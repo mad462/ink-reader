@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "driver/sdmmc_host.h"
 #include "driver/spi_master.h"
@@ -17,216 +16,12 @@
 
 #include "epd_gdey0426t82.h"
 #include "epd_test_pattern.h"
+#include "ink_button_input.h"
+#include "ink_runtime_shell.h"
+#include "ink_txt_preview.h"
 
 static const char *TAG = "ink_reader";
 static const char *kMountPoint = "/sdcard";
-
-enum {
-    TXT_PREVIEW_TEXT_LINES = 4,
-    TXT_PREVIEW_LINE_LENGTH = 23,
-    TXT_PREVIEW_TITLE_LENGTH = 20,
-    TXT_PREVIEW_READ_BYTES = 512,
-};
-
-typedef struct {
-    char title[TXT_PREVIEW_TITLE_LENGTH + 1];
-    char lines[TXT_PREVIEW_TEXT_LINES][TXT_PREVIEW_LINE_LENGTH + 1];
-    char status[TXT_PREVIEW_LINE_LENGTH + 1];
-    size_t non_ascii_bytes;
-    bool found_file;
-} txt_preview_t;
-
-static bool is_ascii_printable(unsigned char c)
-{
-    return c >= 32 && c <= 126;
-}
-
-static char sanitize_preview_char(unsigned char c)
-{
-    if (c == '\t') {
-        return ' ';
-    }
-    if (is_ascii_printable(c)) {
-        return (char)c;
-    }
-    return '#';
-}
-
-static bool ascii_char_equal_ignore_case(char a, char b)
-{
-    if (a >= 'A' && a <= 'Z') {
-        a = (char)(a - 'A' + 'a');
-    }
-    if (b >= 'A' && b <= 'Z') {
-        b = (char)(b - 'A' + 'a');
-    }
-    return a == b;
-}
-
-static bool has_txt_extension(const char *name)
-{
-    size_t len = strlen(name);
-    if (len < 4) {
-        return false;
-    }
-
-    const char *ext = name + len - 4;
-    return ext[0] == '.'
-        && ascii_char_equal_ignore_case(ext[1], 't')
-        && ascii_char_equal_ignore_case(ext[2], 'x')
-        && ascii_char_equal_ignore_case(ext[3], 't');
-}
-
-static void sanitize_ascii_snippet(const char *src, char *dst, size_t dst_size)
-{
-    if (dst == NULL || dst_size == 0) {
-        return;
-    }
-
-    if (src == NULL) {
-        dst[0] = '\0';
-        return;
-    }
-
-    size_t out = 0;
-    for (size_t i = 0; src[i] != '\0' && out + 1 < dst_size; ++i) {
-        dst[out++] = sanitize_preview_char((unsigned char)src[i]);
-    }
-    dst[out] = '\0';
-}
-
-static void trim_trailing_spaces(char *text)
-{
-    size_t len = strlen(text);
-    while (len > 0 && text[len - 1] == ' ') {
-        text[--len] = '\0';
-    }
-}
-
-static void prepare_default_preview(txt_preview_t *preview)
-{
-    memset(preview, 0, sizeof(*preview));
-    strcpy(preview->title, "TXT PREVIEW");
-    strcpy(preview->lines[0], "NO TXT FILE FOUND");
-    strcpy(preview->lines[1], "PUT A FAT32 TXT IN TF");
-    strcpy(preview->lines[2], "UTF-8 CHARS -> #");
-    strcpy(preview->status, "WAITING FOR SAMPLE");
-}
-
-static esp_err_t find_first_txt_file(char *path, size_t path_size, char *name, size_t name_size)
-{
-    DIR *dir = opendir(kMountPoint);
-    if (dir == NULL) {
-        ESP_LOGE(TAG, "opendir(%s) failed during TXT scan: errno=%d", kMountPoint, errno);
-        return ESP_FAIL;
-    }
-
-    esp_err_t ret = ESP_ERR_NOT_FOUND;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!has_txt_extension(entry->d_name)) {
-            continue;
-        }
-
-        snprintf(path, path_size, "%s/%s", kMountPoint, entry->d_name);
-        sanitize_ascii_snippet(entry->d_name, name, name_size);
-        ret = ESP_OK;
-        break;
-    }
-
-    closedir(dir);
-    return ret;
-}
-
-static void append_preview_char(txt_preview_t *preview, size_t *line_index, size_t *column, char c)
-{
-    if (*line_index >= TXT_PREVIEW_TEXT_LINES) {
-        return;
-    }
-
-    if (c == '\r') {
-        return;
-    }
-
-    if (c == '\n') {
-        trim_trailing_spaces(preview->lines[*line_index]);
-        ++(*line_index);
-        *column = 0;
-        return;
-    }
-
-    if (*column >= TXT_PREVIEW_LINE_LENGTH) {
-        trim_trailing_spaces(preview->lines[*line_index]);
-        ++(*line_index);
-        *column = 0;
-        if (*line_index >= TXT_PREVIEW_TEXT_LINES) {
-            return;
-        }
-    }
-
-    preview->lines[*line_index][(*column)++] = c;
-    preview->lines[*line_index][*column] = '\0';
-}
-
-static esp_err_t load_txt_preview(txt_preview_t *preview)
-{
-    char txt_path[256];
-    char txt_name[TXT_PREVIEW_TITLE_LENGTH + 1];
-
-    prepare_default_preview(preview);
-
-    esp_err_t ret = find_first_txt_file(txt_path, sizeof(txt_path), txt_name, sizeof(txt_name));
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    FILE *file = fopen(txt_path, "rb");
-    if (file == NULL) {
-        snprintf(preview->status, sizeof(preview->status), "OPEN FAIL ERR %d", errno);
-        ESP_LOGE(TAG, "fopen(%s) failed: errno=%d", txt_path, errno);
-        return ESP_FAIL;
-    }
-
-    preview->found_file = true;
-    strcpy(preview->title, txt_name);
-    strcpy(preview->lines[0], "FILE FOUND");
-
-    uint8_t raw[TXT_PREVIEW_READ_BYTES];
-    const size_t read_bytes = fread(raw, 1, sizeof(raw), file);
-    fclose(file);
-
-    size_t line_index = 1;
-    size_t column = 0;
-    for (size_t i = 0; i < read_bytes; ++i) {
-        const unsigned char c = raw[i];
-        if (c >= 128) {
-            ++preview->non_ascii_bytes;
-        }
-        append_preview_char(preview, &line_index, &column, sanitize_preview_char(c));
-        if (line_index >= TXT_PREVIEW_TEXT_LINES) {
-            break;
-        }
-    }
-
-    for (size_t i = 0; i < TXT_PREVIEW_TEXT_LINES; ++i) {
-        trim_trailing_spaces(preview->lines[i]);
-    }
-
-    if (preview->lines[1][0] == '\0') {
-        strcpy(preview->lines[1], "EMPTY OR BINARY FILE");
-    }
-
-    if (preview->non_ascii_bytes > 0) {
-        strcpy(preview->status, "UTF8 CHARS -> #");
-    } else {
-        strcpy(preview->status, "ASCII TEXT OK");
-    }
-
-    ESP_LOGI(TAG, "TXT preview file: %s", txt_path);
-    ESP_LOGI(TAG, "TXT preview bytes read: %u", (unsigned)read_bytes);
-    ESP_LOGI(TAG, "TXT preview non-ASCII bytes: %u", (unsigned)preview->non_ascii_bytes);
-    return ESP_OK;
-}
 
 static esp_err_t sd_card_mount_and_list_root(void)
 {
@@ -282,6 +77,73 @@ static esp_err_t sd_card_mount_and_list_root(void)
     return ESP_OK;
 }
 
+static ink_runtime_shell_command_t command_from_snapshot(const ink_button_snapshot_t *snapshot)
+{
+    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_BACK)) {
+        return INK_RUNTIME_SHELL_COMMAND_BACK;
+    }
+    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_CONFIRM)) {
+        return INK_RUNTIME_SHELL_COMMAND_CONFIRM;
+    }
+    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_NAV_PREVIOUS)) {
+        return INK_RUNTIME_SHELL_COMMAND_NAV_PREVIOUS;
+    }
+    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_NAV_NEXT)) {
+        return INK_RUNTIME_SHELL_COMMAND_NAV_NEXT;
+    }
+    return INK_RUNTIME_SHELL_COMMAND_NONE;
+}
+
+static void button_state_from_snapshot(
+    const ink_button_snapshot_t *snapshot,
+    ink_runtime_shell_button_state_t *buttons)
+{
+    const ink_raw_button_t raw_map[INK_RUNTIME_SHELL_BUTTON_COUNT] = {
+        [INK_RUNTIME_SHELL_BUTTON_BACK] = INK_RAW_BUTTON_BACK,
+        [INK_RUNTIME_SHELL_BUTTON_CONFIRM] = INK_RAW_BUTTON_CONFIRM,
+        [INK_RUNTIME_SHELL_BUTTON_LEFT] = INK_RAW_BUTTON_LEFT,
+        [INK_RUNTIME_SHELL_BUTTON_RIGHT] = INK_RAW_BUTTON_RIGHT,
+        [INK_RUNTIME_SHELL_BUTTON_POWER] = INK_RAW_BUTTON_POWER,
+    };
+
+    for (int i = 0; i < INK_RUNTIME_SHELL_BUTTON_COUNT; ++i) {
+        const uint32_t mask = ink_button_input_mask_for_raw(raw_map[i]);
+        buttons->is_down[i] = (snapshot->stable_mask & mask) != 0;
+        buttons->was_pressed[i] = (snapshot->pressed_mask & mask) != 0;
+        buttons->was_released[i] = (snapshot->released_mask & mask) != 0;
+        buttons->held_ms[i] = snapshot->held_duration_ms[raw_map[i]];
+    }
+}
+
+static esp_err_t render_shell_page(
+    uint8_t *framebuffer,
+    size_t framebuffer_length,
+    ink_runtime_shell_t *shell,
+    const ink_txt_preview_t *preview)
+{
+    ink_runtime_shell_view_t view;
+
+    ink_runtime_shell_render(shell, preview, &view);
+    epd_test_pattern_fill_text_page(
+        framebuffer,
+        framebuffer_length,
+        view.title,
+        view.line1,
+        view.line2,
+        view.line3,
+        view.line4,
+        view.line5
+    );
+
+    esp_err_t ret = ink_runtime_shell_requires_full_refresh(shell)
+        ? epd_gdey0426t82_full_refresh(framebuffer, framebuffer_length)
+        : epd_gdey0426t82_partial_refresh(framebuffer, framebuffer_length);
+    if (ret == ESP_OK) {
+        ink_runtime_shell_mark_rendered(shell);
+    }
+    return ret;
+}
+
 void app_main(void)
 {
     static const epd_gdey0426t82_config_t panel = {
@@ -295,17 +157,13 @@ void app_main(void)
         .spi_clock_hz = 10 * 1000 * 1000,
     };
 
-    txt_preview_t preview;
+    ink_txt_preview_t preview;
+    ink_runtime_shell_t shell;
+    ink_button_snapshot_t snapshot;
+    ink_runtime_shell_button_state_t buttons = {0};
+    uint32_t last_render_ms = 0;
     uint8_t *framebuffer = heap_caps_malloc(
         EPD_GDEY0426T82_BUFFER_SIZE,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-    );
-    uint8_t *gray_lsb = heap_caps_malloc(
-        EPD_GDEY0426T82_GRAY_PLANE_SIZE,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-    );
-    uint8_t *gray_msb = heap_caps_malloc(
-        EPD_GDEY0426T82_GRAY_PLANE_SIZE,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
     );
 
@@ -316,82 +174,67 @@ void app_main(void)
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
         );
     }
-    if (gray_lsb == NULL) {
-        ESP_LOGW(TAG, "gray_lsb PSRAM allocation failed, retrying in internal RAM");
-        gray_lsb = heap_caps_malloc(
-            EPD_GDEY0426T82_GRAY_PLANE_SIZE,
-            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
-        );
-    }
-    if (gray_msb == NULL) {
-        ESP_LOGW(TAG, "gray_msb PSRAM allocation failed, retrying in internal RAM");
-        gray_msb = heap_caps_malloc(
-            EPD_GDEY0426T82_GRAY_PLANE_SIZE,
-            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
-        );
-    }
 
     ESP_ERROR_CHECK(framebuffer != NULL ? ESP_OK : ESP_ERR_NO_MEM);
-    ESP_ERROR_CHECK(gray_lsb != NULL ? ESP_OK : ESP_ERR_NO_MEM);
-    ESP_ERROR_CHECK(gray_msb != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(epd_test_pattern_gray_demo_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_button_input_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_runtime_shell_self_test() ? ESP_OK : ESP_FAIL);
 
     ESP_LOGI(TAG, "mounting TF card over SDMMC");
     ESP_ERROR_CHECK(sd_card_mount_and_list_root());
 
     ESP_LOGI(TAG, "loading TXT preview from TF");
-    if (load_txt_preview(&preview) != ESP_OK) {
+    if (ink_txt_preview_load_from_dir(kMountPoint, &preview) != ESP_OK) {
         ESP_LOGW(TAG, "TXT preview unavailable, using fallback page");
+        ink_txt_preview_prepare_default(&preview);
     }
 
     ESP_LOGI(TAG, "initializing GDEY0426T82 panel");
     ESP_ERROR_CHECK(epd_gdey0426t82_init(&panel));
+    ESP_ERROR_CHECK(ink_button_input_init());
 
-    ESP_LOGI(TAG, "displaying grayscale diagnostic base page");
-    epd_test_pattern_fill_gray_demo_bw(framebuffer, EPD_GDEY0426T82_BUFFER_SIZE, 0);
-    ESP_ERROR_CHECK(epd_gdey0426t82_full_refresh(framebuffer, EPD_GDEY0426T82_BUFFER_SIZE));
-    vTaskDelay(pdMS_TO_TICKS(800));
+    ink_runtime_shell_init(&shell);
+    ink_runtime_shell_note_buttons(&shell, &buttons);
 
-    ESP_LOGI(TAG, "displaying grayscale diagnostic planes");
-    epd_test_pattern_fill_gray_demo_planes(
-        gray_lsb,
-        EPD_GDEY0426T82_GRAY_PLANE_SIZE,
-        gray_msb,
-        EPD_GDEY0426T82_GRAY_PLANE_SIZE
-    );
-    ESP_ERROR_CHECK(epd_gdey0426t82_gray_refresh(
-        gray_lsb,
-        EPD_GDEY0426T82_GRAY_PLANE_SIZE,
-        gray_msb,
-        EPD_GDEY0426T82_GRAY_PLANE_SIZE
+    ESP_LOGI(TAG, "booting minimal CrossPoint shell");
+    ESP_ERROR_CHECK(render_shell_page(
+        framebuffer,
+        EPD_GDEY0426T82_BUFFER_SIZE,
+        &shell,
+        &preview
     ));
-    vTaskDelay(pdMS_TO_TICKS(1200));
 
-    ESP_LOGI(TAG, "running footer loader partial refresh demo");
-    for (uint8_t step = 0; step < 6; ++step) {
-        epd_test_pattern_fill_gray_demo_bw(
-            framebuffer,
-            EPD_GDEY0426T82_BUFFER_SIZE,
-            (uint8_t)(step % 3)
-        );
-        ESP_ERROR_CHECK(epd_gdey0426t82_partial_refresh_area(
-            framebuffer,
-            EPD_GDEY0426T82_BUFFER_SIZE,
-            EPD_TEST_PATTERN_GRAY_LOADER_X,
-            EPD_TEST_PATTERN_GRAY_LOADER_Y,
-            EPD_TEST_PATTERN_GRAY_LOADER_W,
-            EPD_TEST_PATTERN_GRAY_LOADER_H
-        ));
-        vTaskDelay(pdMS_TO_TICKS(700));
+    for (;;) {
+        const uint32_t now_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
+        bool dirty = false;
+
+        ESP_ERROR_CHECK(ink_button_input_poll(&snapshot, now_ms));
+        button_state_from_snapshot(&snapshot, &buttons);
+
+        if (snapshot.pressed_mask != 0 || snapshot.released_mask != 0) {
+            dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
+        } else if (shell.page == INK_RUNTIME_SHELL_PAGE_BUTTON_TEST
+            && snapshot.stable_mask != 0
+            && (uint32_t)(now_ms - last_render_ms) >= 250U) {
+            dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
+        }
+
+        ink_runtime_shell_command_t command = command_from_snapshot(&snapshot);
+        if (command != INK_RUNTIME_SHELL_COMMAND_NONE) {
+            dirty |= ink_runtime_shell_handle_command(&shell, command);
+            dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
+        }
+
+        if (dirty) {
+            ESP_ERROR_CHECK(render_shell_page(
+                framebuffer,
+                EPD_GDEY0426T82_BUFFER_SIZE,
+                &shell,
+                &preview
+            ));
+            last_render_ms = now_ms;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
-
-    ESP_LOGI(TAG, "entering panel deep sleep");
-    ESP_ERROR_CHECK(epd_gdey0426t82_sleep());
-
-    heap_caps_free(framebuffer);
-    heap_caps_free(gray_lsb);
-    heap_caps_free(gray_msb);
 }
-
-
-

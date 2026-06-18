@@ -3,6 +3,9 @@ idf_component_register(
         "app_main.c"
         "epd_gdey0426t82.c"
         "epd_test_pattern.c"
+        "ink_button_input.c"
+        "ink_runtime_shell.c"
+        "ink_txt_preview.c"
     INCLUDE_DIRS
         "."
     REQUIRES
