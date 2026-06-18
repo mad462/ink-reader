@@ -25,6 +25,245 @@
 static const char *TAG = "ink_reader";
 static const char *kMountPoint = "/sdcard";
 
+static bool page_shows_live_button_state(ink_runtime_shell_page_t page);
+static bool find_changed_region(
+    const uint8_t *previous,
+    const uint8_t *current,
+    size_t length,
+    uint16_t *x,
+    uint16_t *y,
+    uint16_t *width,
+    uint16_t *height
+);
+static const char *shell_page_name(ink_runtime_shell_page_t page)
+{
+    switch (page) {
+        case INK_RUNTIME_SHELL_PAGE_HOME:
+            return "HOME";
+        case INK_RUNTIME_SHELL_PAGE_BUTTON_TEST:
+            return "BUTTON_TEST";
+        case INK_RUNTIME_SHELL_PAGE_FILE_BROWSER:
+            return "FILE_BROWSER";
+        case INK_RUNTIME_SHELL_PAGE_TXT_READER:
+            return "TXT_READER";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+static const char *shell_command_name(ink_runtime_shell_command_t command)
+{
+    switch (command) {
+        case INK_RUNTIME_SHELL_COMMAND_NONE:
+            return "NONE";
+        case INK_RUNTIME_SHELL_COMMAND_BACK:
+            return "BACK";
+        case INK_RUNTIME_SHELL_COMMAND_CONFIRM:
+            return "CONFIRM";
+        case INK_RUNTIME_SHELL_COMMAND_NAV_PREVIOUS:
+            return "NAV_PREVIOUS";
+        case INK_RUNTIME_SHELL_COMMAND_NAV_NEXT:
+            return "NAV_NEXT";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+static void log_button_snapshot(uint32_t now_ms, const ink_button_snapshot_t *snapshot)
+{
+    if (snapshot == NULL || (snapshot->pressed_mask == 0 && snapshot->released_mask == 0)) {
+        return;
+    }
+
+    ESP_LOGI(
+        TAG,
+        "button event t=%ums stable=0x%02x pressed=0x%02x released=0x%02x L=%u R=%u C=%u B=%u P=%u",
+        (unsigned)now_ms,
+        (unsigned)snapshot->stable_mask,
+        (unsigned)snapshot->pressed_mask,
+        (unsigned)snapshot->released_mask,
+        (unsigned)snapshot->held_duration_ms[INK_RAW_BUTTON_LEFT],
+        (unsigned)snapshot->held_duration_ms[INK_RAW_BUTTON_RIGHT],
+        (unsigned)snapshot->held_duration_ms[INK_RAW_BUTTON_CONFIRM],
+        (unsigned)snapshot->held_duration_ms[INK_RAW_BUTTON_BACK],
+        (unsigned)snapshot->held_duration_ms[INK_RAW_BUTTON_POWER]
+    );
+}
+
+static void log_shell_command(
+    uint32_t now_ms,
+    ink_runtime_shell_page_t page,
+    ink_runtime_shell_command_t command)
+{
+    if (command == INK_RUNTIME_SHELL_COMMAND_NONE) {
+        return;
+    }
+
+    ESP_LOGI(
+        TAG,
+        "command t=%ums page=%s cmd=%s",
+        (unsigned)now_ms,
+        shell_page_name(page),
+        shell_command_name(command)
+    );
+}
+
+static void log_render_timing(
+    uint32_t now_ms,
+    ink_runtime_shell_page_t page,
+    bool full_refresh,
+    uint32_t duration_ms,
+    esp_err_t ret)
+{
+    ESP_LOGI(
+        TAG,
+        "render t=%ums page=%s mode=%s duration=%ums ret=%s",
+        (unsigned)now_ms,
+        shell_page_name(page),
+        full_refresh ? "full" : "partial",
+        (unsigned)duration_ms,
+        esp_err_to_name(ret)
+    );
+}
+
+static bool app_main_debug_self_test(void)
+{
+    if (strcmp(shell_page_name(INK_RUNTIME_SHELL_PAGE_HOME), "HOME") != 0) {
+        return false;
+    }
+    if (strcmp(shell_page_name(INK_RUNTIME_SHELL_PAGE_TXT_READER), "TXT_READER") != 0) {
+        return false;
+    }
+    if (strcmp(shell_command_name(INK_RUNTIME_SHELL_COMMAND_NAV_NEXT), "NAV_NEXT") != 0) {
+        return false;
+    }
+    if (strcmp(shell_command_name(INK_RUNTIME_SHELL_COMMAND_BACK), "BACK") != 0) {
+        return false;
+    }
+    if (page_shows_live_button_state(INK_RUNTIME_SHELL_PAGE_HOME)) {
+        return false;
+    }
+    if (!page_shows_live_button_state(INK_RUNTIME_SHELL_PAGE_BUTTON_TEST)) {
+        return false;
+    }
+    return true;
+}
+
+static bool page_shows_live_button_state(ink_runtime_shell_page_t page)
+{
+    return page == INK_RUNTIME_SHELL_PAGE_BUTTON_TEST;
+}
+
+static bool find_changed_region(
+    const uint8_t *previous,
+    const uint8_t *current,
+    size_t length,
+    uint16_t *x,
+    uint16_t *y,
+    uint16_t *width,
+    uint16_t *height)
+{
+    if (previous == NULL
+        || current == NULL
+        || x == NULL
+        || y == NULL
+        || width == NULL
+        || height == NULL
+        || length < EPD_GDEY0426T82_BUFFER_SIZE) {
+        return false;
+    }
+
+    bool found = false;
+    uint16_t min_x = EPD_GDEY0426T82_WIDTH;
+    uint16_t min_y = EPD_GDEY0426T82_HEIGHT;
+    uint16_t max_x = 0;
+    uint16_t max_y = 0;
+    const size_t stride = EPD_GDEY0426T82_WIDTH / 8U;
+
+    for (uint16_t row = 0; row < EPD_GDEY0426T82_HEIGHT; ++row) {
+        for (uint16_t column_byte = 0; column_byte < stride; ++column_byte) {
+            const size_t index = (size_t)row * stride + column_byte;
+            const uint8_t diff = previous[index] ^ current[index];
+            if (diff == 0) {
+                continue;
+            }
+
+            uint16_t first_bit = 0;
+            while (first_bit < 8U && (diff & (uint8_t)(0x80U >> first_bit)) == 0U) {
+                ++first_bit;
+            }
+
+            int16_t last_bit = 7;
+            while (last_bit >= 0 && (diff & (uint8_t)(0x80U >> last_bit)) == 0U) {
+                --last_bit;
+            }
+
+            const uint16_t left = (uint16_t)(column_byte * 8U + first_bit);
+            const uint16_t right = (uint16_t)(column_byte * 8U + (uint16_t)last_bit);
+
+            if (!found) {
+                min_x = left;
+                max_x = right;
+                min_y = row;
+                max_y = row;
+                found = true;
+            } else {
+                if (left < min_x) {
+                    min_x = left;
+                }
+                if (right > max_x) {
+                    max_x = right;
+                }
+                if (row < min_y) {
+                    min_y = row;
+                }
+                if (row > max_y) {
+                    max_y = row;
+                }
+            }
+        }
+    }
+
+    if (!found) {
+        return false;
+    }
+
+    *x = min_x;
+    *y = min_y;
+    *width = (uint16_t)(max_x - min_x + 1U);
+    *height = (uint16_t)(max_y - min_y + 1U);
+    return true;
+}
+
+static bool app_main_partial_region_self_test(void)
+{
+    static uint8_t previous[EPD_GDEY0426T82_BUFFER_SIZE];
+    static uint8_t current[EPD_GDEY0426T82_BUFFER_SIZE];
+    uint16_t x = 0;
+    uint16_t y = 0;
+    uint16_t width = 0;
+    uint16_t height = 0;
+
+    memset(previous, 0xFF, sizeof(previous));
+    memset(current, 0xFF, sizeof(current));
+
+    if (find_changed_region(previous, current, sizeof(previous), &x, &y, &width, &height)) {
+        return false;
+    }
+
+    current[(115U * (EPD_GDEY0426T82_WIDTH / 8U)) + 4U] = 0x7F;
+    current[(185U * (EPD_GDEY0426T82_WIDTH / 8U)) + 20U] = 0xFE;
+
+    if (!find_changed_region(previous, current, sizeof(previous), &x, &y, &width, &height)) {
+        return false;
+    }
+    if (x != 32U || y != 115U || width != 136U || height != 71U) {
+        return false;
+    }
+
+    return true;
+}
+
 static void prepare_browser_fallback(ink_file_browser_t *browser)
 {
     memset(browser, 0, sizeof(*browser));
@@ -144,11 +383,14 @@ static void button_state_from_snapshot(
 static esp_err_t render_shell_page(
     uint8_t *framebuffer,
     size_t framebuffer_length,
+    uint8_t *previous_framebuffer,
     ink_runtime_shell_t *shell,
     const ink_file_browser_t *browser,
     const ink_txt_reader_t *reader)
 {
     ink_runtime_shell_view_t view;
+    const bool full_refresh = ink_runtime_shell_requires_full_refresh(shell);
+    const uint32_t start_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
 
     ink_runtime_shell_render(shell, browser, reader, &view);
     epd_test_pattern_fill_text_page(
@@ -162,10 +404,38 @@ static esp_err_t render_shell_page(
         view.line5
     );
 
-    esp_err_t ret = ink_runtime_shell_requires_full_refresh(shell)
-        ? epd_gdey0426t82_full_refresh(framebuffer, framebuffer_length)
-        : epd_gdey0426t82_partial_refresh(framebuffer, framebuffer_length);
+    esp_err_t ret = ESP_OK;
+    if (full_refresh || previous_framebuffer == NULL) {
+        ret = epd_gdey0426t82_full_refresh(framebuffer, framebuffer_length);
+    } else {
+        uint16_t dirty_x = 0;
+        uint16_t dirty_y = 0;
+        uint16_t dirty_width = 0;
+        uint16_t dirty_height = 0;
+        if (find_changed_region(
+            previous_framebuffer,
+            framebuffer,
+            framebuffer_length,
+            &dirty_x,
+            &dirty_y,
+            &dirty_width,
+            &dirty_height)) {
+            ret = epd_gdey0426t82_partial_refresh_area(
+                framebuffer,
+                framebuffer_length,
+                dirty_x,
+                dirty_y,
+                dirty_width,
+                dirty_height
+            );
+        }
+    }
+    const uint32_t end_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
+    log_render_timing(start_ms, shell->page, full_refresh, end_ms - start_ms, ret);
     if (ret == ESP_OK) {
+        if (previous_framebuffer != NULL) {
+            memcpy(previous_framebuffer, framebuffer, framebuffer_length);
+        }
         ink_runtime_shell_mark_rendered(shell);
     }
     return ret;
@@ -188,6 +458,10 @@ void app_main(void)
     static ink_runtime_shell_t shell;
     static ink_button_snapshot_t snapshot;
     static ink_runtime_shell_button_state_t buttons;
+    uint8_t *previous_framebuffer = heap_caps_malloc(
+        EPD_GDEY0426T82_BUFFER_SIZE,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+    );
     uint32_t last_render_ms = 0;
     bool tf_ready = false;
     uint8_t *framebuffer = heap_caps_malloc(
@@ -202,13 +476,24 @@ void app_main(void)
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
         );
     }
+    if (previous_framebuffer == NULL) {
+        ESP_LOGW(TAG, "previous framebuffer PSRAM allocation failed, retrying in internal RAM");
+        previous_framebuffer = heap_caps_malloc(
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
+        );
+    }
 
     ESP_ERROR_CHECK(framebuffer != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(previous_framebuffer != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+    memset(previous_framebuffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
     ESP_ERROR_CHECK(epd_test_pattern_gray_demo_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_button_input_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_file_browser_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_txt_reader_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_runtime_shell_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(app_main_debug_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(app_main_partial_region_self_test() ? ESP_OK : ESP_FAIL);
 
     ESP_LOGI(TAG, "mounting TF card over SDMMC");
     tf_ready = sd_card_mount_with_retry() == ESP_OK;
@@ -236,6 +521,7 @@ void app_main(void)
     ESP_ERROR_CHECK(render_shell_page(
         framebuffer,
         EPD_GDEY0426T82_BUFFER_SIZE,
+        previous_framebuffer,
         &shell,
         &browser,
         &reader
@@ -246,10 +532,14 @@ void app_main(void)
         bool dirty = false;
 
         ESP_ERROR_CHECK(ink_button_input_poll(&snapshot, now_ms));
+        log_button_snapshot(now_ms, &snapshot);
         button_state_from_snapshot(&snapshot, &buttons);
 
         if (snapshot.pressed_mask != 0 || snapshot.released_mask != 0) {
-            dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
+            bool button_state_dirty = ink_runtime_shell_note_buttons(&shell, &buttons);
+            if (page_shows_live_button_state(shell.page)) {
+                dirty |= button_state_dirty;
+            }
         } else if (shell.page == INK_RUNTIME_SHELL_PAGE_BUTTON_TEST
             && snapshot.stable_mask != 0
             && (uint32_t)(now_ms - last_render_ms) >= 250U) {
@@ -257,6 +547,7 @@ void app_main(void)
         }
 
         ink_runtime_shell_command_t command = command_from_snapshot(&snapshot);
+        log_shell_command(now_ms, shell.page, command);
         if (command != INK_RUNTIME_SHELL_COMMAND_NONE) {
             bool browser_dirty = false;
 
@@ -309,13 +600,18 @@ void app_main(void)
             }
 
             dirty |= browser_dirty;
-            dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
+            if (page_shows_live_button_state(shell.page)) {
+                dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
+            } else {
+                (void)ink_runtime_shell_note_buttons(&shell, &buttons);
+            }
         }
 
         if (dirty) {
             ESP_ERROR_CHECK(render_shell_page(
                 framebuffer,
                 EPD_GDEY0426T82_BUFFER_SIZE,
+                previous_framebuffer,
                 &shell,
                 &browser,
                 &reader
