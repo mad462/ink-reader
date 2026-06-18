@@ -20,7 +20,7 @@
 #include "ink_button_input.h"
 #include "ink_file_browser.h"
 #include "ink_runtime_shell.h"
-#include "ink_txt_preview.h"
+#include "ink_txt_reader.h"
 
 static const char *TAG = "ink_reader";
 static const char *kMountPoint = "/sdcard";
@@ -146,11 +146,11 @@ static esp_err_t render_shell_page(
     size_t framebuffer_length,
     ink_runtime_shell_t *shell,
     const ink_file_browser_t *browser,
-    const ink_txt_preview_t *preview)
+    const ink_txt_reader_t *reader)
 {
     ink_runtime_shell_view_t view;
 
-    ink_runtime_shell_render(shell, browser, preview, &view);
+    ink_runtime_shell_render(shell, browser, reader, &view);
     epd_test_pattern_fill_text_page(
         framebuffer,
         framebuffer_length,
@@ -183,7 +183,7 @@ void app_main(void)
         .spi_host = SPI2_HOST,
         .spi_clock_hz = 10 * 1000 * 1000,
     };
-    static ink_txt_preview_t preview;
+    static ink_txt_reader_t reader;
     static ink_file_browser_t browser;
     static ink_runtime_shell_t shell;
     static ink_button_snapshot_t snapshot;
@@ -207,6 +207,7 @@ void app_main(void)
     ESP_ERROR_CHECK(epd_test_pattern_gray_demo_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_button_input_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_file_browser_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_txt_reader_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_runtime_shell_self_test() ? ESP_OK : ESP_FAIL);
 
     ESP_LOGI(TAG, "mounting TF card over SDMMC");
@@ -215,8 +216,8 @@ void app_main(void)
         ESP_LOGE(TAG, "TF mount failed after retries, booting with empty browser");
     }
 
-    ESP_LOGI(TAG, "loading TXT preview from TF");
-    ink_txt_preview_prepare_default(&preview);
+    ESP_LOGI(TAG, "preparing TXT reader");
+    ink_txt_reader_prepare_default(&reader);
 
     ESP_LOGI(TAG, "scanning TF browser root");
     prepare_browser_fallback(&browser);
@@ -237,7 +238,7 @@ void app_main(void)
         EPD_GDEY0426T82_BUFFER_SIZE,
         &shell,
         &browser,
-        &preview
+        &reader
     ));
 
     for (;;) {
@@ -282,21 +283,27 @@ void app_main(void)
                         browser_dirty = true;
                     }
                     if (selected_file) {
-                        if (!tf_ready || ink_txt_preview_load_from_file(browser.selected_file_path, &preview) != ESP_OK) {
-                            ESP_LOGW(TAG, "selected TXT preview load failed");
-                            ink_txt_preview_prepare_default(&preview);
-                            snprintf(preview.status, sizeof(preview.status), "%s", "OPEN FAILED");
+                        if (!tf_ready || ink_txt_reader_load_file(&reader, browser.selected_file_path) != ESP_OK) {
+                            ESP_LOGW(TAG, "selected TXT reader load failed");
+                            ink_txt_reader_prepare_default(&reader);
+                            strcpy(reader.pages[0][0], "OPEN FAILED");
+                            strcpy(reader.pages[0][1], "CHECK TF FILE");
                         }
-                        shell.page = INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW;
+                        shell.page = INK_RUNTIME_SHELL_PAGE_TXT_READER;
                         shell.full_refresh_requested = true;
                         browser_dirty = true;
                     }
                 }
-            } else if (shell.page == INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW
-                && command == INK_RUNTIME_SHELL_COMMAND_BACK) {
-                shell.page = INK_RUNTIME_SHELL_PAGE_FILE_BROWSER;
-                shell.full_refresh_requested = true;
-                browser_dirty = true;
+            } else if (shell.page == INK_RUNTIME_SHELL_PAGE_TXT_READER) {
+                if (command == INK_RUNTIME_SHELL_COMMAND_BACK) {
+                    shell.page = INK_RUNTIME_SHELL_PAGE_FILE_BROWSER;
+                    shell.full_refresh_requested = true;
+                    browser_dirty = true;
+                } else if (command == INK_RUNTIME_SHELL_COMMAND_NAV_PREVIOUS) {
+                    browser_dirty = ink_txt_reader_page_previous(&reader);
+                } else if (command == INK_RUNTIME_SHELL_COMMAND_NAV_NEXT) {
+                    browser_dirty = ink_txt_reader_page_next(&reader);
+                }
             } else {
                 browser_dirty = ink_runtime_shell_handle_command(&shell, command);
             }
@@ -311,7 +318,7 @@ void app_main(void)
                 EPD_GDEY0426T82_BUFFER_SIZE,
                 &shell,
                 &browser,
-                &preview
+                &reader
             ));
             last_render_ms = now_ms;
         }

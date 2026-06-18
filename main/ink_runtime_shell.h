@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "ink_file_browser.h"
-#include "ink_txt_preview.h"
+#include "ink_txt_reader.h"
 
 #define INK_RUNTIME_SHELL_TEXT_LENGTH 23
 
@@ -13,7 +13,7 @@ typedef enum {
     INK_RUNTIME_SHELL_PAGE_HOME = 0,
     INK_RUNTIME_SHELL_PAGE_BUTTON_TEST,
     INK_RUNTIME_SHELL_PAGE_FILE_BROWSER,
-    INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW
+    INK_RUNTIME_SHELL_PAGE_TXT_READER
 } ink_runtime_shell_page_t;
 
 typedef enum {
@@ -41,7 +41,7 @@ typedef struct {
 } ink_runtime_shell_button_state_t;
 
 typedef struct {
-    char title[INK_TXT_PREVIEW_TITLE_LENGTH + 1];
+    char title[INK_TXT_READER_TITLE_LENGTH + 1];
     char line1[INK_RUNTIME_SHELL_TEXT_LENGTH + 1];
     char line2[INK_RUNTIME_SHELL_TEXT_LENGTH + 1];
     char line3[INK_RUNTIME_SHELL_TEXT_LENGTH + 1];
@@ -67,7 +67,7 @@ bool ink_runtime_shell_note_buttons(
 void ink_runtime_shell_render(
     const ink_runtime_shell_t *shell,
     const ink_file_browser_t *browser,
-    const ink_txt_preview_t *preview,
+    const ink_txt_reader_t *reader,
     ink_runtime_shell_view_t *view
 );
 bool ink_runtime_shell_requires_full_refresh(const ink_runtime_shell_t *shell);

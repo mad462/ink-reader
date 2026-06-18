@@ -6,7 +6,7 @@ idf_component_register(
         "ink_button_input.c"
         "ink_file_browser.c"
         "ink_runtime_shell.c"
-        "ink_txt_preview.c"
+        "ink_txt_reader.c"
     INCLUDE_DIRS
         "."
     REQUIRES

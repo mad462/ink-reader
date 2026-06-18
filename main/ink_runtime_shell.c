@@ -98,7 +98,7 @@ bool ink_runtime_shell_handle_command(ink_runtime_shell_t *shell, ink_runtime_sh
             return false;
 
         case INK_RUNTIME_SHELL_PAGE_FILE_BROWSER:
-        case INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW:
+        case INK_RUNTIME_SHELL_PAGE_TXT_READER:
             return false;
 
         default:
@@ -216,35 +216,38 @@ static void render_file_browser(
     copy_text(view->line5, sizeof(view->line5), browser_view.status);
 }
 
-static void render_txt_preview(
+static void render_txt_reader(
     const ink_runtime_shell_t *shell,
-    const ink_txt_preview_t *preview,
+    const ink_txt_reader_t *reader,
     ink_runtime_shell_view_t *view)
 {
     (void)shell;
 
-    if (preview == NULL) {
-        copy_text(view->title, sizeof(view->title), "TXT PREVIEW");
-        copy_text(view->line1, sizeof(view->line1), "NO PREVIEW DATA");
+    if (reader == NULL) {
+        copy_text(view->title, sizeof(view->title), "TXT READER");
+        copy_text(view->line1, sizeof(view->line1), "NO READER DATA");
         copy_text(view->line2, sizeof(view->line2), "");
         copy_text(view->line3, sizeof(view->line3), "");
         copy_text(view->line4, sizeof(view->line4), "");
-        copy_text(view->line5, sizeof(view->line5), "BACK HOME");
+        copy_text(view->line5, sizeof(view->line5), "BACK BROWSER");
         return;
     }
 
-    copy_text(view->title, sizeof(view->title), preview->title);
-    copy_text(view->line1, sizeof(view->line1), preview->lines[0]);
-    copy_text(view->line2, sizeof(view->line2), preview->lines[1]);
-    copy_text(view->line3, sizeof(view->line3), preview->lines[2]);
-    copy_text(view->line4, sizeof(view->line4), preview->lines[3]);
-    copy_text(view->line5, sizeof(view->line5), preview->status);
+    ink_txt_reader_view_t reader_view;
+    ink_txt_reader_render(reader, &reader_view);
+
+    copy_text(view->title, sizeof(view->title), reader_view.title);
+    copy_text(view->line1, sizeof(view->line1), reader_view.lines[0]);
+    copy_text(view->line2, sizeof(view->line2), reader_view.lines[1]);
+    copy_text(view->line3, sizeof(view->line3), reader_view.lines[2]);
+    copy_text(view->line4, sizeof(view->line4), reader_view.lines[3]);
+    copy_text(view->line5, sizeof(view->line5), reader_view.status);
 }
 
 void ink_runtime_shell_render(
     const ink_runtime_shell_t *shell,
     const ink_file_browser_t *browser,
-    const ink_txt_preview_t *preview,
+    const ink_txt_reader_t *reader,
     ink_runtime_shell_view_t *view)
 {
     memset(view, 0, sizeof(*view));
@@ -259,8 +262,8 @@ void ink_runtime_shell_render(
         case INK_RUNTIME_SHELL_PAGE_FILE_BROWSER:
             render_file_browser(browser, view);
             break;
-        case INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW:
-            render_txt_preview(shell, preview, view);
+        case INK_RUNTIME_SHELL_PAGE_TXT_READER:
+            render_txt_reader(shell, reader, view);
             break;
         default:
             copy_text(view->title, sizeof(view->title), "INK READER");
@@ -286,21 +289,21 @@ bool ink_runtime_shell_self_test(void)
     static ink_runtime_shell_t shell;
     static ink_runtime_shell_view_t view;
     static ink_file_browser_t browser;
-    static ink_txt_preview_t preview;
+    static ink_txt_reader_t reader;
     static ink_runtime_shell_button_state_t buttons;
 
     memset(&buttons, 0, sizeof(buttons));
     memset(&browser, 0, sizeof(browser));
-    ink_txt_preview_prepare_default(&preview);
-    strcpy(preview.title, "SAMPLE.TXT");
-    strcpy(preview.lines[0], "FILE FOUND");
-    strcpy(preview.lines[1], "HELLO");
-    strcpy(preview.status, "ASCII TEXT OK");
-    preview.found_file = true;
+    ink_txt_reader_prepare_default(&reader);
+    strcpy(reader.title, "SAMPLE.TXT");
+    strcpy(reader.pages[0][0], "HELLO");
+    strcpy(reader.pages[0][1], "WORLD");
+    reader.page_count = 2;
+    reader.loaded = true;
     browser.entry_count = 1;
 
     ink_runtime_shell_init(&shell);
-    ink_runtime_shell_render(&shell, &browser, &preview, &view);
+    ink_runtime_shell_render(&shell, &browser, &reader, &view);
     if (strcmp(view.title, "CROSSPOINT S3") != 0) {
         return false;
     }
@@ -311,7 +314,7 @@ bool ink_runtime_shell_self_test(void)
     if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_NAV_NEXT)) {
         return false;
     }
-    ink_runtime_shell_render(&shell, &browser, &preview, &view);
+    ink_runtime_shell_render(&shell, &browser, &reader, &view);
     if (strcmp(view.line2, "> FILE BROWSER") != 0) {
         return false;
     }
@@ -319,12 +322,12 @@ bool ink_runtime_shell_self_test(void)
     if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_CONFIRM)) {
         return false;
     }
-    shell.page = INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW;
-    ink_runtime_shell_render(&shell, &browser, &preview, &view);
+    shell.page = INK_RUNTIME_SHELL_PAGE_TXT_READER;
+    ink_runtime_shell_render(&shell, &browser, &reader, &view);
     if (strcmp(view.title, "SAMPLE.TXT") != 0) {
         return false;
     }
-    if (strcmp(view.line5, "ASCII TEXT OK") != 0) {
+    if (strcmp(view.line5, "P001/002 ASCII") != 0) {
         return false;
     }
 
@@ -340,7 +343,7 @@ bool ink_runtime_shell_self_test(void)
     if (!ink_runtime_shell_note_buttons(&shell, &buttons)) {
         return false;
     }
-    ink_runtime_shell_render(&shell, &browser, &preview, &view);
+    ink_runtime_shell_render(&shell, &browser, &reader, &view);
     if (strcmp(view.title, "BUTTON TEST") != 0) {
         return false;
     }
