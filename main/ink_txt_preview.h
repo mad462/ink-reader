@@ -19,3 +19,4 @@ typedef struct {
 
 void ink_txt_preview_prepare_default(ink_txt_preview_t *preview);
 esp_err_t ink_txt_preview_load_from_dir(const char *mount_point, ink_txt_preview_t *preview);
+esp_err_t ink_txt_preview_load_from_file(const char *path, ink_txt_preview_t *preview);

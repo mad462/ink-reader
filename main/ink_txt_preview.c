@@ -151,27 +151,24 @@ static void append_preview_char(ink_txt_preview_t *preview, size_t *line_index, 
     preview->lines[*line_index][*column] = '\0';
 }
 
-esp_err_t ink_txt_preview_load_from_dir(const char *mount_point, ink_txt_preview_t *preview)
+esp_err_t ink_txt_preview_load_from_file(const char *path, ink_txt_preview_t *preview)
 {
-    char txt_path[256];
-    char txt_name[INK_TXT_PREVIEW_TITLE_LENGTH + 1];
-
     ink_txt_preview_prepare_default(preview);
-
-    esp_err_t ret = find_first_txt_file(mount_point, txt_path, sizeof(txt_path), txt_name, sizeof(txt_name));
-    if (ret != ESP_OK) {
-        return ret;
+    if (path == NULL || path[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
     }
 
-    FILE *file = fopen(txt_path, "rb");
+    FILE *file = fopen(path, "rb");
     if (file == NULL) {
         snprintf(preview->status, sizeof(preview->status), "OPEN FAIL ERR %d", errno);
-        ESP_LOGE(TAG, "fopen(%s) failed: errno=%d", txt_path, errno);
+        ESP_LOGE(TAG, "fopen(%s) failed: errno=%d", path, errno);
         return ESP_FAIL;
     }
 
     preview->found_file = true;
-    strcpy(preview->title, txt_name);
+    const char *name = strrchr(path, '/');
+    name = name != NULL ? name + 1 : path;
+    sanitize_ascii_snippet(name, preview->title, sizeof(preview->title));
     strcpy(preview->lines[0], "FILE FOUND");
 
     uint8_t raw[INK_TXT_PREVIEW_READ_BYTES];
@@ -205,8 +202,22 @@ esp_err_t ink_txt_preview_load_from_dir(const char *mount_point, ink_txt_preview
         strcpy(preview->status, "ASCII TEXT OK");
     }
 
-    ESP_LOGI(TAG, "TXT preview file: %s", txt_path);
+    ESP_LOGI(TAG, "TXT preview file: %s", path);
     ESP_LOGI(TAG, "TXT preview bytes read: %u", (unsigned)read_bytes);
     ESP_LOGI(TAG, "TXT preview non-ASCII bytes: %u", (unsigned)preview->non_ascii_bytes);
     return ESP_OK;
+}
+
+esp_err_t ink_txt_preview_load_from_dir(const char *mount_point, ink_txt_preview_t *preview)
+{
+    char txt_path[256];
+    char txt_name[INK_TXT_PREVIEW_TITLE_LENGTH + 1];
+
+    esp_err_t ret = find_first_txt_file(mount_point, txt_path, sizeof(txt_path), txt_name, sizeof(txt_name));
+    if (ret != ESP_OK) {
+        ink_txt_preview_prepare_default(preview);
+        return ret;
+    }
+
+    return ink_txt_preview_load_from_file(txt_path, preview);
 }

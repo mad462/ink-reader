@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "driver/sdmmc_host.h"
 #include "driver/spi_master.h"
@@ -17,11 +18,19 @@
 #include "epd_gdey0426t82.h"
 #include "epd_test_pattern.h"
 #include "ink_button_input.h"
+#include "ink_file_browser.h"
 #include "ink_runtime_shell.h"
 #include "ink_txt_preview.h"
 
 static const char *TAG = "ink_reader";
 static const char *kMountPoint = "/sdcard";
+
+static void prepare_browser_fallback(ink_file_browser_t *browser)
+{
+    memset(browser, 0, sizeof(*browser));
+    snprintf(browser->mount_point, sizeof(browser->mount_point), "%s", kMountPoint);
+    snprintf(browser->current_path, sizeof(browser->current_path), "%s", kMountPoint);
+}
 
 static esp_err_t sd_card_mount_and_list_root(void)
 {
@@ -77,6 +86,23 @@ static esp_err_t sd_card_mount_and_list_root(void)
     return ESP_OK;
 }
 
+static esp_err_t sd_card_mount_with_retry(void)
+{
+    esp_err_t ret = ESP_FAIL;
+
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        ret = sd_card_mount_and_list_root();
+        if (ret == ESP_OK) {
+            return ret;
+        }
+
+        ESP_LOGW(TAG, "TF mount attempt %d failed: %s", attempt, esp_err_to_name(ret));
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+
+    return ret;
+}
+
 static ink_runtime_shell_command_t command_from_snapshot(const ink_button_snapshot_t *snapshot)
 {
     if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_BACK)) {
@@ -119,11 +145,12 @@ static esp_err_t render_shell_page(
     uint8_t *framebuffer,
     size_t framebuffer_length,
     ink_runtime_shell_t *shell,
+    const ink_file_browser_t *browser,
     const ink_txt_preview_t *preview)
 {
     ink_runtime_shell_view_t view;
 
-    ink_runtime_shell_render(shell, preview, &view);
+    ink_runtime_shell_render(shell, browser, preview, &view);
     epd_test_pattern_fill_text_page(
         framebuffer,
         framebuffer_length,
@@ -156,12 +183,13 @@ void app_main(void)
         .spi_host = SPI2_HOST,
         .spi_clock_hz = 10 * 1000 * 1000,
     };
-
-    ink_txt_preview_t preview;
-    ink_runtime_shell_t shell;
-    ink_button_snapshot_t snapshot;
-    ink_runtime_shell_button_state_t buttons = {0};
+    static ink_txt_preview_t preview;
+    static ink_file_browser_t browser;
+    static ink_runtime_shell_t shell;
+    static ink_button_snapshot_t snapshot;
+    static ink_runtime_shell_button_state_t buttons;
     uint32_t last_render_ms = 0;
+    bool tf_ready = false;
     uint8_t *framebuffer = heap_caps_malloc(
         EPD_GDEY0426T82_BUFFER_SIZE,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
@@ -178,15 +206,22 @@ void app_main(void)
     ESP_ERROR_CHECK(framebuffer != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(epd_test_pattern_gray_demo_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_button_input_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_file_browser_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_runtime_shell_self_test() ? ESP_OK : ESP_FAIL);
 
     ESP_LOGI(TAG, "mounting TF card over SDMMC");
-    ESP_ERROR_CHECK(sd_card_mount_and_list_root());
+    tf_ready = sd_card_mount_with_retry() == ESP_OK;
+    if (!tf_ready) {
+        ESP_LOGE(TAG, "TF mount failed after retries, booting with empty browser");
+    }
 
     ESP_LOGI(TAG, "loading TXT preview from TF");
-    if (ink_txt_preview_load_from_dir(kMountPoint, &preview) != ESP_OK) {
-        ESP_LOGW(TAG, "TXT preview unavailable, using fallback page");
-        ink_txt_preview_prepare_default(&preview);
+    ink_txt_preview_prepare_default(&preview);
+
+    ESP_LOGI(TAG, "scanning TF browser root");
+    prepare_browser_fallback(&browser);
+    if (tf_ready && ink_file_browser_init(&browser, kMountPoint, kMountPoint) != ESP_OK) {
+        ESP_LOGE(TAG, "file browser init failed, keeping empty browser");
     }
 
     ESP_LOGI(TAG, "initializing GDEY0426T82 panel");
@@ -201,6 +236,7 @@ void app_main(void)
         framebuffer,
         EPD_GDEY0426T82_BUFFER_SIZE,
         &shell,
+        &browser,
         &preview
     ));
 
@@ -221,7 +257,51 @@ void app_main(void)
 
         ink_runtime_shell_command_t command = command_from_snapshot(&snapshot);
         if (command != INK_RUNTIME_SHELL_COMMAND_NONE) {
-            dirty |= ink_runtime_shell_handle_command(&shell, command);
+            bool browser_dirty = false;
+
+            if (shell.page == INK_RUNTIME_SHELL_PAGE_FILE_BROWSER) {
+                if (command == INK_RUNTIME_SHELL_COMMAND_NAV_PREVIOUS) {
+                    browser_dirty = ink_file_browser_move_previous(&browser);
+                } else if (command == INK_RUNTIME_SHELL_COMMAND_NAV_NEXT) {
+                    browser_dirty = ink_file_browser_move_next(&browser);
+                } else if (command == INK_RUNTIME_SHELL_COMMAND_BACK) {
+                    if (!ink_file_browser_go_parent(&browser)) {
+                        shell.page = INK_RUNTIME_SHELL_PAGE_HOME;
+                        shell.full_refresh_requested = true;
+                        browser_dirty = true;
+                    } else {
+                        shell.full_refresh_requested = true;
+                        browser_dirty = true;
+                    }
+                } else if (command == INK_RUNTIME_SHELL_COMMAND_CONFIRM) {
+                    bool entered_directory = false;
+                    bool selected_file = false;
+                    ESP_ERROR_CHECK(ink_file_browser_confirm(&browser, &entered_directory, &selected_file));
+                    if (entered_directory) {
+                        shell.full_refresh_requested = true;
+                        browser_dirty = true;
+                    }
+                    if (selected_file) {
+                        if (!tf_ready || ink_txt_preview_load_from_file(browser.selected_file_path, &preview) != ESP_OK) {
+                            ESP_LOGW(TAG, "selected TXT preview load failed");
+                            ink_txt_preview_prepare_default(&preview);
+                            snprintf(preview.status, sizeof(preview.status), "%s", "OPEN FAILED");
+                        }
+                        shell.page = INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW;
+                        shell.full_refresh_requested = true;
+                        browser_dirty = true;
+                    }
+                }
+            } else if (shell.page == INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW
+                && command == INK_RUNTIME_SHELL_COMMAND_BACK) {
+                shell.page = INK_RUNTIME_SHELL_PAGE_FILE_BROWSER;
+                shell.full_refresh_requested = true;
+                browser_dirty = true;
+            } else {
+                browser_dirty = ink_runtime_shell_handle_command(&shell, command);
+            }
+
+            dirty |= browser_dirty;
             dirty |= ink_runtime_shell_note_buttons(&shell, &buttons);
         }
 
@@ -230,6 +310,7 @@ void app_main(void)
                 framebuffer,
                 EPD_GDEY0426T82_BUFFER_SIZE,
                 &shell,
+                &browser,
                 &preview
             ));
             last_render_ms = now_ms;

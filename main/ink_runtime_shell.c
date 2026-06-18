@@ -5,7 +5,7 @@
 
 enum {
     INK_RUNTIME_SHELL_HOME_ITEM_BUTTON_TEST = 0,
-    INK_RUNTIME_SHELL_HOME_ITEM_TXT_PREVIEW,
+    INK_RUNTIME_SHELL_HOME_ITEM_FILE_BROWSER,
     INK_RUNTIME_SHELL_HOME_ITEM_COUNT
 };
 
@@ -83,19 +83,22 @@ bool ink_runtime_shell_handle_command(ink_runtime_shell_t *shell, ink_runtime_sh
             if (command == INK_RUNTIME_SHELL_COMMAND_CONFIRM) {
                 shell->page = shell->home_index == INK_RUNTIME_SHELL_HOME_ITEM_BUTTON_TEST
                     ? INK_RUNTIME_SHELL_PAGE_BUTTON_TEST
-                    : INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW;
+                    : INK_RUNTIME_SHELL_PAGE_FILE_BROWSER;
                 shell->full_refresh_requested = true;
                 return true;
             }
             return false;
 
         case INK_RUNTIME_SHELL_PAGE_BUTTON_TEST:
-        case INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW:
             if (command == INK_RUNTIME_SHELL_COMMAND_BACK) {
                 shell->page = INK_RUNTIME_SHELL_PAGE_HOME;
                 shell->full_refresh_requested = true;
                 return true;
             }
+            return false;
+
+        case INK_RUNTIME_SHELL_PAGE_FILE_BROWSER:
+        case INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW:
             return false;
 
         default:
@@ -156,7 +159,7 @@ bool ink_runtime_shell_note_buttons(
 
 static void render_home(
     const ink_runtime_shell_t *shell,
-    const ink_txt_preview_t *preview,
+    const ink_file_browser_t *browser,
     ink_runtime_shell_view_t *view)
 {
     copy_text(view->title, sizeof(view->title), "CROSSPOINT S3");
@@ -167,8 +170,8 @@ static void render_home(
     copy_text(
         view->line2,
         sizeof(view->line2),
-        shell->home_index == INK_RUNTIME_SHELL_HOME_ITEM_TXT_PREVIEW ? "> TXT PREVIEW" : "  TXT PREVIEW");
-    copy_text(view->line3, sizeof(view->line3), preview != NULL && preview->found_file ? "TXT READY ON TF" : "TXT SAMPLE MISSING");
+        shell->home_index == INK_RUNTIME_SHELL_HOME_ITEM_FILE_BROWSER ? "> FILE BROWSER" : "  FILE BROWSER");
+    copy_text(view->line3, sizeof(view->line3), browser != NULL && browser->entry_count > 0 ? "TF BROWSER READY" : "TF ROOT EMPTY");
     copy_text(view->line4, sizeof(view->line4), "CONF OPEN");
     copy_text(view->line5, sizeof(view->line5), "LEFT/RIGHT MOVE");
 }
@@ -198,6 +201,21 @@ static void render_button_test(const ink_runtime_shell_t *shell, ink_runtime_she
     copy_text(view->line5, sizeof(view->line5), "BACK HOME");
 }
 
+static void render_file_browser(
+    const ink_file_browser_t *browser,
+    ink_runtime_shell_view_t *view)
+{
+    ink_file_browser_view_t browser_view;
+
+    ink_file_browser_render(browser, &browser_view);
+    copy_text(view->title, sizeof(view->title), browser_view.title);
+    copy_text(view->line1, sizeof(view->line1), browser_view.lines[0]);
+    copy_text(view->line2, sizeof(view->line2), browser_view.lines[1]);
+    copy_text(view->line3, sizeof(view->line3), browser_view.lines[2]);
+    copy_text(view->line4, sizeof(view->line4), browser_view.lines[3]);
+    copy_text(view->line5, sizeof(view->line5), browser_view.status);
+}
+
 static void render_txt_preview(
     const ink_runtime_shell_t *shell,
     const ink_txt_preview_t *preview,
@@ -225,6 +243,7 @@ static void render_txt_preview(
 
 void ink_runtime_shell_render(
     const ink_runtime_shell_t *shell,
+    const ink_file_browser_t *browser,
     const ink_txt_preview_t *preview,
     ink_runtime_shell_view_t *view)
 {
@@ -232,10 +251,13 @@ void ink_runtime_shell_render(
 
     switch (shell->page) {
         case INK_RUNTIME_SHELL_PAGE_HOME:
-            render_home(shell, preview, view);
+            render_home(shell, browser, view);
             break;
         case INK_RUNTIME_SHELL_PAGE_BUTTON_TEST:
             render_button_test(shell, view);
+            break;
+        case INK_RUNTIME_SHELL_PAGE_FILE_BROWSER:
+            render_file_browser(browser, view);
             break;
         case INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW:
             render_txt_preview(shell, preview, view);
@@ -261,21 +283,24 @@ void ink_runtime_shell_mark_rendered(ink_runtime_shell_t *shell)
 
 bool ink_runtime_shell_self_test(void)
 {
-    ink_runtime_shell_t shell;
-    ink_runtime_shell_view_t view;
-    ink_txt_preview_t preview;
-    ink_runtime_shell_button_state_t buttons;
+    static ink_runtime_shell_t shell;
+    static ink_runtime_shell_view_t view;
+    static ink_file_browser_t browser;
+    static ink_txt_preview_t preview;
+    static ink_runtime_shell_button_state_t buttons;
 
     memset(&buttons, 0, sizeof(buttons));
+    memset(&browser, 0, sizeof(browser));
     ink_txt_preview_prepare_default(&preview);
     strcpy(preview.title, "SAMPLE.TXT");
     strcpy(preview.lines[0], "FILE FOUND");
     strcpy(preview.lines[1], "HELLO");
     strcpy(preview.status, "ASCII TEXT OK");
     preview.found_file = true;
+    browser.entry_count = 1;
 
     ink_runtime_shell_init(&shell);
-    ink_runtime_shell_render(&shell, &preview, &view);
+    ink_runtime_shell_render(&shell, &browser, &preview, &view);
     if (strcmp(view.title, "CROSSPOINT S3") != 0) {
         return false;
     }
@@ -286,15 +311,16 @@ bool ink_runtime_shell_self_test(void)
     if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_NAV_NEXT)) {
         return false;
     }
-    ink_runtime_shell_render(&shell, &preview, &view);
-    if (strcmp(view.line2, "> TXT PREVIEW") != 0) {
+    ink_runtime_shell_render(&shell, &browser, &preview, &view);
+    if (strcmp(view.line2, "> FILE BROWSER") != 0) {
         return false;
     }
 
     if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_CONFIRM)) {
         return false;
     }
-    ink_runtime_shell_render(&shell, &preview, &view);
+    shell.page = INK_RUNTIME_SHELL_PAGE_TXT_PREVIEW;
+    ink_runtime_shell_render(&shell, &browser, &preview, &view);
     if (strcmp(view.title, "SAMPLE.TXT") != 0) {
         return false;
     }
@@ -302,12 +328,8 @@ bool ink_runtime_shell_self_test(void)
         return false;
     }
 
-    if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_BACK)) {
-        return false;
-    }
-    if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_NAV_PREVIOUS)) {
-        return false;
-    }
+    shell.page = INK_RUNTIME_SHELL_PAGE_HOME;
+    shell.home_index = INK_RUNTIME_SHELL_HOME_ITEM_BUTTON_TEST;
     if (!ink_runtime_shell_handle_command(&shell, INK_RUNTIME_SHELL_COMMAND_CONFIRM)) {
         return false;
     }
@@ -318,7 +340,7 @@ bool ink_runtime_shell_self_test(void)
     if (!ink_runtime_shell_note_buttons(&shell, &buttons)) {
         return false;
     }
-    ink_runtime_shell_render(&shell, &preview, &view);
+    ink_runtime_shell_render(&shell, &browser, &preview, &view);
     if (strcmp(view.title, "BUTTON TEST") != 0) {
         return false;
     }
