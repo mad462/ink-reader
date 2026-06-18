@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "epd_gdey0426t82.c"
+        "epd_test_pattern.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_driver_sdmmc
+        fatfs
+        vfs
+)
