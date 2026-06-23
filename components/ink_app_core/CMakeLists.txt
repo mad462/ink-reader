@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "ink_display_mailbox.c"
+        "ink_file_browser.c"
+        "ink_runtime_shell.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        ink_book_xtc
+        ink_hw
+)

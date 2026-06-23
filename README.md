@@ -1,6 +1,6 @@
 # ink-reader
 
-Minimal ESP-IDF bring-up for a 4.26-inch `GDEY0426T82` e-paper panel and FAT32 TF card on `ESP32-S3`.
+Minimal ESP-IDF bring-up for a 4.26-inch `GDEY0426T82` e-paper panel on `ESP32-S3`.
 
 ## Environment
 
@@ -22,8 +22,6 @@ $env:IDF_PATH='C:\esp\v5.5.4\esp-idf'
 - Panel: `GDEY0426T82`
 - Logical panel resolution: `480 x 800` portrait
 - Native controller transfer resolution: `800 x 480` landscape
-- TF card filesystem: `FAT32`
-
 ## E-Paper Wiring
 
 - `EPD_GPIO_MOSI` -> `GPIO4`
@@ -33,15 +31,6 @@ $env:IDF_PATH='C:\esp\v5.5.4\esp-idf'
 - `EPD_GPIO_DC` -> `GPIO7`
 - `EPD_GPIO_RST` -> `GPIO15`
 - `EPD_GPIO_BUSY` -> `GPIO16`
-
-## TF Card (SDMMC 4-bit)
-
-- `CLK` -> `GPIO40`
-- `CMD` -> `GPIO39`
-- `D0` -> `GPIO41`
-- `D1` -> `GPIO42`
-- `D2` -> `GPIO48`
-- `D3` -> `GPIO38`
 
 ## Build and flash
 
@@ -54,23 +43,17 @@ idf.py -p COMx flash
 
 Serial logs should show:
 
-1. TF card mount start
-2. SD card identification and root directory listing
-3. TXT preview file scan and byte statistics
-4. E-paper full white
-5. E-paper full black
-6. E-paper text demo pattern
-7. E-paper TXT preview page
-8. E-paper partial area refresh demo, changing only the bottom status line
-9. Panel deep sleep
+1. display tuning lab startup
+2. initial fixed test page submit
+3. E-paper render timing logs for the selected refresh profile
 
-## Current TXT preview behavior
+## Current display tuning lab behavior
 
-- The firmware scans `/sdcard` for the first `.txt` or `.TXT` file.
-- It reads the first `512` bytes and renders a simple preview page.
-- Current preview font is ASCII-only.
-- Any non-ASCII UTF-8 byte is rendered as `#` for now.
-- Serial logs report how many non-ASCII bytes were seen, so Chinese text support is not being overstated.
+- The active runtime no longer depends on TF card or ebook state.
+- Left/right buttons switch between a small set of fixed test pages.
+- Confirm cycles refresh profiles.
+- Back forces a full refresh of the current page.
+- Footer text shows current page and refresh profile so visual artifacts can be correlated with serial logs.
 
 ## Current partial refresh behavior
 
@@ -80,7 +63,7 @@ Serial logs should show:
 - Full refresh updates the shadow framebuffer after a successful refresh.
 - Partial refresh sends the new frame to RAM command `0x24`, the previous frame to RAM command `0x26`, then triggers the seller demo partial update sequence `0x22/0xFF` + `0x20`.
 - `epd_gdey0426t82_partial_refresh_area()` accepts a portrait-coordinate dirty rectangle and writes only the aligned native RAM window.
-- The app currently validates this by full-refreshing the TXT preview page, then changing only the bottom status line to `PARTIAL AREA OK` through partial area refresh.
+- The tuning lab can compare full-screen refresh, full-screen fast refresh, dirty-rect partial refresh, and fixed-footer partial refresh on deterministic pages.
 - Follow the seller guidance: after several partial refreshes, do a full refresh to clear ghosting.
 
 ## Suggested next display milestones

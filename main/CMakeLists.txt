@@ -1,16 +1,21 @@
 idf_component_register(
     SRCS
         "app_main.c"
-        "epd_gdey0426t82.c"
-        "epd_test_pattern.c"
-        "ink_button_input.c"
-        "ink_file_browser.c"
-        "ink_runtime_shell.c"
-        "ink_txt_reader.c"
+        "ink_app_boot.c"
+        "ink_app_display_request.c"
+        "ink_app_fast_browse.c"
+        "ink_app_render.c"
+        "ink_app_startup.c"
+        "ink_tuning_lab.c"
+        "ink_app_ui.c"
     INCLUDE_DIRS
         "."
     REQUIRES
         esp_driver_sdmmc
+        esp_timer
         fatfs
+        ink_app_core
+        ink_book_xtc
+        ink_hw
         vfs
 )

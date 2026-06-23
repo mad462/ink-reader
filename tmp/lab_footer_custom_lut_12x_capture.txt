@@ -1,0 +1,247 @@
+ESP-ROM:esp32s3-202103þESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x28 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x14f0
+load:0x403c8700,len:0xd24
+load:0x403cb700,len:0x2ef0
+entry 0x403c8924
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (25) boot: compile time Jun 19 2026 13:54:49
+I (25) boot: Multicore bootloader
+I (25) boot: chip revision: v0.2
+I (28) boot: efuse block revision: v1.3
+I (31) boot.esp32s3: Boot SPI Speed : 80MHz
+I (35) boot.esp32s3: SPI Mode       : DIO
+I (39) boot.esp32s3: SPI Flash Size : 16MB
+I (43) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (50) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (63) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 00100000
+I (76) boot: End of partition table
+I (79) esp_image: segment 0: paddr=00010020 vaddr=3c020020 size=0e45ch ( 58460) map
+I (97) esp_image: segment 1: paddr=0001e484 vaddr=3fc96600 size=01b94h (  7060) load
+I (99) esp_image: segment 2: paddr=00020020 vaddr=42000020 size=1ffa8h (130984) map
+I (124) esp_image: segment 3: paddr=0003ffd0 vaddr=3fc98194 size=01b9ch (  7068) load
+I (126) esp_image: segment 4: paddr=00041b74 vaddr=40374000 size=125dch ( 75228) load
+I (145) esp_image: segment 5: paddr=00054158 vaddr=50000000 size=00020h (    32) load
+I (152) boot: Loaded app from partition at offset 0x10000
+I (152) boot: Disabling RNG early entropy source...
+I (162) octal_psram: vendor id    : 0x0d (AP)
+I (163) octal_psram: dev id       : 0x02 (generation 3)
+I (163) octal_psram: density      : 0x03 (64 Mbit)
+I (165) octal_psram: good-die     : 0x01 (Pass)
+I (169) octal_psram: Latency      : 0x01 (Fixed)
+I (173) octal_psram: VCC          : 0x01 (3V)
+I (177) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (182) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (187) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (192) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (197) octal_psram: DriveStrength: 0x00 (1/1)
+I (201) MSPI Timing: Enter psram timing tuning
+I (206) esp_psram: Found 8MB PSRAM device
+I (209) esp_psram: Speed: 80MHz
+I (212) cpu_start: Multicore app
+I (648) esp_psram: SPI SRAM memory test OK
+I (656) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (657) cpu_start: Pro cpu start user code
+I (657) cpu_start: cpu freq: 160000000 Hz
+I (658) app_init: Application information:
+I (662) app_init: Project name:     ink_reader
+I (666) app_init: App version:      faf07a6-dirty
+I (671) app_init: Compile time:     Jun 21 2026 18:38:21
+I (676) app_init: ELF file SHA256:  0ca02bbd5...
+I (680) app_init: ESP-IDF:          v5.5.4
+I (684) efuse_init: Min chip rev:     v0.0
+I (688) efuse_init: Max chip rev:     v0.99 
+I (692) efuse_init: Chip rev:         v0.2
+I (696) heap_init: Initializing. RAM available for dynamic allocation:
+I (702) heap_init: At 3FC9DB58 len 0004BBB8 (302 KiB): RAM
+I (707) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (712) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+I (717) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (723) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+I (730) spi_flash: detected chip: boya
+I (733) spi_flash: flash io: dio
+I (736) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (742) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (749) main_task: Started on CPU0
+I (779) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (779) main_task: Calling app_main()
+I (779) ink_reader: boot self-tests skipped; set kRunBootSelfTests=true for strict diagnostics
+I (789) ink_reader: before display alloc free_internal=355611 free_8bit=8741767 largest_8bit=8257536 largest_spiram=8257536
+I (799) ink_reader: alloc framebuffer len=48000 ptr=0x3c030998 free_internal=355611 free_8bit=8693635 largest_8bit=8257536 largest_spiram=8257536
+I (809) ink_reader: alloc previous_framebuffer len=48000 ptr=0x3c03c59c free_internal=355611 free_8bit=8645503 largest_8bit=8257536 largest_spiram=8257536
+I (829) ink_reader: alloc bitmap_snapshot_a len=48000 ptr=0x3c0481a0 free_internal=355611 free_8bit=8597371 largest_8bit=8126464 largest_spiram=8126464
+I (839) ink_reader: alloc bitmap_snapshot_b len=48000 ptr=0x3c053da4 free_internal=355611 free_8bit=8549239 largest_8bit=8126464 largest_spiram=8126464
+I (849) ink_reader: alloc native_snapshot_a len=48000 ptr=0x3c05f9a8 free_internal=355611 free_8bit=8501107 largest_8bit=8126464 largest_spiram=8126464
+I (869) ink_reader: alloc native_snapshot_b len=48000 ptr=0x3c06b5ac free_internal=355611 free_8bit=8452975 largest_8bit=7995392 largest_spiram=7995392
+I (879) ink_reader: display tuning lab mode: skipping TF mount, ebook state, and browser boot
+I (919) ink_reader: creating EpdTask stack=5120
+I (919) ink_reader: EpdTask started
+I (919) ink_reader: create EpdTask result=1 handle=0x3fceb820 free_internal=347571
+I (919) ink_reader: creating UiTask stack=6144
+I (919) ink_reader: UiTask started
+I (929) ink_reader: epd claim seq=1 page=READER full=0 submitted=180ms age=0ms
+I (929) ink_reader: ui submit seq=1 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #0'
+I (969) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (969) ink_reader: create UiTask result=1 handle=0x3fced188 free_internal=341067
+I (969) ink_reader: creating InputTask stack=3072
+I (979) ink_reader: InputTask started
+I (989) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (999) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=7ms ret=ESP_OK
+I (999) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (1059) ink_reader: create InputTask result=1 handle=0x3fcedef0 free_internal=337635
+I (1059) main_task: Returned from app_main()
+I (1209) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=147ms ret=ESP_OK
+I (1209) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=238ms convert=8ms prepare=37ms update=148ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=154ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (1219) ink_reader: render seq=1 t=470ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=30ms diff=10ms epd=250ms total=290ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (1239) ink_reader: epd finish seq=1 result=ESP_OK phase=4
+I (1239) ink_reader: display stats submitted=1 merged=0 cancelled=0 stale=0 completed=1
+I (1249) ink_reader: ui display done seq=1 result=ESP_OK
+I (1259) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=1
+I (1259) ink_reader: ui submit seq=2 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #1'
+I (1259) ink_reader: epd claim seq=2 page=READER full=0 submitted=510ms age=0ms
+I (1309) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (1329) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (1339) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (1339) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (1549) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (1549) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=234ms convert=8ms prepare=29ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (1559) ink_reader: render seq=2 t=810ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (1579) ink_reader: epd finish seq=2 result=ESP_OK phase=4
+I (1579) ink_reader: display stats submitted=2 merged=0 cancelled=0 stale=0 completed=2
+I (1589) ink_reader: ui display done seq=2 result=ESP_OK
+I (1599) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=2
+I (1599) ink_reader: ui submit seq=3 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #2'
+I (1599) ink_reader: epd claim seq=3 page=READER full=0 submitted=850ms age=0ms
+I (1649) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (1669) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (1679) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (1679) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (1889) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (1889) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (1899) ink_reader: render seq=3 t=1150ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (1919) ink_reader: epd finish seq=3 result=ESP_OK phase=4
+I (1919) ink_reader: display stats submitted=3 merged=0 cancelled=0 stale=0 completed=3
+I (1929) ink_reader: ui display done seq=3 result=ESP_OK
+I (1939) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=3
+I (1939) ink_reader: ui submit seq=4 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #3'
+I (1939) ink_reader: epd claim seq=4 page=READER full=0 submitted=1190ms age=0ms
+I (1989) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (2009) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (2019) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (2019) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (2229) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (2229) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (2239) ink_reader: render seq=4 t=1490ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (2259) ink_reader: epd finish seq=4 result=ESP_OK phase=4
+I (2259) ink_reader: display stats submitted=4 merged=0 cancelled=0 stale=0 completed=4
+I (2269) ink_reader: ui display done seq=4 result=ESP_OK
+I (2279) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=4
+I (2279) ink_reader: ui submit seq=5 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #4'
+I (2279) ink_reader: epd claim seq=5 page=READER full=0 submitted=1530ms age=0ms
+I (2329) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (2349) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (2359) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (2359) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (2569) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (2569) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (2579) ink_reader: render seq=5 t=1830ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (2599) ink_reader: epd finish seq=5 result=ESP_OK phase=4
+I (2599) ink_reader: display stats submitted=5 merged=0 cancelled=0 stale=0 completed=5
+I (2609) ink_reader: ui display done seq=5 result=ESP_OK
+I (2619) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=5
+I (2619) ink_reader: ui submit seq=6 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #5'
+I (2619) ink_reader: epd claim seq=6 page=READER full=0 submitted=1870ms age=0ms
+I (2669) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (2689) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (2699) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (2699) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (2909) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (2909) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (2919) ink_reader: render seq=6 t=2170ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (2939) ink_reader: epd finish seq=6 result=ESP_OK phase=4
+I (2939) ink_reader: display stats submitted=6 merged=0 cancelled=0 stale=0 completed=6
+I (2949) ink_reader: ui display done seq=6 result=ESP_OK
+I (2959) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=6
+I (2959) ink_reader: ui submit seq=7 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #6'
+I (2959) ink_reader: epd claim seq=7 page=READER full=0 submitted=2210ms age=0ms
+I (3009) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (3029) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (3039) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (3039) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (3249) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (3249) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (3259) ink_reader: render seq=7 t=2510ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (3279) ink_reader: epd finish seq=7 result=ESP_OK phase=4
+I (3279) ink_reader: display stats submitted=7 merged=0 cancelled=0 stale=0 completed=7
+I (3289) ink_reader: ui display done seq=7 result=ESP_OK
+I (3299) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=7
+I (3299) ink_reader: ui submit seq=8 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #7'
+I (3299) ink_reader: epd claim seq=8 page=READER full=0 submitted=2550ms age=0ms
+I (3349) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (3369) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (3379) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (3379) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (3589) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (3589) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (3599) ink_reader: render seq=8 t=2850ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (3619) ink_reader: epd finish seq=8 result=ESP_OK phase=4
+I (3619) ink_reader: display stats submitted=8 merged=0 cancelled=0 stale=0 completed=8
+I (3629) ink_reader: ui display done seq=8 result=ESP_OK
+I (3639) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=8
+I (3639) ink_reader: ui submit seq=9 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #8'
+I (3639) ink_reader: epd claim seq=9 page=READER full=0 submitted=2890ms age=0ms
+I (3689) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (3709) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (3719) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (3719) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (3929) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (3929) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (3939) ink_reader: render seq=9 t=3190ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (3959) ink_reader: epd finish seq=9 result=ESP_OK phase=4
+I (3959) ink_reader: display stats submitted=9 merged=0 cancelled=0 stale=0 completed=9
+I (3969) ink_reader: ui display done seq=9 result=ESP_OK
+I (3979) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=9
+I (3979) ink_reader: ui submit seq=10 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #9'
+I (3979) ink_reader: epd claim seq=10 page=READER full=0 submitted=3230ms age=0ms
+I (4029) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (4049) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (4059) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (4059) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (4269) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (4269) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=28ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (4279) ink_reader: render seq=10 t=3530ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=10ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (4299) ink_reader: epd finish seq=10 result=ESP_OK phase=4
+I (4299) ink_reader: display stats submitted=10 merged=0 cancelled=0 stale=0 completed=10
+I (4309) ink_reader: ui display done seq=10 result=ESP_OK
+I (4319) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=10
+I (4319) ink_reader: ui submit seq=11 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #10'
+I (4319) ink_reader: epd claim seq=11 page=READER full=0 submitted=3570ms age=0ms
+I (4369) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (4389) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (4399) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (4399) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (4609) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (4609) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=232ms convert=8ms prepare=27ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (4619) ink_reader: render seq=11 t=3870ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=30ms diff=0ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (4639) ink_reader: epd finish seq=11 result=ESP_OK phase=4
+I (4639) ink_reader: display stats submitted=11 merged=0 cancelled=0 stale=0 completed=11
+I (4649) ink_reader: ui display done seq=11 result=ESP_OK
+I (4659) ink_reader: ui auto repeat tuning probe page=1 profile=4 render_counter=11
+I (4659) ink_reader: ui submit seq=12 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P2/4 FOOTER' 'CUSTOM_LUT_A #11'
+I (4659) ink_reader: epd claim seq=12 page=READER full=0 submitted=3910ms age=0ms
+I (4709) epd_gdey0426t82: epd area portrait x=0 y=768 w=480 h=32 native x=768 y=0 w=32 h=480
+I (4729) epd_gdey0426t82: epd busy op=partial_area_lut_a label=reset busy=1ms ret=ESP_OK
+I (4739) epd_gdey0426t82: epd busy op=partial_area_lut_a label=sw_reset busy=10ms ret=ESP_OK
+I (4739) epd_gdey0426t82: epd busy op=partial_area_lut_a label=init_done busy=1ms ret=ESP_OK
+I (4949) epd_gdey0426t82: epd busy op=partial_area_lut_a label=custom_lut_a_update busy=151ms ret=ESP_OK
+I (4949) epd_gdey0426t82: epd refresh op=partial_area_lut_a total=233ms convert=8ms prepare=27ms update=152ms tx=44ms tx_bytes=4017 tx_calls=1033 busy=161ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (4959) ink_reader: render seq=12 t=4210ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=30ms diff=0ms epd=250ms total=280ms dirty=0,768 480x32 cache=+0/-0 evict+0 ret=ESP_OK
+I (4979) ink_reader: epd finish seq=12 result=ESP_OK phase=4
+I (4979) ink_reader: display stats submitted=12 merged=0 cancelled=0 stale=0 completed=12
+I (4989) ink_reader: ui display done seq=12 result=ESP_OK

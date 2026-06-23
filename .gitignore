@@ -1,5 +1,7 @@
 build/
 .vscode/
+.cache/
 *.log
 *.tmp
 *.bak
+.worktrees/

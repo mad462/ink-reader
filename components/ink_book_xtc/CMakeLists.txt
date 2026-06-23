@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "ink_app_state.c"
+        "ink_reader_session.c"
+        "ink_xtc_book.c"
+        "ink_xtc_reader.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        ink_hw
+)

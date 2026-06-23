@@ -1,0 +1,1792 @@
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x14f0
+load:0x403c8700,len:0xd24
+load:0x403cb700,len:0x2ef0
+entry 0x403c8924
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (25) boot: compile time Jun 19 2026 13:54:49
+I (25) boot: Multicore bootloader
+I (25) boot: chip revision: v0.2
+I (28) boot: efuse block revision: v1.3
+I (31) boot.esp32s3: Boot SPI Speed : 80MHz
+I (35) boot.esp32s3: SPI Mode       : DIO
+I (39) boot.esp32s3: SPI Flash Size : 16MB
+I (43) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (50) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (63) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 00100000
+I (76) boot: End of partition table
+I (79) esp_image: segment 0: paddr=00010020 vaddr=3c040020 size=3ce54h (249428) map
+I (130) esp_image: segment 1: paddr=0004ce7c vaddr=3fc96700 size=0319ch ( 12700) load
+I (133) esp_image: segment 2: paddr=00050020 vaddr=42000020 size=32bech (207852) map
+I (171) esp_image: segment 3: paddr=00082c14 vaddr=3fc9989c size=00744h (  1860) load
+I (172) esp_image: segment 4: paddr=00083360 vaddr=40374000 size=12698h ( 75416) load
+I (191) esp_image: segment 5: paddr=00095a00 vaddr=50000000 size=00020h (    32) load
+I (199) boot: Loaded app from partition at offset 0x10000
+I (199) boot: Disabling RNG early entropy source...
+I (209) octal_psram: vendor id    : 0x0d (AP)
+I (209) octal_psram: dev id       : 0x02 (generation 3)
+I (209) octal_psram: density      : 0x03 (64 Mbit)
+I (211) octal_psram: good-die     : 0x01 (Pass)
+I (216) octal_psram: Latency      : 0x01 (Fixed)
+I (220) octal_psram: VCC          : 0x01 (3V)
+I (224) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (229) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (234) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (238) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (244) octal_psram: DriveStrength: 0x00 (1/1)
+I (248) MSPI Timing: Enter psram timing tuning
+I (253) esp_psram: Found 8MB PSRAM device
+I (256) esp_psram: Speed: 80MHz
+I (259) cpu_start: Multicore app
+I (694) esp_psram: SPI SRAM memory test OK
+I (702) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (703) cpu_start: Pro cpu start user code
+I (703) cpu_start: cpu freq: 160000000 Hz
+I (705) app_init: Application information:
+I (709) app_init: Project name:     ink_reader
+I (713) app_init: App version:      5fcd016-dirty
+I (717) app_init: Compile time:     Jun 20 2026 20:45:47
+I (722) app_init: ELF file SHA256:  b58f0f492...
+I (726) app_init: ESP-IDF:          v5.5.4
+I (730) efuse_init: Min chip rev:     v0.0
+I (734) efuse_init: Max chip rev:     v0.99 
+I (738) efuse_init: Chip rev:         v0.2
+I (742) heap_init: Initializing. RAM available for dynamic allocation:
+I (748) heap_init: At 3FC9DE58 len 0004B8B8 (302 KiB): RAM
+I (753) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (759) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+I (764) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (769) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+I (777) spi_flash: detected chip: boya
+I (779) spi_flash: flash io: dio
+I (782) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (788) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (795) main_task: Started on CPU0
+I (825) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (825) main_task: Calling app_main()
+I (825) ink_reader: boot self-tests skipped; set kRunBootSelfTests=true for strict diagnostics
+I (835) ink_reader: before display alloc free_internal=354843 free_8bit=8740999 largest_8bit=8257536 largest_spiram=8257536
+I (845) ink_reader: alloc framebuffer len=48000 ptr=0x3c080998 free_internal=354843 free_8bit=8692867 largest_8bit=8257536 largest_spiram=8257536
+I (855) ink_reader: alloc previous_framebuffer len=48000 ptr=0x3c08c59c free_internal=354843 free_8bit=8644735 largest_8bit=8257536 largest_spiram=8257536
+I (875) ink_reader: alloc bitmap_snapshot_a len=48000 ptr=0x3c0981a0 free_internal=354843 free_8bit=8596603 largest_8bit=8126464 largest_spiram=8126464
+I (885) ink_reader: alloc bitmap_snapshot_b len=48000 ptr=0x3c0a3da4 free_internal=354843 free_8bit=8548471 largest_8bit=8126464 largest_spiram=8126464
+I (895) ink_reader: alloc native_snapshot_a len=48000 ptr=0x3c0af9a8 free_internal=354843 free_8bit=8500339 largest_8bit=8126464 largest_spiram=8126464
+I (915) ink_reader: alloc native_snapshot_b len=48000 ptr=0x3c0bb5ac free_internal=354843 free_8bit=8452207 largest_8bit=7995392 largest_spiram=7995392
+I (965) ink_reader: TF card mounted at /sdcard
+Name: 00000
+Type: SDSC
+Speed: 20.00 MHz (limit: 20.00 MHz)
+Size: 954MB
+CSD: ver=1, sector_size=512, capacity=1953792 read_bl_len=9
+SSR: bus_width=4
+W (975) ink_cpfont: font open failed: /sdcard/.fonts/LXGWWenKai/LXGWWenKai_18.cpfont
+I (975) ink_cpfont: font loaded: /sdcard/fonts/LXGWWenKai_18.cpfont intervals=18 glyphs=21930 advance_y=44 ascender=35 descender=-10 bitmap_offset=351160 cache=96
+I (985) ink_reader: loaded font path=/sdcard/fonts/LXGWWenKai_18.cpfont
+I (1005) ink_cpfont: font loaded: /sdcard/fonts/SmallSimSun_16.cpfont intervals=65 glyphs=21529 advance_y=38 ascender=29 descender=-5 bitmap_offset=345308 cache=96
+I (1005) ink_reader: loaded font path=/sdcard/fonts/SmallSimSun_16.cpfont
+I (1025) ink_reader_session: xtc open begin path=/sdcard/books/海底两万里.xtc heap_internal=328295 heap_8bit=8383603
+I (1095) ink_xtc_book: xtc open ok: path=/sdcard/books/海底两万里.xtc pages=1679 chapters=50 index_offset=5112 data_offset=31976 first_offset=31976 first_size=48022 hq=0
+I (1105) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (1105) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (1315) ink_reader_session: cache page=1 slot=0 load=90ms convert=110ms total=200ms
+I (1315) ink_reader_session: xtc open ok path=/sdcard/books/海底两万里.xtc pages=1679 chapters=50 current_chapter=1 name=译 序
+I (1325) ink_reader_session: chapter[1] start=6 end=6 name=译 序
+I (1325) ink_reader_session: chapter[2] start=25 end=25 name=上 篇
+I (1335) ink_reader_session: chapter[3] start=26 end=26 name=一 飞驰的礁石
+I (1335) ink_reader_session: chapter[4] start=41 end=41 name=二 赞成与反对
+I (1345) ink_reader_session: chapter[5] start=54 end=54 name=三 先生，悉听尊便
+I (1355) ink_reader_session: chapter[6] start=67 end=67 name=四 尼德·兰
+I (1365) ink_reader_session: chapter[7] start=83 end=83 name=五 瞎转悠
+I (1365) ink_reader_session: chapter[8] start=96 end=96 name=六 全速前进
+I (1375) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (1385) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (1425) ink_reader: creating EpdTask stack=5120
+I (1425) ink_reader: EpdTask started
+I (1425) ink_reader: create EpdTask result=1 handle=0x3fceeca8 free_internal=315679
+I (1425) ink_reader: creating UiTask stack=6144
+I (1425) ink_reader: UiTask started
+I (1435) ink_reader: epd claim seq=1 page=READER full=1 submitted=640ms age=0ms
+I (1445) ink_reader: ui submit seq=1 page=READER cmd=NONE full=1 input_to_ui=0ms build=0ms footer='1/1679 0%' 'CH 1/50'
+I (1555) ink_reader: create UiTask result=1 handle=0x3fcab9d4 free_internal=309183
+I (1555) ink_reader: creating InputTask stack=3072
+I (1555) ink_reader: InputTask started
+I (1575) epd_gdey0426t82: epd busy op=full label=reset busy=1ms ret=ESP_OK
+I (1585) epd_gdey0426t82: epd busy op=full label=sw_reset busy=10ms ret=ESP_OK
+I (1585) epd_gdey0426t82: epd busy op=full label=init_done busy=1ms ret=ESP_OK
+I (1605) ink_reader: create InputTask result=1 handle=0x3fcac734 free_internal=305759
+I (1605) main_task: Returned from app_main()
+I (3305) epd_gdey0426t82: epd busy op=full label=full_update busy=1697ms ret=ESP_OK
+I (3305) epd_gdey0426t82: epd refresh op=full total=1857ms convert=106ms prepare=31ms update=1697ms tx=22ms tx_bytes=48040 tx_calls=52 busy=1707ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (3315) ink_reader: render seq=1 t=2520ms page=READER mode=full cmd=NONE since_cmd=0ms view=0ms draw=0ms diff=0ms epd=1870ms total=1870ms dirty=0,0 480x800 cache=+0/-0 evict+0 ret=ESP_OK
+I (3325) ink_reader: epd finish seq=1 result=ESP_OK phase=4
+I (3335) ink_reader: display stats submitted=1 merged=0 cancelled=0 stale=0 completed=1
+I (3345) ink_reader: ui display done seq=1 result=ESP_OK
+I (14925) ink_reader: button event t=14130ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (15245) ink_reader: fast browse begin page=1 total=1679 dir=forward
+I (15245) ink_reader: fast browse target page=2 held=0ms step=1 interval=120ms
+I (15245) ink_reader: epd claim seq=2 page=READER full=0 submitted=14450ms age=0ms
+I (15245) ink_reader: ui submit seq=2 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='2/1679 0%' 'CH 1/50'
+I (15265) ink_reader: render dirty seq=2 page=READER x=8 y=782 w=10 h=14
+I (15265) epd_gdey0426t82: epd area portrait x=8 y=782 w=10 h=14 native x=776 y=462 w=24 h=10
+I (15295) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (15305) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (15305) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (15375) ink_reader: fast browse target page=3 held=130ms step=1 interval=120ms
+I (15375) ink_reader: ui submit seq=3 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='3/1679 0%' 'CH 1/50'
+I (15505) ink_reader: fast browse target page=4 held=260ms step=1 interval=120ms
+I (15505) ink_reader: ui submit seq=4 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='4/1679 0%' 'CH 1/50'
+I (15555) ink_reader: button event t=14760ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (15555) ink_reader_session: chapter resolve page=4 chapter=1/50 start=6 end=6 name=译 序
+I (15555) ink_reader_session: chapter resolve page=4 chapter=1/50 start=6 end=6 name=译 序
+I (15615) ink_reader: button event t=14820ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (15665) ink_reader: button event t=14870ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (15765) ink_reader_session: cache page=4 slot=1 load=90ms convert=110ms total=200ms
+I (15805) ink_reader: fast browse commit target=4 ret=1
+I (15805) ink_reader: ui submit seq=5 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='4/1679 0%' 'CH 1/50'
+I (15815) ink_reader: command t=14870ms page=READER cmd=NAV_NEXT
+I (15815) ink_reader_session: chapter resolve page=5 chapter=1/50 start=6 end=6 name=译 序
+I (15825) ink_reader_session: chapter resolve page=5 chapter=1/50 start=6 end=6 name=译 序
+I (15935) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (15935) epd_gdey0426t82: epd refresh op=partial_area total=664ms convert=1ms prepare=31ms update=625ms tx=3ms tx_bytes=120 tx_calls=80 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (15945) ink_reader: render seq=2 t=15150ms page=READER mode=partial cmd=NAV_NEXT since_cmd=280ms view=0ms draw=10ms diff=10ms epd=680ms total=700ms dirty=8,782 10x14 cache=+0/-0 evict+0 ret=ESP_OK
+I (15965) ink_reader: epd finish seq=2 result=ESP_OK phase=4
+I (15965) ink_reader: display stats submitted=5 merged=3 cancelled=0 stale=0 completed=2
+I (15975) ink_reader: epd claim seq=5 page=READER full=0 submitted=15010ms age=170ms
+I (16025) ink_reader: render dirty seq=5 page=READER x=8 y=17 w=456 h=779
+I (16025) epd_gdey0426t82: epd area portrait x=8 y=17 w=456 h=779 native x=16 y=16 w=784 h=456
+I (16055) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (16055) ink_reader_session: cache page=5 slot=2 load=90ms convert=130ms total=220ms
+I (16065) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (16065) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (16085) ink_reader: ui submit seq=6 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='5/1679 0%' 'CH 1/50'
+I (16095) ink_reader: ui display done seq=2 result=ESP_OK
+W (16245) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (16245) epd_gdey0426t82: epd refresh op=partial_area total=212ms convert=171ms prepare=38ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (16255) ink_reader: render seq=5 t=15460ms page=READER mode=partial cmd=NAV_NEXT since_cmd=590ms view=0ms draw=0ms diff=40ms epd=230ms total=270ms dirty=8,17 456x779 cache=+0/-0 evict+0 ret=ERROR
+I (16265) ink_reader: epd finish seq=5 result=ERROR phase=5
+I (16275) ink_reader: display stats submitted=6 merged=4 cancelled=1 stale=0 completed=2
+I (16285) ink_reader: epd claim seq=6 page=READER full=0 submitted=15290ms age=200ms
+I (16285) ink_reader: ui display done seq=5 result=ERROR
+I (16325) ink_reader: render dirty seq=6 page=READER x=8 y=17 w=458 h=779
+I (16325) epd_gdey0426t82: epd area portrait x=8 y=17 w=458 h=779 native x=16 y=14 w=784 h=458
+I (16345) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (16355) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (16355) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (16375) ink_reader: button event t=15580ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (16415) ink_reader: button event t=15620ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (16415) ink_reader: command t=15620ms page=READER cmd=NAV_NEXT
+I (16415) ink_reader_session: chapter resolve page=6 chapter=1/50 start=6 end=6 name=译 序
+I (16425) ink_reader_session: chapter resolve page=6 chapter=1/50 start=6 end=6 name=译 序
+I (16485) ink_reader: button event t=15690ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (16505) ink_reader: button event t=15710ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (16625) ink_reader_session: cache page=6 slot=0 load=90ms convert=100ms total=190ms
+I (16655) ink_reader: ui submit seq=7 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='6/1679 0%' '译 序'
+I (16655) ink_reader: command t=15710ms page=READER cmd=NAV_NEXT
+I (16665) ink_reader_session: chapter resolve page=7 chapter=1/50 start=6 end=6 name=译 序
+I (16675) ink_reader_session: chapter resolve page=7 chapter=1/50 start=6 end=6 name=译 序
+I (16885) ink_reader_session: cache page=7 slot=1 load=90ms convert=110ms total=200ms
+I (16915) ink_reader: ui submit seq=8 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='7/1679 0%' '译 序'
+I (17245) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (17245) epd_gdey0426t82: epd refresh op=partial_area total=917ms convert=173ms prepare=26ms update=630ms tx=80ms tx_bytes=89828 tx_calls=976 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (17255) ink_reader: render seq=6 t=16460ms page=READER mode=partial cmd=NAV_NEXT since_cmd=750ms view=0ms draw=10ms diff=30ms epd=930ms total=970ms dirty=8,17 458x779 cache=+0/-0 evict+0 ret=ESP_OK
+I (17275) ink_reader: epd finish seq=6 result=ESP_OK phase=4
+I (17275) ink_reader: display stats submitted=8 merged=6 cancelled=1 stale=0 completed=3
+I (17285) ink_reader: ui display done seq=6 result=ESP_OK
+I (17285) ink_reader: epd claim seq=8 page=READER full=0 submitted=16120ms age=370ms
+I (17355) ink_reader: render dirty seq=8 page=READER x=8 y=28 w=458 h=770
+I (17355) epd_gdey0426t82: epd area portrait x=8 y=28 w=458 h=770 native x=24 y=14 w=776 h=458
+I (17375) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (17385) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (17385) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (18265) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (18265) epd_gdey0426t82: epd refresh op=partial_area total=911ms convert=163ms prepare=30ms update=630ms tx=80ms tx_bytes=88912 tx_calls=976 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (18275) ink_reader: render seq=8 t=17480ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1770ms view=0ms draw=40ms diff=20ms epd=920ms total=980ms dirty=8,28 458x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (18295) ink_reader: epd finish seq=8 result=ESP_OK phase=4
+I (18295) ink_reader: display stats submitted=8 merged=6 cancelled=1 stale=0 completed=4
+I (18305) ink_reader: ui display done seq=8 result=ESP_OK
+I (30405) ink_reader: button event t=29610ms stable=0x01 pressed=0x01 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (30405) ink_reader: command t=29610ms page=READER cmd=BACK
+I (30405) ink_reader: epd claim seq=9 page=LIBRARY full=0 submitted=29610ms age=0ms
+I (30405) ink_reader: ui submit seq=9 page=LIBRARY cmd=BACK full=0 input_to_ui=0ms build=0ms footer='' ''
+I (30585) ink_reader: button event t=29790ms stable=0x00 pressed=0x00 released=0x01 L=0 R=0 C=0 B=0 P=0
+I (30685) ink_reader: render dirty seq=9 page=LIBRARY x=0 y=0 w=480 h=800
+I (30685) epd_gdey0426t82: epd area portrait x=0 y=0 w=480 h=800 native x=0 y=0 w=800 h=480
+I (30715) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (30725) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (30725) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (31615) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=622ms ret=ESP_OK
+I (31615) epd_gdey0426t82: epd refresh op=partial_area total=924ms convert=176ms prepare=33ms update=623ms tx=85ms tx_bytes=96060 tx_calls=1020 busy=632ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (31625) ink_reader: render seq=9 t=30830ms page=LIBRARY mode=partial cmd=BACK since_cmd=1220ms view=0ms draw=250ms diff=20ms epd=940ms total=1210ms dirty=0,0 480x800 cache=+6/-28 evict+0 ret=ESP_OK
+I (31645) ink_reader: epd finish seq=9 result=ESP_OK phase=4
+I (31645) ink_reader: display stats submitted=9 merged=6 cancelled=1 stale=0 completed=5
+I (31655) ink_reader: ui display done seq=9 result=ESP_OK
+I (37085) ink_reader: button event t=36290ms stable=0x02 pressed=0x02 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (37085) ink_reader: command t=36290ms page=LIBRARY cmd=CONFIRM
+I (37085) ink_reader: selected XTC path=/sdcard/books/海底两万里.xtc
+I (37095) ink_reader_session: xtc open begin path=/sdcard/books/海底两万里.xtc heap_internal=307175 heap_8bit=7950287
+I (37175) ink_xtc_book: xtc open ok: path=/sdcard/books/海底两万里.xtc pages=1679 chapters=50 index_offset=5112 data_offset=31976 first_offset=31976 first_size=48022 hq=0
+I (37175) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (37185) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (37205) ink_reader: button event t=36410ms stable=0x00 pressed=0x00 released=0x02 L=0 R=0 C=0 B=0 P=0
+I (37405) ink_reader_session: cache page=1 slot=0 load=90ms convert=120ms total=210ms
+I (37405) ink_reader_session: xtc open ok path=/sdcard/books/海底两万里.xtc pages=1679 chapters=50 current_chapter=1 name=译 序
+I (37415) ink_reader_session: chapter[1] start=6 end=6 name=译 序
+I (37415) ink_reader_session: chapter[2] start=25 end=25 name=上 篇
+I (37425) ink_reader_session: chapter[3] start=26 end=26 name=一 飞驰的礁石
+I (37425) ink_reader_session: chapter[4] start=41 end=41 name=二 赞成与反对
+I (37435) ink_reader_session: chapter[5] start=54 end=54 name=三 先生，悉听尊便
+I (37445) ink_reader_session: chapter[6] start=67 end=67 name=四 尼德·兰
+I (37455) ink_reader_session: chapter[7] start=83 end=83 name=五 瞎转悠
+I (37455) ink_reader_session: chapter[8] start=96 end=96 name=六 全速前进
+I (37495) ink_reader: epd claim seq=10 page=READER full=0 submitted=36700ms age=0ms
+I (37495) ink_reader: ui submit seq=10 page=READER cmd=CONFIRM full=0 input_to_ui=0ms build=0ms footer='1/1679 0%' 'CH 1/50'
+I (37535) ink_reader: render dirty seq=10 page=READER x=0 y=0 w=480 h=800
+I (37535) epd_gdey0426t82: epd area portrait x=0 y=0 w=480 h=800 native x=0 y=0 w=800 h=480
+I (37555) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (37565) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (37565) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (38455) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=622ms ret=ESP_OK
+I (38455) epd_gdey0426t82: epd refresh op=partial_area total=916ms convert=177ms prepare=26ms update=622ms tx=85ms tx_bytes=96060 tx_calls=1020 busy=632ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (38465) ink_reader: render seq=10 t=37670ms page=READER mode=partial cmd=CONFIRM since_cmd=1380ms view=0ms draw=10ms diff=30ms epd=930ms total=970ms dirty=0,0 480x800 cache=+0/-0 evict+0 ret=ESP_OK
+I (38485) ink_reader: epd finish seq=10 result=ESP_OK phase=4
+I (38485) ink_reader: display stats submitted=10 merged=6 cancelled=1 stale=0 completed=6
+I (38495) ink_reader: ui display done seq=10 result=ESP_OK
+I (81945) ink_reader: button event t=81150ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (82145) ink_reader: button event t=81350ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (82145) ink_reader: command t=81350ms page=READER cmd=NAV_NEXT
+I (82145) ink_reader_session: chapter resolve page=2 chapter=1/50 start=6 end=6 name=译 序
+I (82155) ink_reader_session: chapter resolve page=2 chapter=1/50 start=6 end=6 name=译 序
+I (82365) ink_reader_session: cache page=2 slot=1 load=90ms convert=110ms total=200ms
+I (82395) ink_reader: epd claim seq=11 page=READER full=0 submitted=81600ms age=0ms
+I (82395) ink_reader: ui submit seq=11 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='2/1679 0%' 'CH 1/50'
+I (82435) ink_reader: render dirty seq=11 page=READER x=8 y=17 w=456 h=779
+I (82435) epd_gdey0426t82: epd area portrait x=8 y=17 w=456 h=779 native x=16 y=16 w=784 h=456
+I (82455) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (82465) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (82465) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (82775) ink_reader: button event t=81980ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (83035) ink_reader: button event t=82240ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (83035) ink_reader: command t=82240ms page=READER cmd=NAV_NEXT
+I (83035) ink_reader_session: chapter resolve page=3 chapter=1/50 start=6 end=6 name=译 序
+I (83045) ink_reader_session: chapter resolve page=3 chapter=1/50 start=6 end=6 name=译 序
+I (83245) ink_reader_session: cache page=3 slot=2 load=90ms convert=100ms total=190ms
+I (83285) ink_reader: ui submit seq=12 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='3/1679 0%' 'CH 1/50'
+I (83345) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=629ms ret=ESP_OK
+I (83345) epd_gdey0426t82: epd refresh op=partial_area total=911ms convert=164ms prepare=30ms update=630ms tx=80ms tx_bytes=89436 tx_calls=972 busy=639ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (83355) ink_reader: render seq=11 t=82560ms page=READER mode=partial cmd=NAV_NEXT since_cmd=320ms view=0ms draw=10ms diff=30ms epd=920ms total=960ms dirty=8,17 456x779 cache=+0/-0 evict+0 ret=ESP_OK
+I (83375) ink_reader: epd finish seq=11 result=ESP_OK phase=4
+I (83375) ink_reader: display stats submitted=12 merged=7 cancelled=1 stale=0 completed=7
+I (83385) ink_reader: ui display done seq=11 result=ESP_OK
+I (83385) ink_reader: epd claim seq=12 page=READER full=0 submitted=82490ms age=100ms
+I (83415) ink_reader: render dirty seq=12 page=READER x=8 y=32 w=449 h=764
+I (83415) epd_gdey0426t82: epd area portrait x=8 y=32 w=449 h=764 native x=32 y=23 w=768 h=449
+I (83445) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (83455) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (83455) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (83585) ink_reader: button event t=82790ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (83755) ink_reader: button event t=82960ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (83755) ink_reader: command t=82960ms page=READER cmd=NAV_NEXT
+I (83755) ink_reader_session: chapter resolve page=4 chapter=1/50 start=6 end=6 name=译 序
+I (83765) ink_reader_session: chapter resolve page=4 chapter=1/50 start=6 end=6 name=译 序
+I (83975) ink_reader_session: cache page=4 slot=0 load=90ms convert=110ms total=200ms
+I (84015) ink_reader: ui submit seq=13 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='4/1679 0%' 'CH 1/50'
+I (84185) ink_reader: button event t=83390ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (84315) ink_reader: button event t=83520ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (84315) ink_reader: command t=83520ms page=READER cmd=NAV_NEXT
+I (84315) ink_reader_session: chapter resolve page=5 chapter=1/50 start=6 end=6 name=译 序
+I (84325) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=627ms ret=ESP_OK
+I (84325) ink_reader_session: chapter resolve page=5 chapter=1/50 start=6 end=6 name=译 序
+I (84335) epd_gdey0426t82: epd refresh op=partial_area total=914ms convert=159ms prepare=32ms update=637ms tx=78ms tx_bytes=86268 tx_calls=958 busy=637ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (84355) ink_reader: render seq=12 t=83560ms page=READER mode=partial cmd=NAV_NEXT since_cmd=40ms view=0ms draw=10ms diff=10ms epd=940ms total=960ms dirty=8,32 449x764 cache=+0/-0 evict+0 ret=ESP_OK
+I (84375) ink_reader: epd finish seq=12 result=ESP_OK phase=4
+I (84375) ink_reader: display stats submitted=13 merged=8 cancelled=1 stale=0 completed=8
+I (84385) ink_reader: epd claim seq=13 page=READER full=0 submitted=83210ms age=380ms
+I (84415) ink_reader: render dirty seq=13 page=READER x=8 y=28 w=450 h=768
+I (84415) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (84445) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (84455) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (84455) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (84565) ink_reader_session: cache page=5 slot=1 load=100ms convert=130ms total=230ms
+I (84605) ink_reader: ui submit seq=14 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='5/1679 0%' 'CH 1/50'
+I (84605) ink_reader: ui display done seq=12 result=ESP_OK
+W (84655) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (84655) epd_gdey0426t82: epd refresh op=partial_area total=238ms convert=199ms prepare=35ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (84665) ink_reader: render seq=13 t=83870ms page=READER mode=partial cmd=NAV_NEXT since_cmd=350ms view=0ms draw=10ms diff=10ms epd=250ms total=270ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ERROR
+I (84685) ink_reader: epd finish seq=13 result=ERROR phase=5
+I (84685) ink_reader: display stats submitted=14 merged=9 cancelled=2 stale=0 completed=8
+I (84695) ink_reader: epd claim seq=14 page=READER full=0 submitted=83810ms age=90ms
+I (84695) ink_reader: ui display done seq=13 result=ERROR
+I (84725) ink_reader: button event t=83930ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (84725) ink_reader: render dirty seq=14 page=READER x=8 y=28 w=458 h=762
+I (84725) epd_gdey0426t82: epd area portrait x=8 y=28 w=458 h=762 native x=24 y=14 w=768 h=458
+I (84755) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (84765) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (84765) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (84875) ink_reader: button event t=84080ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (84875) ink_reader: command t=84080ms page=READER cmd=NAV_NEXT
+I (84875) ink_reader_session: chapter resolve page=6 chapter=1/50 start=6 end=6 name=译 序
+I (84885) ink_reader_session: chapter resolve page=6 chapter=1/50 start=6 end=6 name=译 序
+I (85085) ink_reader_session: cache page=6 slot=0 load=90ms convert=100ms total=190ms
+I (85125) ink_reader: ui submit seq=15 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='6/1679 0%' '译 序'
+I (85195) ink_reader: button event t=84400ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (85305) ink_reader: button event t=84510ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (85305) ink_reader: command t=84510ms page=READER cmd=NAV_NEXT
+I (85305) ink_reader_session: chapter resolve page=7 chapter=1/50 start=6 end=6 name=译 序
+I (85315) ink_reader_session: chapter resolve page=7 chapter=1/50 start=6 end=6 name=译 序
+I (85525) ink_reader_session: cache page=7 slot=1 load=90ms convert=110ms total=200ms
+I (85555) ink_reader: ui submit seq=16 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='7/1679 0%' '译 序'
+I (85605) ink_reader: button event t=84810ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (85645) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (85645) epd_gdey0426t82: epd refresh op=partial_area total=918ms convert=168ms prepare=32ms update=625ms tx=81ms tx_bytes=87996 tx_calls=976 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (85655) ink_reader: render seq=14 t=84860ms page=READER mode=partial cmd=NAV_NEXT since_cmd=350ms view=0ms draw=0ms diff=20ms epd=930ms total=950ms dirty=8,28 458x762 cache=+0/-0 evict+0 ret=ESP_OK
+I (85675) ink_reader: epd finish seq=14 result=ESP_OK phase=4
+I (85675) ink_reader: display stats submitted=16 merged=11 cancelled=2 stale=0 completed=9
+I (85685) ink_reader: ui display done seq=14 result=ESP_OK
+I (85685) ink_reader: epd claim seq=16 page=READER full=0 submitted=84760ms age=130ms
+I (85715) ink_reader: button event t=84920ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (85715) ink_reader: command t=84920ms page=READER cmd=NAV_NEXT
+I (85715) ink_reader_session: chapter resolve page=8 chapter=1/50 start=6 end=6 name=译 序
+I (85725) ink_reader_session: chapter resolve page=8 chapter=1/50 start=6 end=6 name=译 序
+I (85725) ink_reader: render dirty seq=16 page=READER x=8 y=28 w=458 h=770
+I (85735) epd_gdey0426t82: epd area portrait x=8 y=28 w=458 h=770 native x=24 y=14 w=776 h=458
+I (85765) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (85775) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (85775) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (85975) ink_reader_session: cache page=8 slot=0 load=90ms convert=150ms total=240ms
+W (86015) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (86005) ink_reader: ui submit seq=17 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='8/1679 0%' '译 序'
+E (86015) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+E (86025) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (86035) epd_gdey0426t82: current area write failed
+I (86035) epd_gdey0426t82: epd refresh op=partial_area total=300ms convert=211ms prepare=31ms update=0ms tx=23ms tx_bytes=21493 tx_calls=277 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (86055) ink_reader: render seq=16 t=85260ms page=READER mode=partial cmd=NAV_NEXT since_cmd=340ms view=0ms draw=10ms diff=20ms epd=330ms total=360ms dirty=8,28 458x770 cache=+0/-0 evict+0 ret=ERROR
+I (86075) ink_reader: epd finish seq=16 result=ERROR phase=5
+I (86075) ink_reader: display stats submitted=17 merged=12 cancelled=3 stale=0 completed=9
+I (86085) ink_reader: epd claim seq=17 page=READER full=0 submitted=85210ms age=80ms
+I (86085) ink_reader: ui display done seq=16 result=ERROR
+I (86115) ink_reader: render dirty seq=17 page=READER x=8 y=28 w=458 h=770
+I (86115) epd_gdey0426t82: epd area portrait x=8 y=28 w=458 h=770 native x=24 y=14 w=776 h=458
+I (86135) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (86145) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (86145) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (87025) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (87025) epd_gdey0426t82: epd refresh op=partial_area total=907ms convert=163ms prepare=26ms update=631ms tx=80ms tx_bytes=88912 tx_calls=976 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (87035) ink_reader: render seq=17 t=86240ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1320ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=8,28 458x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (87055) ink_reader: epd finish seq=17 result=ESP_OK phase=4
+I (87055) ink_reader: display stats submitted=17 merged=12 cancelled=3 stale=0 completed=10
+I (87065) ink_reader: ui display done seq=17 result=ESP_OK
+I (98805) ink_reader: button event t=98010ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (98865) ink_reader: button event t=98070ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (98865) ink_reader: command t=98070ms page=READER cmd=NAV_NEXT
+I (98865) ink_reader_session: chapter resolve page=9 chapter=1/50 start=6 end=6 name=译 序
+I (98875) ink_reader_session: chapter resolve page=9 chapter=1/50 start=6 end=6 name=译 序
+I (99085) ink_reader_session: cache page=9 slot=1 load=90ms convert=110ms total=200ms
+I (99115) ink_reader: epd claim seq=18 page=READER full=0 submitted=98320ms age=0ms
+I (99115) ink_reader: ui submit seq=18 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='9/1679 0%' '译 序'
+I (99145) ink_reader: render dirty seq=18 page=READER x=8 y=28 w=449 h=766
+I (99145) epd_gdey0426t82: epd area portrait x=8 y=28 w=449 h=766 native x=24 y=23 w=776 h=449
+I (99165) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (99175) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (99175) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (100045) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=625ms ret=ESP_OK
+I (100045) epd_gdey0426t82: epd refresh op=partial_area total=897ms convert=160ms prepare=26ms update=625ms tx=79ms tx_bytes=87166 tx_calls=958 busy=635ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (100055) ink_reader: render seq=18 t=99260ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1190ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=8,28 449x766 cache=+0/-0 evict+0 ret=ESP_OK
+I (100075) ink_reader: epd finish seq=18 result=ESP_OK phase=4
+I (100075) ink_reader: display stats submitted=18 merged=12 cancelled=3 stale=0 completed=11
+I (100085) ink_reader: button event t=99290ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (100085) ink_reader: ui display done seq=18 result=ESP_OK
+I (100175) ink_reader: button event t=99380ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (100175) ink_reader: command t=99380ms page=READER cmd=NAV_NEXT
+I (100175) ink_reader_session: chapter resolve page=10 chapter=1/50 start=6 end=6 name=译 序
+I (100185) ink_reader_session: chapter resolve page=10 chapter=1/50 start=6 end=6 name=译 序
+I (100395) ink_reader_session: cache page=10 slot=0 load=90ms convert=110ms total=200ms
+I (100425) ink_reader: epd claim seq=19 page=READER full=0 submitted=99630ms age=0ms
+I (100425) ink_reader: ui submit seq=19 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='10/1679 0%' '译 序'
+I (100455) ink_reader: render dirty seq=19 page=READER x=8 y=28 w=450 h=768
+I (100455) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (100475) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (100485) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (100485) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (100745) ink_reader: button event t=99950ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (100825) ink_reader: button event t=100030ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (100825) ink_reader: command t=100030ms page=READER cmd=NAV_NEXT
+I (100825) ink_reader_session: chapter resolve page=11 chapter=1/50 start=6 end=6 name=译 序
+I (100835) ink_reader_session: chapter resolve page=11 chapter=1/50 start=6 end=6 name=译 序
+I (101045) ink_reader_session: cache page=11 slot=1 load=90ms convert=110ms total=200ms
+I (101075) ink_reader: ui submit seq=20 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='11/1679 0%' '译 序'
+I (101235) ink_reader: button event t=100440ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (101335) ink_reader: button event t=100540ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (101335) ink_reader: command t=100540ms page=READER cmd=NAV_NEXT
+I (101335) ink_reader_session: chapter resolve page=12 chapter=1/50 start=6 end=6 name=译 序
+I (101345) ink_reader_session: chapter resolve page=12 chapter=1/50 start=6 end=6 name=译 序
+I (101355) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (101365) epd_gdey0426t82: epd refresh op=partial_area total=906ms convert=160ms prepare=26ms update=634ms tx=79ms tx_bytes=87360 tx_calls=960 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (101375) ink_reader: render seq=19 t=100580ms page=READER mode=partial cmd=NAV_NEXT since_cmd=40ms view=0ms draw=10ms diff=20ms epd=920ms total=950ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (101395) ink_reader: epd finish seq=19 result=ESP_OK phase=4
+I (101395) ink_reader: display stats submitted=20 merged=13 cancelled=3 stale=0 completed=12
+I (101405) ink_reader: epd claim seq=20 page=READER full=0 submitted=100280ms age=330ms
+I (101445) ink_reader: render dirty seq=20 page=READER x=20 y=28 w=438 h=766
+I (101445) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=766 native x=24 y=22 w=776 h=438
+I (101465) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (101475) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (101475) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (101595) ink_reader_session: cache page=12 slot=0 load=90ms convert=150ms total=240ms
+I (101635) ink_reader: ui submit seq=21 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='12/1679 0%' '译 序'
+I (101635) ink_reader: ui display done seq=19 result=ESP_OK
+W (101675) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (101675) epd_gdey0426t82: epd refresh op=partial_area total=235ms convert=201ms prepare=31ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (101685) ink_reader: render seq=20 t=100890ms page=READER mode=partial cmd=NAV_NEXT since_cmd=350ms view=0ms draw=10ms diff=20ms epd=240ms total=270ms dirty=20,28 438x766 cache=+0/-0 evict+0 ret=ERROR
+I (101705) ink_reader: epd finish seq=20 result=ERROR phase=5
+I (101715) ink_reader: display stats submitted=21 merged=14 cancelled=4 stale=0 completed=12
+I (101715) ink_reader: epd claim seq=21 page=READER full=0 submitted=100830ms age=90ms
+I (101715) ink_reader: ui display done seq=20 result=ERROR
+I (101755) ink_reader: render dirty seq=21 page=READER x=20 y=28 w=438 h=768
+I (101755) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (101775) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (101785) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (101785) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (101935) ink_reader: button event t=101140ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (102085) ink_reader: button event t=101290ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (102085) ink_reader: command t=101290ms page=READER cmd=NAV_NEXT
+I (102085) ink_reader_session: chapter resolve page=13 chapter=1/50 start=6 end=6 name=译 序
+I (102095) ink_reader_session: chapter resolve page=13 chapter=1/50 start=6 end=6 name=译 序
+I (102305) ink_reader_session: cache page=13 slot=1 load=90ms convert=110ms total=200ms
+I (102335) ink_reader: ui submit seq=22 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='13/1679 0%' '译 序'
+I (102485) ink_reader: button event t=101690ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (102595) ink_reader: button event t=101800ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (102595) ink_reader: command t=101800ms page=READER cmd=NAV_NEXT
+I (102595) ink_reader_session: chapter resolve page=14 chapter=1/50 start=6 end=6 name=译 序
+I (102605) ink_reader_session: chapter resolve page=14 chapter=1/50 start=6 end=6 name=译 序
+I (102655) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (102655) epd_gdey0426t82: epd refresh op=partial_area total=901ms convert=156ms prepare=29ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (102665) ink_reader: render seq=21 t=101870ms page=READER mode=partial cmd=NAV_NEXT since_cmd=70ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (102685) ink_reader: epd finish seq=21 result=ESP_OK phase=4
+I (102685) ink_reader: display stats submitted=22 merged=15 cancelled=4 stale=0 completed=13
+I (102695) ink_reader: epd claim seq=22 page=READER full=0 submitted=101540ms age=360ms
+I (102735) ink_reader: render dirty seq=22 page=READER x=20 y=28 w=438 h=768
+I (102735) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (102765) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (102775) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (102775) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (102845) ink_reader_session: cache page=14 slot=0 load=90ms convert=140ms total=230ms
+I (102875) ink_reader: ui submit seq=23 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='14/1679 0%' '译 序'
+I (102875) ink_reader: ui display done seq=21 result=ESP_OK
+W (102955) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (102955) epd_gdey0426t82: epd refresh op=partial_area total=222ms convert=184ms prepare=34ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (102965) ink_reader: render seq=22 t=102170ms page=READER mode=partial cmd=NAV_NEXT since_cmd=370ms view=0ms draw=10ms diff=20ms epd=230ms total=260ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ERROR
+I (102985) ink_reader: epd finish seq=22 result=ERROR phase=5
+I (102995) ink_reader: display stats submitted=23 merged=16 cancelled=5 stale=0 completed=13
+I (103005) ink_reader: epd claim seq=23 page=READER full=0 submitted=102080ms age=130ms
+I (103005) ink_reader: ui display done seq=22 result=ERROR
+I (103035) ink_reader: render dirty seq=23 page=READER x=16 y=28 w=442 h=768
+I (103035) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (103055) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (103065) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (103065) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (103395) ink_reader: button event t=102600ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (103565) ink_reader: button event t=102770ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (103565) ink_reader: command t=102770ms page=READER cmd=NAV_NEXT
+I (103565) ink_reader_session: chapter resolve page=15 chapter=1/50 start=6 end=6 name=译 序
+I (103575) ink_reader_session: chapter resolve page=15 chapter=1/50 start=6 end=6 name=译 序
+I (103785) ink_reader_session: cache page=15 slot=1 load=90ms convert=110ms total=200ms
+I (103825) ink_reader: ui submit seq=24 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='15/1679 0%' '译 序'
+I (103915) ink_reader: button event t=103120ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (103935) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=629ms ret=ESP_OK
+I (103935) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=158ms prepare=26ms update=629ms tx=78ms tx_bytes=85808 tx_calls=944 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (103945) ink_reader: render seq=23 t=103150ms page=READER mode=partial cmd=NAV_NEXT since_cmd=380ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (103965) ink_reader: epd finish seq=23 result=ESP_OK phase=4
+I (103965) ink_reader: display stats submitted=24 merged=17 cancelled=5 stale=0 completed=14
+I (103975) ink_reader: ui display done seq=23 result=ESP_OK
+I (103975) ink_reader: epd claim seq=24 page=READER full=0 submitted=103020ms age=160ms
+I (104015) ink_reader: render dirty seq=24 page=READER x=16 y=28 w=442 h=768
+I (104015) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (104035) ink_reader: button event t=103240ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (104035) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (104035) ink_reader: command t=103240ms page=READER cmd=NAV_NEXT
+I (104045) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=4ms ret=ESP_OK
+I (104045) ink_reader_session: chapter resolve page=16 chapter=1/50 start=6 end=6 name=译 序
+I (104055) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (104055) ink_reader_session: chapter resolve page=16 chapter=1/50 start=6 end=6 name=译 序
+I (104305) ink_reader_session: cache page=16 slot=0 load=90ms convert=140ms total=230ms
+W (104335) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (104335) ink_reader: ui submit seq=25 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='16/1679 0%' '译 序'
+E (104335) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+E (104345) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (104355) epd_gdey0426t82: previous area write failed
+I (104365) epd_gdey0426t82: epd refresh op=partial_area total=347ms convert=191ms prepare=48ms update=0ms tx=74ms tx_bytes=78627 tx_calls=867 busy=4ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (104375) ink_reader: render seq=24 t=103580ms page=READER mode=partial cmd=NAV_NEXT since_cmd=340ms view=0ms draw=10ms diff=20ms epd=360ms total=390ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ERROR
+I (104395) ink_reader: button event t=103600ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (104395) ink_reader: epd finish seq=24 result=ERROR phase=5
+I (104415) ink_reader: display stats submitted=25 merged=18 cancelled=6 stale=0 completed=14
+I (104415) ink_reader: epd claim seq=25 page=READER full=0 submitted=103540ms age=80ms
+I (104415) ink_reader: ui display done seq=24 result=ERROR
+I (104445) ink_reader: button event t=103650ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (104445) ink_reader: command t=103650ms page=READER cmd=NAV_NEXT
+I (104445) ink_reader_session: chapter resolve page=17 chapter=1/50 start=6 end=6 name=译 序
+I (104455) ink_reader_session: chapter resolve page=17 chapter=1/50 start=6 end=6 name=译 序
+I (104455) ink_reader: render dirty seq=25 page=READER x=16 y=28 w=442 h=768
+I (104475) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (104495) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (104505) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (104505) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (104555) ink_reader: button event t=103760ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (104715) ink_reader_session: cache page=17 slot=1 load=90ms convert=160ms total=250ms
+I (104735) ink_reader: button event t=103940ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+W (104745) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (104745) ink_reader: ui submit seq=26 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='17/1679 1%' '译 序'
+E (104745) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+I (104755) ink_reader: command t=103940ms page=READER cmd=NAV_NEXT
+E (104755) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+I (104765) ink_reader_session: chapter resolve page=18 chapter=1/50 start=6 end=6 name=译 序
+E (104775) epd_gdey0426t82: current area write failed
+I (104775) ink_reader_session: chapter resolve page=18 chapter=1/50 start=6 end=6 name=译 序
+I (104785) epd_gdey0426t82: epd refresh op=partial_area total=315ms convert=204ms prepare=27ms update=0ms tx=33ms tx_bytes=31387 tx_calls=379 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (104805) ink_reader: render seq=25 t=104010ms page=READER mode=partial cmd=NAV_NEXT since_cmd=70ms view=0ms draw=10ms diff=20ms epd=350ms total=380ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ERROR
+I (104825) ink_reader: epd finish seq=25 result=ERROR phase=5
+I (104835) ink_reader: display stats submitted=26 merged=19 cancelled=7 stale=0 completed=14
+I (104845) ink_reader: epd claim seq=26 page=READER full=0 submitted=103950ms age=100ms
+I (104875) ink_reader: button event t=104080ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (104875) ink_reader: render dirty seq=26 page=READER x=16 y=28 w=442 h=768
+I (104875) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (104905) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (104915) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (104915) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (105035) ink_reader_session: cache page=18 slot=0 load=90ms convert=150ms total=240ms
+I (105055) ink_reader: button event t=104260ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (105065) ink_reader: ui submit seq=27 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='18/1679 1%' '译 序'
+I (105065) ink_reader: ui display done seq=25 result=ERROR
+I (105075) ink_reader: command t=104260ms page=READER cmd=NAV_NEXT
+I (105085) ink_reader_session: chapter resolve page=19 chapter=1/50 start=6 end=6 name=译 序
+I (105085) ink_reader_session: chapter resolve page=19 chapter=1/50 start=6 end=6 name=译 序
+I (105125) ink_reader: button event t=104330ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+W (105125) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (105125) epd_gdey0426t82: epd refresh op=partial_area total=250ms convert=207ms prepare=32ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (105145) ink_reader: render seq=26 t=104350ms page=READER mode=partial cmd=NAV_NEXT since_cmd=90ms view=0ms draw=10ms diff=20ms epd=270ms total=300ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ERROR
+I (105155) ink_reader: epd finish seq=26 result=ERROR phase=5
+I (105165) ink_reader: display stats submitted=27 merged=20 cancelled=8 stale=0 completed=14
+I (105175) ink_reader: epd claim seq=27 page=READER full=0 submitted=104270ms age=110ms
+I (105215) ink_reader: render dirty seq=27 page=READER x=16 y=28 w=442 h=768
+I (105215) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (105215) ink_reader: button event t=104420ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (105235) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (105245) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=7ms ret=ESP_OK
+I (105245) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (105335) ink_reader_session: cache page=19 slot=1 load=90ms convert=150ms total=240ms
+I (105365) ink_reader: button event t=104570ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (105375) ink_reader: ui submit seq=28 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='19/1679 1%' '译 序'
+I (105375) ink_reader: ui display done seq=26 result=ERROR
+I (105385) ink_reader: command t=104420ms page=READER cmd=NAV_NEXT
+I (105385) ink_reader_session: chapter resolve page=20 chapter=1/50 start=6 end=6 name=译 序
+I (105395) ink_reader_session: chapter resolve page=20 chapter=1/50 start=6 end=6 name=译 序
+W (105445) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (105445) epd_gdey0426t82: epd refresh op=partial_area total=238ms convert=201ms prepare=33ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=7ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (105465) ink_reader: render seq=27 t=104670ms page=READER mode=partial cmd=NAV_NEXT since_cmd=250ms view=0ms draw=0ms diff=30ms epd=250ms total=280ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ERROR
+I (105475) ink_reader: epd finish seq=27 result=ERROR phase=5
+I (105485) ink_reader: display stats submitted=28 merged=21 cancelled=9 stale=0 completed=14
+I (105495) ink_reader: epd claim seq=28 page=READER full=0 submitted=104580ms age=120ms
+I (105535) ink_reader: render dirty seq=28 page=READER x=16 y=28 w=442 h=768
+I (105535) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (105555) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (105565) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (105565) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (105635) ink_reader_session: cache page=20 slot=0 load=90ms convert=140ms total=230ms
+I (105675) ink_reader: ui submit seq=29 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='20/1679 1%' '译 序'
+I (105675) ink_reader: ui display done seq=27 result=ERROR
+I (105745) ink_reader: fast browse begin page=20 total=1679 dir=forward
+I (105745) ink_reader: fast browse target page=21 held=0ms step=1 interval=120ms
+I (105745) ink_reader: ui submit seq=30 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='21/1679 1%' '译 序'
+W (105755) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (105755) epd_gdey0426t82: epd refresh op=partial_area total=226ms convert=191ms prepare=27ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (105775) ink_reader: button event t=104980ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (105775) ink_reader: render seq=28 t=104980ms page=READER mode=partial cmd=NAV_NEXT since_cmd=560ms view=0ms draw=0ms diff=30ms epd=240ms total=270ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ERROR
+I (105795) ink_reader_session: chapter resolve page=21 chapter=1/50 start=6 end=6 name=译 序
+I (105805) ink_reader: epd finish seq=28 result=ERROR phase=5
+I (105815) ink_reader_session: chapter resolve page=21 chapter=1/50 start=6 end=6 name=译 序
+I (105815) ink_reader: display stats submitted=30 merged=23 cancelled=10 stale=0 completed=14
+I (105835) ink_reader: epd claim seq=30 page=READER full=0 submitted=104950ms age=90ms
+I (105855) ink_reader: render dirty seq=30 page=READER x=8 y=782 w=106 h=14
+I (105855) epd_gdey0426t82: epd area portrait x=8 y=782 w=106 h=14 native x=776 y=366 w=24 h=106
+I (105885) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (105895) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (105895) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (105935) ink_reader: button event t=105140ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (106035) ink_reader_session: cache page=21 slot=1 load=90ms convert=120ms total=210ms
+I (106065) ink_reader: fast browse commit target=21 ret=1
+I (106065) ink_reader: ui submit seq=31 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='21/1679 1%' '译 序'
+I (106065) ink_reader: ui display done seq=28 result=ERROR
+I (106085) ink_reader: button event t=105290ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (106085) ink_reader: command t=105290ms page=READER cmd=NAV_NEXT
+I (106085) ink_reader_session: chapter resolve page=22 chapter=1/50 start=6 end=6 name=译 序
+I (106095) ink_reader_session: chapter resolve page=22 chapter=1/50 start=6 end=6 name=译 序
+I (106305) ink_reader_session: cache page=22 slot=0 load=90ms convert=110ms total=200ms
+I (106345) ink_reader: ui submit seq=32 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='22/1679 1%' '译 序'
+I (106535) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (106535) epd_gdey0426t82: epd refresh op=partial_area total=674ms convert=2ms prepare=35ms update=624ms tx=11ms tx_bytes=696 tx_calls=272 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (106545) ink_reader: render seq=30 t=105750ms page=READER mode=partial cmd=NAV_NEXT since_cmd=460ms view=0ms draw=0ms diff=10ms epd=690ms total=700ms dirty=8,782 106x14 cache=+0/-0 evict+0 ret=ESP_OK
+I (106565) ink_reader: epd finish seq=30 result=ESP_OK phase=4
+I (106565) ink_reader: display stats submitted=32 merged=25 cancelled=10 stale=0 completed=15
+I (106575) ink_reader: ui display done seq=30 result=ESP_OK
+I (106575) ink_reader: epd claim seq=32 page=READER full=0 submitted=105550ms age=230ms
+I (106615) ink_reader: render dirty seq=32 page=READER x=16 y=28 w=442 h=768
+I (106615) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (106635) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (106645) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (106645) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (107405) ink_reader: button event t=106610ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (107515) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (107515) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=158ms prepare=27ms update=629ms tx=78ms tx_bytes=85808 tx_calls=944 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (107525) ink_reader: render seq=32 t=106730ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1440ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (107535) ink_reader: button event t=106740ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (107545) ink_reader: epd finish seq=32 result=ESP_OK phase=4
+I (107555) ink_reader: display stats submitted=32 merged=25 cancelled=10 stale=0 completed=16
+I (107565) ink_reader: command t=106740ms page=READER cmd=NAV_NEXT
+I (107575) ink_reader_session: chapter resolve page=23 chapter=1/50 start=6 end=6 name=译 序
+I (107575) ink_reader_session: chapter resolve page=23 chapter=1/50 start=6 end=6 name=译 序
+I (107795) ink_reader_session: cache page=23 slot=1 load=90ms convert=120ms total=210ms
+I (107825) ink_reader: ui submit seq=33 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='23/1679 1%' '译 序'
+I (107825) ink_reader: epd claim seq=33 page=READER full=0 submitted=107030ms age=0ms
+I (107825) ink_reader: ui display done seq=32 result=ESP_OK
+I (107865) ink_reader: render dirty seq=33 page=READER x=20 y=28 w=438 h=768
+I (107865) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (107885) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (107895) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (107895) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (108325) ink_reader: button event t=107530ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (108425) ink_reader: button event t=107630ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (108425) ink_reader: command t=107630ms page=READER cmd=NAV_NEXT
+I (108425) ink_reader_session: chapter resolve page=24 chapter=1/50 start=6 end=6 name=译 序
+I (108435) ink_reader_session: chapter resolve page=24 chapter=1/50 start=6 end=6 name=译 序
+I (108645) ink_reader_session: cache page=24 slot=0 load=90ms convert=110ms total=200ms
+I (108675) ink_reader: ui submit seq=34 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='24/1679 1%' '译 序'
+I (108765) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (108765) epd_gdey0426t82: epd refresh op=partial_area total=901ms convert=156ms prepare=30ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (108775) ink_reader: render seq=33 t=107980ms page=READER mode=partial cmd=NAV_NEXT since_cmd=350ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (108795) ink_reader: epd finish seq=33 result=ESP_OK phase=4
+I (108795) ink_reader: display stats submitted=34 merged=26 cancelled=10 stale=0 completed=17
+I (108805) ink_reader: ui display done seq=33 result=ESP_OK
+I (108805) ink_reader: epd claim seq=34 page=READER full=0 submitted=107880ms age=130ms
+I (108845) ink_reader: render dirty seq=34 page=READER x=20 y=28 w=438 h=768
+I (108845) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (108865) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (108875) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (108875) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (109265) ink_reader: button event t=108470ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (109355) ink_reader: button event t=108560ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (109355) ink_reader: command t=108560ms page=READER cmd=NAV_NEXT
+I (109355) ink_reader_session: chapter resolve page=25 chapter=2/50 start=25 end=25 name=上 篇
+I (109365) ink_reader_session: chapter resolve page=25 chapter=2/50 start=25 end=25 name=上 篇
+I (109575) ink_reader_session: cache page=25 slot=1 load=90ms convert=110ms total=200ms
+I (109615) ink_reader: ui submit seq=35 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='25/1679 1%' '上 篇'
+I (109745) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (109745) epd_gdey0426t82: epd refresh op=partial_area total=897ms convert=156ms prepare=26ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (109755) ink_reader: render seq=34 t=108960ms page=READER mode=partial cmd=NAV_NEXT since_cmd=400ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (109775) ink_reader: epd finish seq=34 result=ESP_OK phase=4
+I (109775) ink_reader: display stats submitted=35 merged=27 cancelled=10 stale=0 completed=18
+I (109785) ink_reader: ui display done seq=34 result=ESP_OK
+I (109785) ink_reader: epd claim seq=35 page=READER full=0 submitted=108810ms age=180ms
+I (109845) ink_reader: render dirty seq=35 page=READER x=20 y=28 w=438 h=770
+I (109845) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=770 native x=24 y=22 w=776 h=438
+I (109875) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (109885) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (109885) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (110005) ink_reader: button event t=109210ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (110145) ink_reader: button event t=109350ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (110145) ink_reader: command t=109350ms page=READER cmd=NAV_NEXT
+I (110145) ink_reader_session: chapter resolve page=26 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (110155) ink_reader_session: chapter resolve page=26 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (110365) ink_reader_session: cache page=26 slot=0 load=90ms convert=110ms total=200ms
+I (110405) ink_reader: ui submit seq=36 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='26/1679 1%' '一 飞驰的礁石'
+I (110665) ink_reader: button event t=109870ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (110755) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (110755) epd_gdey0426t82: epd refresh op=partial_area total=905ms convert=157ms prepare=34ms update=630ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (110765) ink_reader: render seq=35 t=109970ms page=READER mode=partial cmd=NAV_NEXT since_cmd=620ms view=0ms draw=30ms diff=20ms epd=920ms total=970ms dirty=20,28 438x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (110775) ink_reader: button event t=109980ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (110785) ink_reader: epd finish seq=35 result=ESP_OK phase=4
+I (110795) ink_reader: display stats submitted=36 merged=28 cancelled=10 stale=0 completed=19
+I (110805) ink_reader: command t=109980ms page=READER cmd=NAV_NEXT
+I (110805) ink_reader: epd claim seq=36 page=READER full=0 submitted=109600ms age=410ms
+I (110815) ink_reader_session: chapter resolve page=27 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (110825) ink_reader_session: chapter resolve page=27 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (110935) ink_reader: render dirty seq=36 page=READER x=20 y=28 w=443 h=770
+I (110935) epd_gdey0426t82: epd area portrait x=20 y=28 w=443 h=770 native x=24 y=17 w=776 h=443
+I (110965) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (110975) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (110975) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (111155) ink_reader_session: cache page=27 slot=1 load=160ms convert=160ms total=320ms
+W (111185) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (111195) ink_reader: ui submit seq=37 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='27/1679 1%' '一 飞驰的礁石'
+E (111195) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+I (111195) ink_reader: ui display done seq=35 result=ESP_OK
+E (111205) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (111215) epd_gdey0426t82: current area write failed
+I (111225) epd_gdey0426t82: epd refresh op=partial_area total=285ms convert=205ms prepare=33ms update=0ms tx=10ms tx_bytes=9271 tx_calls=151 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (111235) ink_reader: render seq=36 t=110440ms page=READER mode=partial cmd=NAV_NEXT since_cmd=460ms view=0ms draw=100ms diff=20ms epd=300ms total=420ms dirty=20,28 443x770 cache=+0/-0 evict+0 ret=ERROR
+I (111255) ink_reader: button event t=110460ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (111255) ink_reader: epd finish seq=36 result=ERROR phase=5
+I (111275) ink_reader: display stats submitted=37 merged=29 cancelled=11 stale=0 completed=19
+I (111285) ink_reader: epd claim seq=37 page=READER full=0 submitted=110390ms age=100ms
+I (111285) ink_reader: ui display done seq=36 result=ERROR
+I (111315) ink_reader: render dirty seq=37 page=READER x=20 y=28 w=443 h=770
+I (111315) epd_gdey0426t82: epd area portrait x=20 y=28 w=443 h=770 native x=24 y=17 w=776 h=443
+I (111335) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (111345) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (111345) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (111415) ink_reader: button event t=110620ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (111415) ink_reader: command t=110620ms page=READER cmd=NAV_NEXT
+I (111415) ink_reader_session: chapter resolve page=28 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (111425) ink_reader_session: chapter resolve page=28 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (111625) ink_reader_session: cache page=28 slot=0 load=90ms convert=100ms total=190ms
+I (111665) ink_reader: ui submit seq=38 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='28/1679 1%' '一 飞驰的礁石'
+I (111835) ink_reader: button event t=111040ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (111935) ink_reader: button event t=111140ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (111935) ink_reader: command t=111140ms page=READER cmd=NAV_NEXT
+I (111935) ink_reader_session: chapter resolve page=29 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (111945) ink_reader_session: chapter resolve page=29 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (112155) ink_reader_session: cache page=29 slot=1 load=90ms convert=110ms total=200ms
+I (112185) ink_reader: ui submit seq=39 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='29/1679 1%' '一 飞驰的礁石'
+I (112225) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (112225) epd_gdey0426t82: epd refresh op=partial_area total=908ms convert=167ms prepare=27ms update=629ms tx=78ms tx_bytes=86002 tx_calls=946 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (112235) ink_reader: render seq=37 t=111440ms page=READER mode=partial cmd=NAV_NEXT since_cmd=300ms view=0ms draw=10ms diff=20ms epd=920ms total=950ms dirty=20,28 443x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (112255) ink_reader: epd finish seq=37 result=ESP_OK phase=4
+I (112255) ink_reader: display stats submitted=39 merged=31 cancelled=11 stale=0 completed=20
+I (112265) ink_reader: ui display done seq=37 result=ESP_OK
+I (112265) ink_reader: epd claim seq=39 page=READER full=0 submitted=111390ms age=80ms
+I (112305) ink_reader: render dirty seq=39 page=READER x=20 y=28 w=438 h=768
+I (112305) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (112325) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (112335) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (112335) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (112435) ink_reader: button event t=111640ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (112555) ink_reader: button event t=111760ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (112555) ink_reader: command t=111760ms page=READER cmd=NAV_NEXT
+I (112555) ink_reader_session: chapter resolve page=30 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (112565) ink_reader_session: chapter resolve page=30 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (112595) ink_reader: button event t=111800ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (112635) ink_reader: button event t=111840ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (112775) ink_reader_session: cache page=30 slot=0 load=90ms convert=110ms total=200ms
+I (112805) ink_reader: ui submit seq=40 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='30/1679 1%' '一 飞驰的礁石'
+I (112805) ink_reader: command t=111840ms page=READER cmd=NAV_NEXT
+I (112815) ink_reader_session: chapter resolve page=31 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (112825) ink_reader_session: chapter resolve page=31 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (113035) ink_reader_session: cache page=31 slot=1 load=90ms convert=110ms total=200ms
+I (113065) ink_reader: button event t=112270ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (113065) ink_reader: ui submit seq=41 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='31/1679 1%' '一 飞驰的礁石'
+I (113175) ink_reader: button event t=112380ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (113175) ink_reader: command t=112380ms page=READER cmd=NAV_NEXT
+I (113175) ink_reader_session: chapter resolve page=32 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (113185) ink_reader_session: chapter resolve page=32 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (113205) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (113205) epd_gdey0426t82: epd refresh op=partial_area total=900ms convert=157ms prepare=27ms update=632ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (113215) ink_reader: button event t=112420ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (113225) ink_reader: render seq=39 t=112430ms page=READER mode=partial cmd=NAV_NEXT since_cmd=50ms view=0ms draw=10ms diff=20ms epd=910ms total=950ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (113245) ink_reader: button event t=112450ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (113245) ink_reader: epd finish seq=39 result=ESP_OK phase=4
+I (113265) ink_reader: display stats submitted=41 merged=33 cancelled=11 stale=0 completed=21
+I (113265) ink_reader: epd claim seq=41 page=READER full=0 submitted=112270ms age=200ms
+I (113305) ink_reader: render dirty seq=41 page=READER x=8 y=27 w=449 h=769
+I (113305) epd_gdey0426t82: epd area portrait x=8 y=27 w=449 h=769 native x=24 y=23 w=776 h=449
+I (113325) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (113335) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (113335) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (113425) ink_reader_session: cache page=32 slot=0 load=90ms convert=140ms total=230ms
+I (113455) ink_reader: ui submit seq=42 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='32/1679 1%' '一 飞驰的礁石'
+I (113455) ink_reader: command t=112450ms page=READER cmd=NAV_NEXT
+I (113465) ink_reader_session: chapter resolve page=33 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (113475) ink_reader_session: chapter resolve page=33 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+W (113535) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (113535) epd_gdey0426t82: epd refresh op=partial_area total=232ms convert=198ms prepare=30ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (113545) ink_reader: render seq=41 t=112750ms page=READER mode=partial cmd=NAV_NEXT since_cmd=300ms view=0ms draw=10ms diff=20ms epd=240ms total=270ms dirty=8,27 449x769 cache=+0/-0 evict+0 ret=ERROR
+I (113565) ink_reader: epd finish seq=41 result=ERROR phase=5
+I (113565) ink_reader: display stats submitted=42 merged=34 cancelled=12 stale=0 completed=21
+I (113575) ink_reader: epd claim seq=42 page=READER full=0 submitted=112660ms age=120ms
+I (113615) ink_reader: render dirty seq=42 page=READER x=8 y=28 w=449 h=768
+I (113615) epd_gdey0426t82: epd area portrait x=8 y=28 w=449 h=768 native x=24 y=23 w=776 h=449
+I (113635) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (113645) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (113645) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (113705) ink_reader_session: cache page=33 slot=1 load=90ms convert=130ms total=220ms
+I (113745) ink_reader: ui submit seq=43 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='33/1679 1%' '一 飞驰的礁石'
+I (113745) ink_reader: ui display done seq=39 result=ESP_OK
+I (113755) ink_reader: ui display done seq=41 result=ERROR
+W (113835) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (113835) epd_gdey0426t82: epd refresh op=partial_area total=221ms convert=186ms prepare=31ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (113845) ink_reader: render seq=42 t=113050ms page=READER mode=partial cmd=NAV_NEXT since_cmd=600ms view=0ms draw=10ms diff=20ms epd=230ms total=260ms dirty=8,28 449x768 cache=+0/-0 evict+0 ret=ERROR
+I (113865) ink_reader: epd finish seq=42 result=ERROR phase=5
+I (113865) ink_reader: display stats submitted=43 merged=35 cancelled=13 stale=0 completed=21
+I (113875) ink_reader: button event t=113080ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (113875) ink_reader: epd claim seq=43 page=READER full=0 submitted=112940ms age=140ms
+I (113875) ink_reader: ui display done seq=42 result=ERROR
+I (113915) ink_reader: render dirty seq=43 page=READER x=8 y=28 w=449 h=768
+I (113915) epd_gdey0426t82: epd area portrait x=8 y=28 w=449 h=768 native x=24 y=23 w=776 h=449
+I (113935) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (113945) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (113945) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (114095) ink_reader: button event t=113300ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (114095) ink_reader: command t=113300ms page=READER cmd=NAV_NEXT
+I (114095) ink_reader_session: chapter resolve page=34 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (114105) ink_reader_session: chapter resolve page=34 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (114315) ink_reader_session: cache page=34 slot=0 load=90ms convert=110ms total=200ms
+I (114345) ink_reader: ui submit seq=44 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='34/1679 2%' '一 飞驰的礁石'
+I (114825) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (114825) epd_gdey0426t82: epd refresh op=partial_area total=910ms convert=165ms prepare=30ms update=628ms tx=80ms tx_bytes=87166 tx_calls=958 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (114835) ink_reader: render seq=43 t=114040ms page=READER mode=partial cmd=NAV_NEXT since_cmd=740ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=8,28 449x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (114855) ink_reader: epd finish seq=43 result=ESP_OK phase=4
+I (114855) ink_reader: display stats submitted=44 merged=36 cancelled=13 stale=0 completed=22
+I (114865) ink_reader: ui display done seq=43 result=ESP_OK
+I (114865) ink_reader: epd claim seq=44 page=READER full=0 submitted=113550ms age=520ms
+I (114895) ink_reader: render dirty seq=44 page=READER x=20 y=27 w=325 h=769
+I (114895) epd_gdey0426t82: epd area portrait x=20 y=27 w=325 h=769 native x=24 y=135 w=776 h=325
+I (114925) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (114935) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (114935) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (114995) ink_reader: button event t=114200ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (115115) ink_reader: button event t=114320ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (115115) ink_reader: command t=114320ms page=READER cmd=NAV_NEXT
+I (115115) ink_reader_session: chapter resolve page=35 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (115125) ink_reader_session: chapter resolve page=35 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (115135) ink_reader: button event t=114340ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (115165) ink_reader: button event t=114370ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (115335) ink_reader_session: cache page=35 slot=1 load=90ms convert=110ms total=200ms
+I (115365) ink_reader: ui submit seq=45 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='35/1679 2%' '一 飞驰的礁石'
+I (115365) ink_reader: command t=114370ms page=READER cmd=NAV_NEXT
+I (115375) ink_reader_session: chapter resolve page=36 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (115385) ink_reader_session: chapter resolve page=36 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (115595) ink_reader_session: cache page=36 slot=0 load=90ms convert=110ms total=200ms
+I (115635) ink_reader: ui submit seq=46 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='36/1679 2%' '一 飞驰的礁石'
+I (115745) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (115745) epd_gdey0426t82: epd refresh op=partial_area total=844ms convert=117ms prepare=33ms update=630ms tx=58ms tx_bytes=63110 tx_calls=710 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (115755) ink_reader: render seq=44 t=114960ms page=READER mode=partial cmd=NAV_NEXT since_cmd=590ms view=0ms draw=10ms diff=10ms epd=860ms total=880ms dirty=20,27 325x769 cache=+0/-0 evict+0 ret=ESP_OK
+I (115765) ink_reader: button event t=114970ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (115775) ink_reader: epd finish seq=44 result=ESP_OK phase=4
+I (115785) ink_reader: display stats submitted=46 merged=38 cancelled=13 stale=0 completed=23
+I (115795) ink_reader: ui display done seq=44 result=ESP_OK
+I (115795) ink_reader: epd claim seq=46 page=READER full=0 submitted=114830ms age=170ms
+I (115825) ink_reader: render dirty seq=46 page=READER x=20 y=27 w=437 h=769
+I (115825) epd_gdey0426t82: epd area portrait x=20 y=27 w=437 h=769 native x=24 y=23 w=776 h=437
+I (115855) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (115865) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (115865) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (115915) ink_reader: button event t=115120ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (115915) ink_reader: command t=115120ms page=READER cmd=NAV_NEXT
+I (115915) ink_reader_session: chapter resolve page=37 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (115925) ink_reader_session: chapter resolve page=37 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (116125) ink_reader_session: cache page=37 slot=1 load=90ms convert=100ms total=190ms
+I (116155) ink_reader: ui submit seq=47 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='37/1679 2%' '一 飞驰的礁石'
+I (116495) ink_reader: button event t=115700ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (116665) ink_reader: button event t=115870ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (116665) ink_reader: command t=115870ms page=READER cmd=NAV_NEXT
+I (116665) ink_reader_session: chapter resolve page=38 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (116675) ink_reader_session: chapter resolve page=38 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (116735) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (116735) epd_gdey0426t82: epd refresh op=partial_area total=905ms convert=164ms prepare=33ms update=624ms tx=76ms tx_bytes=84838 tx_calls=934 busy=633ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (116745) ink_reader: render seq=46 t=115950ms page=READER mode=partial cmd=NAV_NEXT since_cmd=80ms view=0ms draw=10ms diff=10ms epd=920ms total=940ms dirty=20,27 437x769 cache=+0/-0 evict+0 ret=ESP_OK
+I (116765) ink_reader: epd finish seq=46 result=ESP_OK phase=4
+I (116765) ink_reader: display stats submitted=47 merged=39 cancelled=13 stale=0 completed=24
+I (116775) ink_reader: epd claim seq=47 page=READER full=0 submitted=115360ms age=620ms
+I (116805) ink_reader: render dirty seq=47 page=READER x=20 y=27 w=437 h=769
+I (116805) epd_gdey0426t82: epd area portrait x=20 y=27 w=437 h=769 native x=24 y=23 w=776 h=437
+I (116835) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (116845) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (116845) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (116905) ink_reader_session: cache page=38 slot=0 load=90ms convert=130ms total=220ms
+I (116945) ink_reader: ui submit seq=48 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='38/1679 2%' '一 飞驰的礁石'
+I (116945) ink_reader: ui display done seq=46 result=ESP_OK
+W (117025) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (117025) epd_gdey0426t82: epd refresh op=partial_area total=220ms convert=182ms prepare=35ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (117035) ink_reader: render seq=47 t=116240ms page=READER mode=partial cmd=NAV_NEXT since_cmd=370ms view=0ms draw=10ms diff=10ms epd=230ms total=250ms dirty=20,27 437x769 cache=+0/-0 evict+0 ret=ERROR
+I (117055) ink_reader: epd finish seq=47 result=ERROR phase=5
+I (117065) ink_reader: display stats submitted=48 merged=40 cancelled=14 stale=0 completed=24
+I (117065) ink_reader: epd claim seq=48 page=READER full=0 submitted=116140ms age=130ms
+I (117065) ink_reader: ui display done seq=47 result=ERROR
+I (117095) ink_reader: render dirty seq=48 page=READER x=20 y=27 w=437 h=763
+I (117095) epd_gdey0426t82: epd area portrait x=20 y=27 w=437 h=763 native x=24 y=23 w=768 h=437
+I (117125) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (117135) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (117135) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (117185) ink_reader: button event t=116390ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (117375) ink_reader: button event t=116580ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (117375) ink_reader: command t=116580ms page=READER cmd=NAV_NEXT
+I (117375) ink_reader_session: chapter resolve page=39 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (117385) ink_reader_session: chapter resolve page=39 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (117595) ink_reader_session: cache page=39 slot=1 load=90ms convert=110ms total=200ms
+I (117635) ink_reader: ui submit seq=49 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='39/1679 2%' '一 飞驰的礁石'
+I (117745) ink_reader: button event t=116950ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (117865) ink_reader: button event t=117070ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (117865) ink_reader: command t=117070ms page=READER cmd=NAV_NEXT
+I (117865) ink_reader_session: chapter resolve page=40 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (117875) ink_reader_session: chapter resolve page=40 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (117995) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=622ms ret=ESP_OK
+I (117995) epd_gdey0426t82: epd refresh op=partial_area total=895ms convert=155ms prepare=33ms update=623ms tx=76ms tx_bytes=83964 tx_calls=934 busy=632ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (118005) ink_reader: render seq=48 t=117210ms page=READER mode=partial cmd=NAV_NEXT since_cmd=140ms view=0ms draw=10ms diff=10ms epd=910ms total=930ms dirty=20,27 437x763 cache=+0/-0 evict+0 ret=ESP_OK
+I (118025) ink_reader: epd finish seq=48 result=ESP_OK phase=4
+I (118025) ink_reader: display stats submitted=49 merged=41 cancelled=14 stale=0 completed=25
+I (118035) ink_reader: epd claim seq=49 page=READER full=0 submitted=116830ms age=410ms
+I (118075) ink_reader: render dirty seq=49 page=READER x=20 y=28 w=438 h=766
+I (118075) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=766 native x=24 y=22 w=776 h=438
+I (118105) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (118105) ink_reader_session: cache page=40 slot=0 load=90ms convert=130ms total=220ms
+I (118115) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (118115) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (118145) ink_reader: ui submit seq=50 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='40/1679 2%' '一 飞驰的礁石'
+I (118145) ink_reader: ui display done seq=48 result=ESP_OK
+W (118275) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (118275) epd_gdey0426t82: epd refresh op=partial_area total=201ms convert=159ms prepare=38ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (118295) ink_reader: render seq=49 t=117500ms page=READER mode=partial cmd=NAV_NEXT since_cmd=430ms view=0ms draw=10ms diff=20ms epd=220ms total=250ms dirty=20,28 438x766 cache=+0/-0 evict+0 ret=ERROR
+I (118305) ink_reader: epd finish seq=49 result=ERROR phase=5
+I (118315) ink_reader: display stats submitted=50 merged=42 cancelled=15 stale=0 completed=25
+I (118325) ink_reader: epd claim seq=50 page=READER full=0 submitted=117340ms age=190ms
+I (118325) ink_reader: ui display done seq=49 result=ERROR
+I (118355) ink_reader: render dirty seq=50 page=READER x=8 y=28 w=449 h=768
+I (118355) epd_gdey0426t82: epd area portrait x=8 y=28 w=449 h=768 native x=24 y=23 w=776 h=449
+I (118385) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (118395) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (118395) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (118475) ink_reader: button event t=117680ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (118665) ink_reader: button event t=117870ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (118665) ink_reader: command t=117870ms page=READER cmd=NAV_NEXT
+I (118665) ink_reader_session: chapter resolve page=41 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (118675) ink_reader_session: chapter resolve page=41 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (118885) ink_reader_session: cache page=41 slot=1 load=90ms convert=110ms total=200ms
+I (118915) ink_reader: ui submit seq=51 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='41/1679 2%' '二 赞成与反对'
+I (119265) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (119265) epd_gdey0426t82: epd refresh op=partial_area total=906ms convert=161ms prepare=35ms update=624ms tx=79ms tx_bytes=87166 tx_calls=958 busy=633ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (119275) ink_reader: render seq=50 t=118480ms page=READER mode=partial cmd=NAV_NEXT since_cmd=610ms view=10ms draw=0ms diff=20ms epd=920ms total=950ms dirty=8,28 449x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (119285) ink_reader: button event t=118490ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (119295) ink_reader: epd finish seq=50 result=ESP_OK phase=4
+I (119305) ink_reader: display stats submitted=51 merged=43 cancelled=15 stale=0 completed=26
+I (119315) ink_reader: ui display done seq=50 result=ESP_OK
+I (119315) ink_reader: epd claim seq=51 page=READER full=0 submitted=118120ms age=400ms
+I (119415) ink_reader: render dirty seq=51 page=READER x=20 y=28 w=443 h=770
+I (119415) epd_gdey0426t82: epd area portrait x=20 y=28 w=443 h=770 native x=24 y=17 w=776 h=443
+I (119445) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (119455) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (119455) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (119495) ink_reader: button event t=118700ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (119495) ink_reader: command t=118700ms page=READER cmd=NAV_NEXT
+I (119495) ink_reader_session: chapter resolve page=42 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (119505) ink_reader_session: chapter resolve page=42 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (119715) ink_reader_session: cache page=42 slot=0 load=90ms convert=110ms total=200ms
+I (119745) ink_reader: ui submit seq=52 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='42/1679 2%' '二 赞成与反对'
+I (120155) ink_reader: button event t=119360ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (120345) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=629ms ret=ESP_OK
+I (120345) epd_gdey0426t82: epd refresh op=partial_area total=926ms convert=176ms prepare=35ms update=630ms tx=77ms tx_bytes=86002 tx_calls=946 busy=639ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (120345) ink_reader: button event t=119550ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (120355) ink_reader: render seq=51 t=119560ms page=READER mode=partial cmd=NAV_NEXT since_cmd=860ms view=0ms draw=70ms diff=20ms epd=940ms total=1030ms dirty=20,28 443x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (120375) ink_reader: command t=119550ms page=READER cmd=NAV_NEXT
+I (120385) ink_reader: epd finish seq=51 result=ESP_OK phase=4
+I (120385) ink_reader_session: chapter resolve page=43 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (120395) ink_reader: display stats submitted=52 merged=44 cancelled=15 stale=0 completed=27
+I (120405) ink_reader_session: chapter resolve page=43 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (120415) ink_reader: epd claim seq=52 page=READER full=0 submitted=118950ms age=670ms
+I (120455) ink_reader: render dirty seq=52 page=READER x=20 y=29 w=438 h=767
+I (120455) epd_gdey0426t82: epd area portrait x=20 y=29 w=438 h=767 native x=24 y=22 w=776 h=438
+I (120475) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (120485) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (120485) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (120675) ink_reader_session: cache page=43 slot=1 load=90ms convert=160ms total=250ms
+W (120705) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (120705) ink_reader: ui submit seq=53 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='43/1679 2%' '二 赞成与反对'
+E (120705) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+I (120715) ink_reader: ui display done seq=51 result=ESP_OK
+E (120715) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (120735) epd_gdey0426t82: current area write failed
+I (120735) epd_gdey0426t82: epd refresh op=partial_area total=283ms convert=206ms prepare=28ms update=0ms tx=12ms tx_bytes=9853 tx_calls=157 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (120755) ink_reader: render seq=52 t=119960ms page=READER mode=partial cmd=NAV_NEXT since_cmd=410ms view=0ms draw=10ms diff=20ms epd=300ms total=330ms dirty=20,29 438x767 cache=+0/-0 evict+0 ret=ERROR
+I (120775) ink_reader: epd finish seq=52 result=ERROR phase=5
+I (120775) ink_reader: display stats submitted=53 merged=45 cancelled=16 stale=0 completed=27
+I (120785) ink_reader: epd claim seq=53 page=READER full=0 submitted=119910ms age=80ms
+I (120785) ink_reader: ui display done seq=52 result=ERROR
+I (120815) ink_reader: render dirty seq=53 page=READER x=20 y=28 w=438 h=768
+I (120815) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (120845) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (120855) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (120855) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (120895) ink_reader: button event t=120100ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (121105) ink_reader: button event t=120310ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (121105) ink_reader: command t=120310ms page=READER cmd=NAV_NEXT
+I (121105) ink_reader_session: chapter resolve page=44 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (121115) ink_reader_session: chapter resolve page=44 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (121325) ink_reader_session: cache page=44 slot=0 load=90ms convert=110ms total=200ms
+I (121365) ink_reader: ui submit seq=54 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='44/1679 2%' '二 赞成与反对'
+I (121725) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=629ms ret=ESP_OK
+I (121725) epd_gdey0426t82: epd refresh op=partial_area total=905ms convert=158ms prepare=34ms update=629ms tx=77ms tx_bytes=85032 tx_calls=936 busy=639ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (121735) ink_reader: render seq=53 t=120940ms page=READER mode=partial cmd=NAV_NEXT since_cmd=630ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (121755) ink_reader: epd finish seq=53 result=ESP_OK phase=4
+I (121755) ink_reader: display stats submitted=54 merged=46 cancelled=16 stale=0 completed=28
+I (121765) ink_reader: ui display done seq=53 result=ESP_OK
+I (121765) ink_reader: epd claim seq=54 page=READER full=0 submitted=120570ms age=400ms
+I (121805) ink_reader: render dirty seq=54 page=READER x=20 y=28 w=438 h=768
+I (121805) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (121825) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (121835) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (121835) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (122135) ink_reader: button event t=121340ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (122315) ink_reader: button event t=121520ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (122315) ink_reader: command t=121520ms page=READER cmd=NAV_PREVIOUS
+I (122315) ink_reader_session: chapter resolve page=43 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (122325) ink_reader_session: chapter resolve page=43 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (122365) ink_reader: ui submit seq=55 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='43/1679 2%' '二 赞成与反对'
+I (122705) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (122705) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=156ms prepare=27ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (122715) ink_reader: render seq=54 t=121920ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=400ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (122735) ink_reader: epd finish seq=54 result=ESP_OK phase=4
+I (122735) ink_reader: display stats submitted=55 merged=47 cancelled=16 stale=0 completed=29
+I (122745) ink_reader: ui display done seq=54 result=ESP_OK
+I (122745) ink_reader: epd claim seq=55 page=READER full=0 submitted=121570ms age=380ms
+I (122785) ink_reader: render dirty seq=55 page=READER x=20 y=28 w=438 h=768
+I (122785) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (122805) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (122815) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (122815) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (122875) ink_reader: button event t=122080ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (123055) ink_reader: button event t=122260ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (123055) ink_reader: command t=122260ms page=READER cmd=NAV_PREVIOUS
+I (123055) ink_reader_session: chapter resolve page=42 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (123065) ink_reader_session: chapter resolve page=42 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (123275) ink_reader_session: cache page=42 slot=0 load=90ms convert=110ms total=200ms
+I (123315) ink_reader: ui submit seq=56 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='42/1679 2%' '二 赞成与反对'
+I (123515) ink_reader: button event t=122720ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (123675) ink_reader: button event t=122880ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (123675) ink_reader: command t=122880ms page=READER cmd=NAV_PREVIOUS
+I (123675) ink_reader_session: chapter resolve page=41 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (123685) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (123685) ink_reader_session: chapter resolve page=41 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (123695) epd_gdey0426t82: epd refresh op=partial_area total=910ms convert=157ms prepare=27ms update=642ms tx=77ms tx_bytes=85032 tx_calls=936 busy=639ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (123725) ink_reader: render seq=55 t=122930ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=50ms view=0ms draw=10ms diff=20ms epd=930ms total=970ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (123735) ink_reader: epd finish seq=55 result=ESP_OK phase=4
+I (123745) ink_reader: display stats submitted=56 merged=48 cancelled=16 stale=0 completed=30
+I (123755) ink_reader: epd claim seq=56 page=READER full=0 submitted=122520ms age=440ms
+I (123785) ink_reader: render dirty seq=56 page=READER x=20 y=28 w=438 h=768
+I (123785) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (123805) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (123815) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (123815) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (123945) ink_reader_session: cache page=41 slot=1 load=90ms convert=150ms total=240ms
+I (123985) ink_reader: ui submit seq=57 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='41/1679 2%' '二 赞成与反对'
+I (123985) ink_reader: ui display done seq=55 result=ESP_OK
+W (124015) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (124015) epd_gdey0426t82: epd refresh op=partial_area total=234ms convert=204ms prepare=26ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (124035) ink_reader: render seq=56 t=123230ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=350ms view=0ms draw=10ms diff=20ms epd=240ms total=280ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ERROR
+I (124045) ink_reader: epd finish seq=56 result=ERROR phase=5
+I (124055) ink_reader: display stats submitted=57 merged=49 cancelled=17 stale=0 completed=30
+I (124065) ink_reader: epd claim seq=57 page=READER full=0 submitted=123190ms age=80ms
+I (124065) ink_reader: ui display done seq=56 result=ERROR
+I (124095) ink_reader: render dirty seq=57 page=READER x=20 y=28 w=438 h=768
+I (124095) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (124115) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (124125) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (124125) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (124485) ink_reader: button event t=123690ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (124685) ink_reader: button event t=123890ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (124685) ink_reader: command t=123890ms page=READER cmd=NAV_PREVIOUS
+I (124685) ink_reader_session: chapter resolve page=40 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (124695) ink_reader_session: chapter resolve page=40 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (124915) ink_reader_session: cache page=40 slot=0 load=90ms convert=120ms total=210ms
+I (124945) ink_reader: ui submit seq=58 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='40/1679 2%' '一 飞驰的礁石'
+I (124995) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (124995) epd_gdey0426t82: epd refresh op=partial_area total=897ms convert=156ms prepare=26ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=641ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (125005) ink_reader: render seq=57 t=124210ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=320ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (125025) ink_reader: epd finish seq=57 result=ESP_OK phase=4
+I (125025) ink_reader: display stats submitted=58 merged=50 cancelled=17 stale=0 completed=31
+I (125035) ink_reader: ui display done seq=57 result=ESP_OK
+I (125035) ink_reader: epd claim seq=58 page=READER full=0 submitted=124150ms age=90ms
+I (125075) ink_reader: render dirty seq=58 page=READER x=20 y=28 w=443 h=770
+I (125075) epd_gdey0426t82: epd area portrait x=20 y=28 w=443 h=770 native x=24 y=17 w=776 h=443
+I (125095) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (125105) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (125105) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (125325) ink_reader: button event t=124530ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (125475) ink_reader: button event t=124680ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (125475) ink_reader: command t=124680ms page=READER cmd=NAV_PREVIOUS
+I (125475) ink_reader_session: chapter resolve page=39 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (125485) ink_reader_session: chapter resolve page=39 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (125705) ink_reader_session: cache page=39 slot=1 load=90ms convert=120ms total=210ms
+I (125735) ink_reader: ui submit seq=59 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='39/1679 2%' '一 飞驰的礁石'
+I (125975) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (125975) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=158ms prepare=27ms update=628ms tx=78ms tx_bytes=86002 tx_calls=946 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (125985) ink_reader: render seq=58 t=125190ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=510ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 443x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (126005) ink_reader: epd finish seq=58 result=ESP_OK phase=4
+I (126005) ink_reader: display stats submitted=59 merged=51 cancelled=17 stale=0 completed=32
+I (126015) ink_reader: ui display done seq=58 result=ESP_OK
+I (126015) ink_reader: epd claim seq=59 page=READER full=0 submitted=124940ms age=280ms
+I (126055) ink_reader: render dirty seq=59 page=READER x=8 y=28 w=450 h=768
+I (126055) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (126075) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (126085) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (126085) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (126225) ink_reader: button event t=125430ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (126415) ink_reader: button event t=125620ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (126415) ink_reader: command t=125620ms page=READER cmd=NAV_PREVIOUS
+I (126415) ink_reader_session: chapter resolve page=38 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (126425) ink_reader_session: chapter resolve page=38 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (126635) ink_reader_session: cache page=38 slot=0 load=90ms convert=110ms total=200ms
+I (126675) ink_reader: ui submit seq=60 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='38/1679 2%' '一 飞驰的礁石'
+I (126885) ink_reader: button event t=126090ms stable=0x04 pressed=0x04 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (126955) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (126955) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=161ms prepare=27ms update=624ms tx=79ms tx_bytes=87360 tx_calls=960 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (126965) ink_reader: render seq=59 t=126170ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=550ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (126985) ink_reader: epd finish seq=59 result=ESP_OK phase=4
+I (126985) ink_reader: display stats submitted=60 merged=52 cancelled=17 stale=0 completed=33
+I (126995) ink_reader: ui display done seq=59 result=ESP_OK
+I (126995) ink_reader: epd claim seq=60 page=READER full=0 submitted=125870ms age=330ms
+I (127025) ink_reader: button event t=126230ms stable=0x00 pressed=0x00 released=0x04 L=0 R=0 C=0 B=0 P=0
+I (127025) ink_reader: command t=126230ms page=READER cmd=NAV_PREVIOUS
+I (127025) ink_reader_session: chapter resolve page=37 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (127035) ink_reader_session: chapter resolve page=37 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (127035) ink_reader: render dirty seq=60 page=READER x=20 y=28 w=438 h=766
+I (127055) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=766 native x=24 y=22 w=776 h=438
+I (127075) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (127085) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (127085) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (127285) ink_reader_session: cache page=37 slot=1 load=100ms convert=140ms total=240ms
+W (127315) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (127315) ink_reader: ui submit seq=61 page=READER cmd=NAV_PREVIOUS full=0 input_to_ui=0ms build=0ms footer='37/1679 2%' '一 飞驰的礁石'
+E (127315) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+E (127325) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (127335) epd_gdey0426t82: current area write failed
+I (127345) epd_gdey0426t82: epd refresh op=partial_area total=291ms convert=193ms prepare=27ms update=0ms tx=35ms tx_bytes=33715 tx_calls=403 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (127355) ink_reader: render seq=60 t=126560ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=330ms view=0ms draw=10ms diff=20ms epd=320ms total=350ms dirty=20,28 438x766 cache=+0/-0 evict+0 ret=ERROR
+I (127375) ink_reader: epd finish seq=60 result=ERROR phase=5
+I (127385) ink_reader: display stats submitted=61 merged=53 cancelled=18 stale=0 completed=33
+I (127385) ink_reader: epd claim seq=61 page=READER full=0 submitted=126520ms age=70ms
+I (127385) ink_reader: ui display done seq=60 result=ERROR
+I (127425) ink_reader: render dirty seq=61 page=READER x=20 y=28 w=438 h=768
+I (127425) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (127445) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (127455) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (127455) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (128325) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (128325) epd_gdey0426t82: epd refresh op=partial_area total=901ms convert=156ms prepare=30ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=641ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (128335) ink_reader: render seq=61 t=127540ms page=READER mode=partial cmd=NAV_PREVIOUS since_cmd=1310ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (128355) ink_reader: epd finish seq=61 result=ESP_OK phase=4
+I (128355) ink_reader: display stats submitted=61 merged=53 cancelled=18 stale=0 completed=34
+I (128365) ink_reader: ui display done seq=61 result=ESP_OK
+I (129025) ink_reader: button event t=128230ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (129225) ink_reader: button event t=128430ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (129225) ink_reader: command t=128430ms page=READER cmd=NAV_NEXT
+I (129225) ink_reader_session: chapter resolve page=38 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (129235) ink_reader_session: chapter resolve page=38 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (129285) ink_reader: epd claim seq=62 page=READER full=0 submitted=128480ms age=10ms
+I (129285) ink_reader: ui submit seq=62 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='38/1679 2%' '一 飞驰的礁石'
+I (129305) ink_reader: render dirty seq=62 page=READER x=20 y=186 w=437 h=610
+I (129305) epd_gdey0426t82: epd area portrait x=20 y=186 w=437 h=610 native x=184 y=23 w=616 h=437
+I (129325) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (129335) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (129335) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (130165) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (130165) epd_gdey0426t82: epd refresh op=partial_area total=860ms convert=123ms prepare=29ms update=631ms tx=70ms tx_bytes=67358 tx_calls=934 busy=641ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (130175) ink_reader: render seq=62 t=129380ms page=READER mode=partial cmd=NAV_NEXT since_cmd=950ms view=0ms draw=10ms diff=10ms epd=870ms total=890ms dirty=20,186 437x610 cache=+0/-0 evict+0 ret=ESP_OK
+I (130195) ink_reader: epd finish seq=62 result=ESP_OK phase=4
+I (130195) ink_reader: display stats submitted=62 merged=53 cancelled=18 stale=0 completed=35
+I (130205) ink_reader: ui display done seq=62 result=ESP_OK
+I (132115) ink_reader: button event t=131320ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (132275) ink_reader: button event t=131480ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (132275) ink_reader: command t=131480ms page=READER cmd=NAV_NEXT
+I (132275) ink_reader_session: chapter resolve page=39 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (132285) ink_reader_session: chapter resolve page=39 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (132505) ink_reader_session: cache page=39 slot=1 load=90ms convert=120ms total=210ms
+I (132535) ink_reader: ui submit seq=63 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='39/1679 2%' '一 飞驰的礁石'
+I (132535) ink_reader: epd claim seq=63 page=READER full=0 submitted=131740ms age=0ms
+I (132575) ink_reader: render dirty seq=63 page=READER x=20 y=28 w=438 h=766
+I (132575) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=766 native x=24 y=22 w=776 h=438
+I (132595) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (132605) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (132605) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (133335) ink_reader: button event t=132540ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (133475) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (133475) epd_gdey0426t82: epd refresh op=partial_area total=901ms convert=156ms prepare=30ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (133485) ink_reader: render seq=63 t=132690ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1210ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x766 cache=+0/-0 evict+0 ret=ESP_OK
+I (133495) ink_reader: button event t=132700ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (133505) ink_reader: epd finish seq=63 result=ESP_OK phase=4
+I (133515) ink_reader: display stats submitted=63 merged=53 cancelled=18 stale=0 completed=36
+I (133525) ink_reader: command t=132700ms page=READER cmd=NAV_NEXT
+I (133535) ink_reader_session: chapter resolve page=40 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (133545) ink_reader_session: chapter resolve page=40 chapter=3/50 start=26 end=26 name=一 飞驰的礁石
+I (133755) ink_reader_session: cache page=40 slot=0 load=90ms convert=110ms total=200ms
+I (133785) ink_reader: epd claim seq=64 page=READER full=0 submitted=132990ms age=0ms
+I (133785) ink_reader: ui submit seq=64 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='40/1679 2%' '一 飞驰的礁石'
+I (133795) ink_reader: ui display done seq=63 result=ESP_OK
+I (133815) ink_reader: render dirty seq=64 page=READER x=8 y=28 w=450 h=768
+I (133815) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (133845) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (133855) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (133855) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (134515) ink_reader: button event t=133720ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (134695) ink_reader: button event t=133900ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (134695) ink_reader: command t=133900ms page=READER cmd=NAV_NEXT
+I (134695) ink_reader_session: chapter resolve page=41 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (134705) ink_reader_session: chapter resolve page=41 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (134725) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (134725) epd_gdey0426t82: epd refresh op=partial_area total=908ms convert=160ms prepare=35ms update=626ms tx=79ms tx_bytes=87360 tx_calls=960 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (134745) ink_reader: render seq=64 t=133950ms page=READER mode=partial cmd=NAV_NEXT since_cmd=50ms view=0ms draw=10ms diff=20ms epd=920ms total=960ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (134755) ink_reader: epd finish seq=64 result=ESP_OK phase=4
+I (134765) ink_reader: display stats submitted=64 merged=53 cancelled=18 stale=0 completed=37
+I (134915) ink_reader_session: cache page=41 slot=1 load=90ms convert=110ms total=200ms
+I (134955) ink_reader: epd claim seq=65 page=READER full=0 submitted=134150ms age=10ms
+I (134955) ink_reader: ui submit seq=65 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='41/1679 2%' '二 赞成与反对'
+I (134965) ink_reader: ui display done seq=64 result=ESP_OK
+I (134975) ink_reader: render dirty seq=65 page=READER x=20 y=28 w=443 h=770
+I (134975) epd_gdey0426t82: epd area portrait x=20 y=28 w=443 h=770 native x=24 y=17 w=776 h=443
+I (135005) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (135015) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (135015) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (135885) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (135885) epd_gdey0426t82: epd refresh op=partial_area total=904ms convert=158ms prepare=33ms update=628ms tx=78ms tx_bytes=86002 tx_calls=946 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (135895) ink_reader: render seq=65 t=135100ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1200ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=20,28 443x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (135915) ink_reader: epd finish seq=65 result=ESP_OK phase=4
+I (135915) ink_reader: display stats submitted=65 merged=53 cancelled=18 stale=0 completed=38
+I (135925) ink_reader: ui display done seq=65 result=ESP_OK
+I (136875) ink_reader: button event t=136080ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (137055) ink_reader: button event t=136260ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (137055) ink_reader: command t=136260ms page=READER cmd=NAV_NEXT
+I (137055) ink_reader_session: chapter resolve page=42 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (137065) ink_reader_session: chapter resolve page=42 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (137275) ink_reader_session: cache page=42 slot=0 load=90ms convert=110ms total=200ms
+I (137305) ink_reader: epd claim seq=66 page=READER full=0 submitted=136510ms age=0ms
+I (137305) ink_reader: ui submit seq=66 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='42/1679 2%' '二 赞成与反对'
+I (137335) ink_reader: render dirty seq=66 page=READER x=20 y=29 w=438 h=767
+I (137335) epd_gdey0426t82: epd area portrait x=20 y=29 w=438 h=767 native x=24 y=22 w=776 h=438
+I (137355) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (137365) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (137365) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (137985) ink_reader: button event t=137190ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (138155) ink_reader: button event t=137360ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (138155) ink_reader: command t=137360ms page=READER cmd=NAV_NEXT
+I (138155) ink_reader_session: chapter resolve page=43 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (138165) ink_reader_session: chapter resolve page=43 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (138235) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (138235) epd_gdey0426t82: epd refresh op=partial_area total=899ms convert=156ms prepare=27ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (138245) ink_reader: render seq=66 t=137450ms page=READER mode=partial cmd=NAV_NEXT since_cmd=90ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,29 438x767 cache=+0/-0 evict+0 ret=ESP_OK
+I (138265) ink_reader: epd finish seq=66 result=ESP_OK phase=4
+I (138265) ink_reader: display stats submitted=66 merged=53 cancelled=18 stale=0 completed=39
+I (138375) ink_reader_session: cache page=43 slot=1 load=90ms convert=110ms total=200ms
+I (138415) ink_reader: epd claim seq=67 page=READER full=0 submitted=137620ms age=0ms
+I (138415) ink_reader: ui submit seq=67 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='43/1679 2%' '二 赞成与反对'
+I (138425) ink_reader: ui display done seq=66 result=ESP_OK
+I (138445) ink_reader: render dirty seq=67 page=READER x=20 y=28 w=438 h=768
+I (138445) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (138465) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (138475) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (138475) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (139155) ink_reader: button event t=138360ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (139215) ink_reader: button event t=138420ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (139215) ink_reader: command t=138420ms page=READER cmd=NAV_NEXT
+I (139215) ink_reader_session: chapter resolve page=44 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (139225) ink_reader_session: chapter resolve page=44 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (139345) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (139345) epd_gdey0426t82: epd refresh op=partial_area total=903ms convert=156ms prepare=31ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=641ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (139355) ink_reader: render seq=67 t=138560ms page=READER mode=partial cmd=NAV_NEXT since_cmd=140ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (139375) ink_reader: epd finish seq=67 result=ESP_OK phase=4
+I (139375) ink_reader: display stats submitted=67 merged=53 cancelled=18 stale=0 completed=40
+I (139445) ink_reader_session: cache page=44 slot=0 load=90ms convert=120ms total=210ms
+I (139475) ink_reader: epd claim seq=68 page=READER full=0 submitted=138680ms age=0ms
+I (139475) ink_reader: ui submit seq=68 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='44/1679 2%' '二 赞成与反对'
+I (139485) ink_reader: ui display done seq=67 result=ESP_OK
+I (139505) ink_reader: render dirty seq=68 page=READER x=20 y=28 w=438 h=768
+I (139505) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (139535) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (139545) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (139545) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (140035) ink_reader: button event t=139240ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (140215) ink_reader: button event t=139420ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (140215) ink_reader: command t=139420ms page=READER cmd=NAV_NEXT
+I (140215) ink_reader_session: chapter resolve page=45 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (140225) ink_reader_session: chapter resolve page=45 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (140415) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (140415) epd_gdey0426t82: epd refresh op=partial_area total=907ms convert=156ms prepare=36ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (140425) ink_reader: render seq=68 t=139630ms page=READER mode=partial cmd=NAV_NEXT since_cmd=210ms view=0ms draw=10ms diff=20ms epd=920ms total=950ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (140445) ink_reader: epd finish seq=68 result=ESP_OK phase=4
+I (140445) ink_reader_session: cache page=45 slot=1 load=90ms convert=120ms total=210ms
+I (140445) ink_reader: display stats submitted=68 merged=53 cancelled=18 stale=0 completed=41
+I (140485) ink_reader: ui submit seq=69 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='45/1679 2%' '二 赞成与反对'
+I (140485) ink_reader: epd claim seq=69 page=READER full=0 submitted=139690ms age=0ms
+I (140495) ink_reader: ui display done seq=68 result=ESP_OK
+I (140525) ink_reader: render dirty seq=69 page=READER x=20 y=28 w=438 h=768
+I (140525) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (140545) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (140555) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (140555) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (141425) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (141425) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=156ms prepare=27ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (141435) ink_reader: render seq=69 t=140640ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1220ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (141455) ink_reader: epd finish seq=69 result=ESP_OK phase=4
+I (141455) ink_reader: display stats submitted=69 merged=53 cancelled=18 stale=0 completed=42
+I (141465) ink_reader: ui display done seq=69 result=ESP_OK
+I (141905) ink_reader: button event t=141110ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (142095) ink_reader: button event t=141300ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (142095) ink_reader: command t=141300ms page=READER cmd=NAV_NEXT
+I (142095) ink_reader_session: chapter resolve page=46 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (142105) ink_reader_session: chapter resolve page=46 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (142315) ink_reader_session: cache page=46 slot=0 load=90ms convert=110ms total=200ms
+I (142355) ink_reader: epd claim seq=70 page=READER full=0 submitted=141560ms age=0ms
+I (142355) ink_reader: ui submit seq=70 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='46/1679 2%' '二 赞成与反对'
+I (142385) ink_reader: render dirty seq=70 page=READER x=20 y=28 w=438 h=768
+I (142385) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (142405) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (142415) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (142415) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (143285) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (143285) epd_gdey0426t82: epd refresh op=partial_area total=900ms convert=156ms prepare=29ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (143295) ink_reader: render seq=70 t=142500ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1200ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (143315) ink_reader: epd finish seq=70 result=ESP_OK phase=4
+I (143315) ink_reader: display stats submitted=70 merged=53 cancelled=18 stale=0 completed=43
+I (143325) ink_reader: ui display done seq=70 result=ESP_OK
+I (531655) ink_reader: button event t=530860ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (531835) ink_reader: button event t=531040ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (531835) ink_reader: command t=531040ms page=READER cmd=NAV_NEXT
+I (531835) ink_reader_session: chapter resolve page=47 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (531845) ink_reader_session: chapter resolve page=47 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (532055) ink_reader_session: cache page=47 slot=1 load=90ms convert=110ms total=200ms
+I (532095) ink_reader: epd claim seq=71 page=READER full=0 submitted=531300ms age=0ms
+I (532095) ink_reader: ui submit seq=71 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='47/1679 2%' '二 赞成与反对'
+I (532125) ink_reader: render dirty seq=71 page=READER x=16 y=28 w=442 h=768
+I (532125) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (532145) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (532155) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (532155) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (532555) ink_reader: button event t=531760ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (532575) ink_reader: button event t=531780ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (532575) ink_reader: command t=531780ms page=READER cmd=NAV_NEXT
+I (532575) ink_reader_session: chapter resolve page=48 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (532585) ink_reader_session: chapter resolve page=48 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (532635) ink_reader: button event t=531840ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (532715) ink_reader: button event t=531920ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (532795) ink_reader_session: cache page=48 slot=0 load=90ms convert=110ms total=200ms
+I (532835) ink_reader: ui submit seq=72 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='48/1679 2%' '二 赞成与反对'
+I (532835) ink_reader: command t=531920ms page=READER cmd=NAV_NEXT
+I (532845) ink_reader_session: chapter resolve page=49 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (532845) ink_reader_session: chapter resolve page=49 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (533025) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (533025) epd_gdey0426t82: epd refresh op=partial_area total=901ms convert=158ms prepare=30ms update=629ms tx=78ms tx_bytes=85808 tx_calls=944 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (533035) ink_reader: render seq=71 t=532240ms page=READER mode=partial cmd=NAV_NEXT since_cmd=320ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (533055) ink_reader: epd finish seq=71 result=ESP_OK phase=4
+I (533055) ink_reader: display stats submitted=72 merged=54 cancelled=18 stale=0 completed=44
+I (533065) ink_reader: epd claim seq=72 page=READER full=0 submitted=532030ms age=240ms
+I (533075) ink_reader_session: cache page=49 slot=1 load=100ms convert=120ms total=220ms
+I (533105) ink_reader: render dirty seq=72 page=READER x=16 y=28 w=442 h=768
+I (533105) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (533115) ink_reader: ui submit seq=73 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='49/1679 2%' '二 赞成与反对'
+I (533125) ink_reader: ui display done seq=71 result=ESP_OK
+I (533135) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (533145) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=5ms ret=ESP_OK
+I (533145) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+W (533155) epd_gdey0426t82: epd refresh aborted at phase=preparing
+I (533155) epd_gdey0426t82: epd refresh op=partial_area total=51ms convert=0ms prepare=42ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=5ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (533175) ink_reader: render seq=72 t=532380ms page=READER mode=partial cmd=NAV_NEXT since_cmd=460ms view=0ms draw=10ms diff=20ms epd=70ms total=100ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ERROR
+I (533195) ink_reader: epd finish seq=72 result=ERROR phase=5
+I (533195) ink_reader: display stats submitted=73 merged=55 cancelled=19 stale=0 completed=44
+I (533205) ink_reader: epd claim seq=73 page=READER full=0 submitted=532320ms age=90ms
+I (533205) ink_reader: ui display done seq=72 result=ERROR
+I (533235) ink_reader: render dirty seq=73 page=READER x=16 y=28 w=442 h=768
+I (533235) epd_gdey0426t82: epd area portrait x=16 y=28 w=442 h=768 native x=24 y=22 w=776 h=442
+I (533265) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (533275) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (533275) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (534145) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=628ms ret=ESP_OK
+I (534145) epd_gdey0426t82: epd refresh op=partial_area total=904ms convert=158ms prepare=33ms update=629ms tx=78ms tx_bytes=85808 tx_calls=944 busy=638ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (534145) ink_reader: button event t=533350ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (534155) ink_reader: render seq=73 t=533360ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1440ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=16,28 442x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (534185) ink_reader: epd finish seq=73 result=ESP_OK phase=4
+I (534185) ink_reader: display stats submitted=73 merged=55 cancelled=19 stale=0 completed=45
+I (534195) ink_reader: ui display done seq=73 result=ESP_OK
+I (534225) ink_reader: button event t=533430ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (534225) ink_reader: command t=533430ms page=READER cmd=NAV_NEXT
+I (534225) ink_reader_session: chapter resolve page=50 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (534235) ink_reader_session: chapter resolve page=50 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (534445) ink_reader_session: cache page=50 slot=0 load=90ms convert=110ms total=200ms
+I (534485) ink_reader: epd claim seq=74 page=READER full=0 submitted=533680ms age=10ms
+I (534485) ink_reader: ui submit seq=74 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='50/1679 2%' '二 赞成与反对'
+I (534505) ink_reader: render dirty seq=74 page=READER x=8 y=28 w=450 h=768
+I (534505) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (534535) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (534545) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (534545) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (535195) ink_reader: button event t=534400ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (535275) ink_reader: button event t=534480ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (535275) ink_reader: command t=534480ms page=READER cmd=NAV_NEXT
+I (535275) ink_reader_session: chapter resolve page=51 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (535285) ink_reader_session: chapter resolve page=51 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (535415) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (535415) epd_gdey0426t82: epd refresh op=partial_area total=905ms convert=160ms prepare=33ms update=625ms tx=79ms tx_bytes=87360 tx_calls=960 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (535425) ink_reader: render seq=74 t=534630ms page=READER mode=partial cmd=NAV_NEXT since_cmd=150ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (535445) ink_reader: epd finish seq=74 result=ESP_OK phase=4
+I (535445) ink_reader: display stats submitted=74 merged=55 cancelled=19 stale=0 completed=46
+I (535505) ink_reader_session: cache page=51 slot=1 load=90ms convert=120ms total=210ms
+I (535535) ink_reader: epd claim seq=75 page=READER full=0 submitted=534740ms age=0ms
+I (535535) ink_reader: ui submit seq=75 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='51/1679 3%' '二 赞成与反对'
+I (535545) ink_reader: ui display done seq=74 result=ESP_OK
+I (535565) ink_reader: render dirty seq=75 page=READER x=20 y=28 w=438 h=768
+I (535565) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (535585) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (535595) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (535595) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (536015) ink_reader: button event t=535220ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (536085) ink_reader: button event t=535290ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (536085) ink_reader: command t=535290ms page=READER cmd=NAV_NEXT
+I (536085) ink_reader_session: chapter resolve page=52 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (536095) ink_reader_session: chapter resolve page=52 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (536305) ink_reader_session: cache page=52 slot=0 load=90ms convert=110ms total=200ms
+I (536335) ink_reader: ui submit seq=76 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='52/1679 3%' '二 赞成与反对'
+I (536465) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (536465) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=156ms prepare=27ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (536475) ink_reader: render seq=75 t=535680ms page=READER mode=partial cmd=NAV_NEXT since_cmd=390ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (536495) ink_reader: epd finish seq=75 result=ESP_OK phase=4
+I (536495) ink_reader: display stats submitted=76 merged=56 cancelled=19 stale=0 completed=47
+I (536505) ink_reader: ui display done seq=75 result=ESP_OK
+I (536505) ink_reader: epd claim seq=76 page=READER full=0 submitted=535540ms age=170ms
+I (536545) ink_reader: render dirty seq=76 page=READER x=20 y=28 w=438 h=768
+I (536545) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (536565) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (536575) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (536575) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (536685) ink_reader: button event t=535890ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (536785) ink_reader: button event t=535990ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (536785) ink_reader: command t=535990ms page=READER cmd=NAV_NEXT
+I (536785) ink_reader_session: chapter resolve page=53 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (536795) ink_reader_session: chapter resolve page=53 chapter=4/50 start=41 end=41 name=二 赞成与反对
+I (537005) ink_reader_session: cache page=53 slot=1 load=90ms convert=110ms total=200ms
+I (537045) ink_reader: ui submit seq=77 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='53/1679 3%' '二 赞成与反对'
+I (537295) ink_reader: button event t=536500ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (537345) ink_reader: button event t=536550ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (537345) ink_reader: command t=536550ms page=READER cmd=NAV_NEXT
+I (537345) ink_reader_session: chapter resolve page=54 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (537355) ink_reader_session: chapter resolve page=54 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (537435) ink_reader: button event t=536640ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (537445) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (537445) epd_gdey0426t82: epd refresh op=partial_area total=900ms convert=157ms prepare=28ms update=630ms tx=77ms tx_bytes=85032 tx_calls=936 busy=639ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (537455) ink_reader: render seq=76 t=536660ms page=READER mode=partial cmd=NAV_NEXT since_cmd=110ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (537475) ink_reader: epd finish seq=76 result=ESP_OK phase=4
+I (537475) ink_reader: display stats submitted=77 merged=57 cancelled=19 stale=0 completed=48
+I (537485) ink_reader: epd claim seq=77 page=READER full=0 submitted=536240ms age=450ms
+I (537525) ink_reader: render dirty seq=77 page=READER x=20 y=28 w=438 h=768
+I (537525) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (537535) ink_reader: button event t=536740ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (537555) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (537565) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (537565) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (537595) ink_reader_session: cache page=54 slot=0 load=90ms convert=140ms total=230ms
+I (537635) ink_reader: ui submit seq=78 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='54/1679 3%' '三 先生，悉听尊便'
+I (537635) ink_reader: ui display done seq=76 result=ESP_OK
+I (537645) ink_reader: command t=536740ms page=READER cmd=NAV_NEXT
+I (537645) ink_reader_session: chapter resolve page=55 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (537655) ink_reader_session: chapter resolve page=55 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+W (537745) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (537745) epd_gdey0426t82: epd refresh op=partial_area total=222ms convert=183ms prepare=35ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (537755) ink_reader: render seq=77 t=536960ms page=READER mode=partial cmd=NAV_NEXT since_cmd=220ms view=0ms draw=10ms diff=20ms epd=230ms total=260ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ERROR
+I (537775) ink_reader: epd finish seq=77 result=ERROR phase=5
+I (537785) ink_reader: display stats submitted=78 merged=58 cancelled=20 stale=0 completed=48
+I (537795) ink_reader: epd claim seq=78 page=READER full=0 submitted=536840ms age=160ms
+I (537885) ink_reader_session: cache page=55 slot=1 load=100ms convert=120ms total=220ms
+I (537925) ink_reader: ui submit seq=79 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='55/1679 3%' '三 先生，悉听尊便'
+I (537925) ink_reader: render dirty seq=78 page=READER x=20 y=28 w=459 h=770
+I (537925) ink_reader: ui display done seq=77 result=ERROR
+I (537935) epd_gdey0426t82: epd area portrait x=20 y=28 w=459 h=770 native x=24 y=1 w=776 h=459
+W (537945) epd_gdey0426t82: epd refresh aborted at phase=preparing
+I (537955) epd_gdey0426t82: epd refresh op=partial_area total=20ms convert=0ms prepare=0ms update=0ms tx=0ms tx_bytes=0 tx_calls=0 busy=0ms busy_calls=0 spi_hz=20000000 ret=ERROR
+I (537965) ink_reader: render seq=78 t=537170ms page=READER mode=partial cmd=NAV_NEXT since_cmd=430ms view=0ms draw=110ms diff=20ms epd=40ms total=170ms dirty=20,28 459x770 cache=+0/-0 evict+0 ret=ERROR
+I (537985) ink_reader: epd finish seq=78 result=ERROR phase=5
+I (537995) ink_reader: display stats submitted=79 merged=59 cancelled=21 stale=0 completed=48
+I (537995) ink_reader: epd claim seq=79 page=READER full=0 submitted=537130ms age=70ms
+I (537995) ink_reader: ui display done seq=78 result=ERROR
+I (538035) ink_reader: render dirty seq=79 page=READER x=20 y=28 w=459 h=770
+I (538035) epd_gdey0426t82: epd area portrait x=20 y=28 w=459 h=770 native x=24 y=1 w=776 h=459
+I (538055) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (538065) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (538065) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (538175) ink_reader: button event t=537380ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (538235) ink_reader: button event t=537440ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (538235) ink_reader: command t=537440ms page=READER cmd=NAV_NEXT
+I (538235) ink_reader_session: chapter resolve page=56 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (538245) ink_reader_session: chapter resolve page=56 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (538455) ink_reader_session: cache page=56 slot=0 load=90ms convert=110ms total=200ms
+I (538495) ink_reader: ui submit seq=80 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='56/1679 3%' '三 先生，悉听尊便'
+I (538905) ink_reader: button event t=538110ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (538945) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=627ms ret=ESP_OK
+I (538945) epd_gdey0426t82: epd refresh op=partial_area total=911ms convert=164ms prepare=30ms update=628ms tx=81ms tx_bytes=89106 tx_calls=978 busy=637ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (538945) ink_reader: button event t=538150ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (538955) ink_reader: render seq=79 t=538160ms page=READER mode=partial cmd=NAV_NEXT since_cmd=720ms view=0ms draw=10ms diff=20ms epd=920ms total=950ms dirty=20,28 459x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (538975) ink_reader: command t=538150ms page=READER cmd=NAV_NEXT
+I (538985) ink_reader: epd finish seq=79 result=ESP_OK phase=4
+I (538985) ink_reader_session: chapter resolve page=57 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (538995) ink_reader: display stats submitted=80 merged=60 cancelled=21 stale=0 completed=49
+I (539005) ink_reader_session: chapter resolve page=57 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (539015) ink_reader: epd claim seq=80 page=READER full=0 submitted=537700ms age=520ms
+I (539055) ink_reader: render dirty seq=80 page=READER x=20 y=28 w=438 h=768
+I (539055) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (539075) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (539085) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (539085) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (539265) ink_reader_session: cache page=57 slot=1 load=90ms convert=150ms total=240ms
+W (539305) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (539295) ink_reader: ui submit seq=81 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='57/1679 3%' '三 先生，悉听尊便'
+E (539305) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+I (539305) ink_reader: ui display done seq=79 result=ESP_OK
+E (539315) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (539325) epd_gdey0426t82: current area write failed
+I (539335) epd_gdey0426t82: epd refresh op=partial_area total=279ms convert=205ms prepare=26ms update=0ms tx=11ms tx_bytes=8495 tx_calls=143 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (539355) ink_reader: render seq=80 t=538560ms page=READER mode=partial cmd=NAV_NEXT since_cmd=410ms view=0ms draw=10ms diff=20ms epd=300ms total=330ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ERROR
+I (539365) ink_reader: epd finish seq=80 result=ERROR phase=5
+I (539375) ink_reader: display stats submitted=81 merged=61 cancelled=22 stale=0 completed=49
+I (539385) ink_reader: epd claim seq=81 page=READER full=0 submitted=538500ms age=90ms
+I (539385) ink_reader: ui display done seq=80 result=ERROR
+I (539415) ink_reader: render dirty seq=81 page=READER x=20 y=28 w=438 h=768
+I (539415) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (539445) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (539455) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (539455) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (539715) ink_reader: button event t=538920ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (539735) ink_reader: button event t=538940ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (539735) ink_reader: command t=538940ms page=READER cmd=NAV_NEXT
+I (539735) ink_reader_session: chapter resolve page=58 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (539745) ink_reader_session: chapter resolve page=58 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (539955) ink_reader_session: cache page=58 slot=0 load=90ms convert=110ms total=200ms
+I (539995) ink_reader: ui submit seq=82 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='58/1679 3%' '三 先生，悉听尊便'
+I (540315) ink_reader: button event t=539520ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (540325) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (540325) epd_gdey0426t82: epd refresh op=partial_area total=907ms convert=156ms prepare=36ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (540335) ink_reader: render seq=81 t=539540ms page=READER mode=partial cmd=NAV_NEXT since_cmd=600ms view=0ms draw=10ms diff=20ms epd=920ms total=950ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (540355) ink_reader: button event t=539560ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (540355) ink_reader: epd finish seq=81 result=ESP_OK phase=4
+I (540365) ink_reader: display stats submitted=82 merged=62 cancelled=22 stale=0 completed=50
+I (540375) ink_reader: command t=539560ms page=READER cmd=NAV_NEXT
+I (540375) ink_reader: epd claim seq=82 page=READER full=0 submitted=539190ms age=390ms
+I (540385) ink_reader_session: chapter resolve page=59 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (540395) ink_reader_session: chapter resolve page=59 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (540415) ink_reader: render dirty seq=82 page=READER x=20 y=29 w=438 h=767
+I (540415) epd_gdey0426t82: epd area portrait x=20 y=29 w=438 h=767 native x=24 y=22 w=776 h=438
+I (540445) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (540455) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (540455) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (540655) ink_reader_session: cache page=59 slot=1 load=100ms convert=150ms total=250ms
+W (540685) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (540695) ink_reader: ui submit seq=83 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='59/1679 3%' '三 先生，悉听尊便'
+E (540695) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+I (540695) ink_reader: ui display done seq=81 result=ESP_OK
+E (540705) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (540715) epd_gdey0426t82: current area write failed
+I (540725) epd_gdey0426t82: epd refresh op=partial_area total=306ms convert=201ms prepare=32ms update=0ms tx=33ms tx_bytes=35267 tx_calls=419 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (540735) ink_reader: render seq=82 t=539940ms page=READER mode=partial cmd=NAV_NEXT since_cmd=380ms view=0ms draw=10ms diff=20ms epd=320ms total=350ms dirty=20,29 438x767 cache=+0/-0 evict+0 ret=ERROR
+I (540755) ink_reader: epd finish seq=82 result=ERROR phase=5
+I (540765) ink_reader: display stats submitted=83 merged=63 cancelled=23 stale=0 completed=50
+I (540775) ink_reader: epd claim seq=83 page=READER full=0 submitted=539890ms age=90ms
+I (540775) ink_reader: ui display done seq=82 result=ERROR
+I (540805) ink_reader: render dirty seq=83 page=READER x=20 y=28 w=438 h=768
+I (540805) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (540825) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (540835) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (540835) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (540975) ink_reader: button event t=540180ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (541015) ink_reader: button event t=540220ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (541015) ink_reader: command t=540220ms page=READER cmd=NAV_NEXT
+I (541015) ink_reader_session: chapter resolve page=60 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (541025) ink_reader_session: chapter resolve page=60 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (541235) ink_reader_session: cache page=60 slot=0 load=90ms convert=110ms total=200ms
+I (541275) ink_reader: ui submit seq=84 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='60/1679 3%' '三 先生，悉听尊便'
+I (541705) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (541705) epd_gdey0426t82: epd refresh op=partial_area total=899ms convert=156ms prepare=28ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (541705) ink_reader: button event t=540910ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (541715) ink_reader: render seq=83 t=540920ms page=READER mode=partial cmd=NAV_NEXT since_cmd=700ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (541745) ink_reader: epd finish seq=83 result=ESP_OK phase=4
+I (541745) ink_reader: display stats submitted=84 merged=64 cancelled=23 stale=0 completed=51
+I (541755) ink_reader: button event t=540960ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (541755) ink_reader: epd claim seq=84 page=READER full=0 submitted=540470ms age=490ms
+I (541755) ink_reader: ui display done seq=83 result=ESP_OK
+I (541775) ink_reader: command t=540960ms page=READER cmd=NAV_NEXT
+I (541785) ink_reader_session: chapter resolve page=61 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (541795) ink_reader_session: chapter resolve page=61 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (541805) ink_reader: render dirty seq=84 page=READER x=8 y=28 w=450 h=768
+I (541815) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (541835) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (541845) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (541845) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (542055) ink_reader_session: cache page=61 slot=1 load=90ms convert=160ms total=250ms
+W (542085) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (542085) ink_reader: ui submit seq=85 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='61/1679 3%' '三 先生，悉听尊便'
+E (542085) epd_gdey0426t82: epd_write_data(273): refresh aborted before tx chunk
+E (542105) epd_gdey0426t82: epd_write_native_area(309): native area row write failed
+E (542105) epd_gdey0426t82: current area write failed
+I (542115) epd_gdey0426t82: epd refresh op=partial_area total=303ms convert=208ms prepare=27ms update=0ms tx=31ms tx_bytes=29253 tx_calls=357 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (542125) ink_reader: render seq=84 t=541330ms page=READER mode=partial cmd=NAV_NEXT since_cmd=370ms view=0ms draw=10ms diff=20ms epd=320ms total=350ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ERROR
+I (542145) ink_reader: epd finish seq=84 result=ERROR phase=5
+I (542155) ink_reader: display stats submitted=85 merged=65 cancelled=24 stale=0 completed=51
+I (542165) ink_reader: epd claim seq=85 page=READER full=0 submitted=541290ms age=80ms
+I (542165) ink_reader: ui display done seq=84 result=ERROR
+I (542195) ink_reader: render dirty seq=85 page=READER x=8 y=28 w=450 h=768
+I (542195) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (542215) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (542225) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (542225) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (543095) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (543095) epd_gdey0426t82: epd refresh op=partial_area total=897ms convert=160ms prepare=27ms update=625ms tx=79ms tx_bytes=87360 tx_calls=960 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (543105) ink_reader: render seq=85 t=542310ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1350ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (543125) ink_reader: epd finish seq=85 result=ESP_OK phase=4
+I (543125) ink_reader: display stats submitted=85 merged=65 cancelled=24 stale=0 completed=52
+I (543135) ink_reader: ui display done seq=85 result=ESP_OK
+I (543325) ink_reader: button event t=542530ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (543355) ink_reader: button event t=542560ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (543355) ink_reader: command t=542560ms page=READER cmd=NAV_NEXT
+I (543355) ink_reader_session: chapter resolve page=62 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (543365) ink_reader_session: chapter resolve page=62 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (543575) ink_reader_session: cache page=62 slot=0 load=90ms convert=110ms total=200ms
+I (543615) ink_reader: epd claim seq=86 page=READER full=0 submitted=542820ms age=0ms
+I (543615) ink_reader: ui submit seq=86 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='62/1679 3%' '三 先生，悉听尊便'
+I (543645) ink_reader: render dirty seq=86 page=READER x=20 y=28 w=438 h=768
+I (543645) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (543665) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (543675) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (543675) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (544545) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (544545) epd_gdey0426t82: epd refresh op=partial_area total=900ms convert=156ms prepare=29ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (544555) ink_reader: render seq=86 t=543760ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1200ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (544575) ink_reader: epd finish seq=86 result=ESP_OK phase=4
+I (544575) ink_reader: display stats submitted=86 merged=65 cancelled=24 stale=0 completed=53
+I (544585) ink_reader: ui display done seq=86 result=ESP_OK
+I (545795) ink_reader: button event t=545000ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (545835) ink_reader: button event t=545040ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (545835) ink_reader: command t=545040ms page=READER cmd=NAV_NEXT
+I (545835) ink_reader_session: chapter resolve page=63 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (545845) ink_reader_session: chapter resolve page=63 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (545915) ink_reader: button event t=545120ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (546055) ink_reader_session: cache page=63 slot=1 load=90ms convert=110ms total=200ms
+I (546085) ink_reader: ui submit seq=87 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='63/1679 3%' '三 先生，悉听尊便'
+I (546085) ink_reader: epd claim seq=87 page=READER full=0 submitted=545290ms age=0ms
+I (546125) ink_reader: render dirty seq=87 page=READER x=20 y=28 w=438 h=768
+I (546125) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (546145) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (546155) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (546155) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (546235) ink_reader: fast browse begin page=63 total=1679 dir=forward
+I (546235) ink_reader: fast browse target page=64 held=0ms step=1 interval=120ms
+I (546235) ink_reader: ui submit seq=88 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='64/1679 3%' '三 先生，悉听尊便'
+W (546315) epd_gdey0426t82: epd refresh aborted at phase=transmitting
+I (546315) epd_gdey0426t82: epd refresh op=partial_area total=193ms convert=160ms prepare=29ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (546325) ink_reader: render seq=87 t=545530ms page=READER mode=partial cmd=NAV_NEXT since_cmd=490ms view=0ms draw=10ms diff=20ms epd=200ms total=230ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ERROR
+I (546345) ink_reader: epd finish seq=87 result=ERROR phase=5
+I (546345) ink_reader: display stats submitted=88 merged=66 cancelled=25 stale=0 completed=53
+I (546355) ink_reader: epd claim seq=88 page=READER full=0 submitted=545440ms age=120ms
+I (546355) ink_reader: ui display done seq=87 result=ERROR
+I (546385) ink_reader: render dirty seq=88 page=READER x=20 y=782 w=10 h=14
+I (546385) epd_gdey0426t82: epd area portrait x=20 y=782 w=10 h=14 native x=776 y=450 w=24 h=10
+I (546405) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (546415) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (546415) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (546435) ink_reader: fast browse target page=65 held=520ms step=1 interval=120ms
+I (546435) ink_reader: ui submit seq=89 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='65/1679 3%' '三 先生，悉听尊便'
+I (546555) ink_reader: fast browse target page=66 held=320ms step=1 interval=120ms
+I (546555) ink_reader: ui submit seq=90 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='66/1679 3%' '三 先生，悉听尊便'
+I (546685) ink_reader: fast browse target page=67 held=450ms step=1 interval=120ms
+I (546685) ink_reader: ui submit seq=91 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='67/1679 3%' '四 尼德·兰'
+I (546685) ink_reader: button event t=545890ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (546695) ink_reader_session: chapter resolve page=67 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (546705) ink_reader_session: chapter resolve page=67 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (546925) ink_reader_session: cache page=67 slot=0 load=100ms convert=110ms total=210ms
+I (546955) ink_reader: fast browse commit target=67 ret=1
+I (546965) ink_reader: ui submit seq=92 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='67/1679 3%' '四 尼德·兰'
+I (547045) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (547045) epd_gdey0426t82: epd refresh op=partial_area total=659ms convert=1ms prepare=30ms update=624ms tx=3ms tx_bytes=120 tx_calls=80 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (547055) ink_reader: render seq=88 t=546260ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1220ms view=0ms draw=10ms diff=10ms epd=670ms total=690ms dirty=20,782 10x14 cache=+0/-0 evict+0 ret=ESP_OK
+I (547075) ink_reader: epd finish seq=88 result=ESP_OK phase=4
+I (547075) ink_reader: display stats submitted=92 merged=70 cancelled=25 stale=0 completed=54
+I (547085) ink_reader: ui display done seq=88 result=ESP_OK
+I (547085) ink_reader: epd claim seq=92 page=READER full=0 submitted=546160ms age=130ms
+I (547155) ink_reader: render dirty seq=92 page=READER x=20 y=28 w=459 h=770
+I (547155) epd_gdey0426t82: epd area portrait x=20 y=28 w=459 h=770 native x=24 y=1 w=776 h=459
+I (547185) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (547195) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (547195) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (548075) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=630ms ret=ESP_OK
+I (548075) epd_gdey0426t82: epd refresh op=partial_area total=913ms convert=163ms prepare=32ms update=630ms tx=81ms tx_bytes=89106 tx_calls=978 busy=639ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (548085) ink_reader: render seq=92 t=547290ms page=READER mode=partial cmd=NAV_NEXT since_cmd=2250ms view=0ms draw=50ms diff=10ms epd=930ms total=990ms dirty=20,28 459x770 cache=+0/-0 evict+0 ret=ESP_OK
+I (548105) ink_reader: epd finish seq=92 result=ESP_OK phase=4
+I (548105) ink_reader: display stats submitted=92 merged=70 cancelled=25 stale=0 completed=55
+I (548115) ink_reader: ui display done seq=92 result=ESP_OK
+I (549585) ink_reader: button event t=548790ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (549685) ink_reader: button event t=548890ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (549685) ink_reader: command t=548890ms page=READER cmd=NAV_NEXT
+I (549685) ink_reader_session: chapter resolve page=68 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (549695) ink_reader_session: chapter resolve page=68 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (549905) ink_reader_session: cache page=68 slot=1 load=90ms convert=110ms total=200ms
+I (549935) ink_reader: epd claim seq=93 page=READER full=0 submitted=549140ms age=0ms
+I (549935) ink_reader: ui submit seq=93 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='68/1679 4%' '四 尼德·兰'
+I (549965) ink_reader: render dirty seq=93 page=READER x=20 y=28 w=438 h=768
+I (549965) epd_gdey0426t82: epd area portrait x=20 y=28 w=438 h=768 native x=24 y=22 w=776 h=438
+I (549995) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (550005) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (550005) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (550875) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (550875) epd_gdey0426t82: epd refresh op=partial_area total=906ms convert=156ms prepare=35ms update=631ms tx=77ms tx_bytes=85032 tx_calls=936 busy=640ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (550885) ink_reader: render seq=93 t=550090ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1200ms view=0ms draw=10ms diff=20ms epd=920ms total=950ms dirty=20,28 438x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (550905) ink_reader: epd finish seq=93 result=ESP_OK phase=4
+I (550905) ink_reader: display stats submitted=93 merged=70 cancelled=25 stale=0 completed=56
+I (550915) ink_reader: ui display done seq=93 result=ESP_OK
+I (550985) ink_reader: button event t=550190ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (551295) ink_reader: button event t=550500ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (551295) ink_reader: command t=550500ms page=READER cmd=NAV_NEXT
+I (551295) ink_reader_session: chapter resolve page=69 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (551305) ink_reader_session: chapter resolve page=69 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (551515) ink_reader_session: cache page=69 slot=0 load=90ms convert=110ms total=200ms
+I (551555) ink_reader: ui submit seq=94 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='69/1679 4%' '四 尼德·兰'
+I (551555) ink_reader: epd claim seq=94 page=READER full=0 submitted=550750ms age=10ms
+I (551585) ink_reader: render dirty seq=94 page=READER x=20 y=28 w=437 h=766
+I (551585) epd_gdey0426t82: epd area portrait x=20 y=28 w=437 h=766 native x=24 y=23 w=776 h=437
+I (551605) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (551615) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (551615) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (551775) ink_reader: button event t=550980ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (551795) ink_reader: button event t=551000ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (551795) ink_reader: command t=551000ms page=READER cmd=NAV_NEXT
+I (551795) ink_reader_session: chapter resolve page=70 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (551805) ink_reader_session: chapter resolve page=70 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (551835) ink_reader: button event t=551040ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (551885) ink_reader: button event t=551090ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (551915) ink_reader: button event t=551120ms stable=0x08 pressed=0x08 released=0x00 L=0 R=0 C=0 B=0 P=0
+I (551965) ink_reader: button event t=551170ms stable=0x00 pressed=0x00 released=0x08 L=0 R=0 C=0 B=0 P=0
+I (552015) ink_reader_session: cache page=70 slot=1 load=90ms convert=110ms total=200ms
+I (552055) ink_reader: ui submit seq=95 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='70/1679 4%' '四 尼德·兰'
+I (552055) ink_reader: command t=551090ms page=READER cmd=NAV_NEXT
+I (552055) ink_reader_session: chapter resolve page=71 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (552065) ink_reader_session: chapter resolve page=71 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (552275) ink_reader_session: cache page=71 slot=0 load=90ms convert=110ms total=200ms
+I (552315) ink_reader: ui submit seq=96 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='71/1679 4%' '四 尼德·兰'
+I (552315) ink_reader: command t=551170ms page=READER cmd=NAV_NEXT
+I (552315) ink_reader_session: chapter resolve page=72 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (552325) ink_reader_session: chapter resolve page=72 chapter=6/50 start=67 end=67 name=四 尼德·兰
+I (552485) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=631ms ret=ESP_OK
+I (552485) epd_gdey0426t82: epd refresh op=partial_area total=898ms convert=156ms prepare=26ms update=632ms tx=76ms tx_bytes=84838 tx_calls=934 busy=641ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (552495) ink_reader: render seq=94 t=551700ms page=READER mode=partial cmd=NAV_NEXT since_cmd=530ms view=0ms draw=10ms diff=20ms epd=910ms total=940ms dirty=20,28 437x766 cache=+0/-0 evict+0 ret=ESP_OK
+I (552515) ink_reader: epd finish seq=94 result=ESP_OK phase=4
+I (552515) ink_reader: display stats submitted=96 merged=72 cancelled=25 stale=0 completed=57
+I (552525) ink_reader: epd claim seq=96 page=READER full=0 submitted=551510ms age=220ms
+I (552555) ink_reader_session: cache page=72 slot=1 load=90ms convert=130ms total=220ms
+I (552565) ink_reader: render dirty seq=96 page=READER x=8 y=28 w=450 h=768
+I (552565) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (552595) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (552595) ink_reader: ui submit seq=97 page=READER cmd=NAV_NEXT full=0 input_to_ui=0ms build=0ms footer='72/1679 4%' '四 尼德·兰'
+I (552595) ink_reader: ui display done seq=94 result=ESP_OK
+I (552605) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (552615) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+W (552625) epd_gdey0426t82: epd refresh aborted at phase=preparing
+I (552625) epd_gdey0426t82: epd refresh op=partial_area total=59ms convert=0ms prepare=50ms update=0ms tx=2ms tx_bytes=55 tx_calls=55 busy=10ms busy_calls=3 spi_hz=20000000 ret=ERROR
+I (552645) ink_reader: render seq=96 t=551850ms page=READER mode=partial cmd=NAV_NEXT since_cmd=680ms view=0ms draw=10ms diff=20ms epd=80ms total=110ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ERROR
+I (552655) ink_reader: epd finish seq=96 result=ERROR phase=5
+I (552665) ink_reader: display stats submitted=97 merged=73 cancelled=26 stale=0 completed=57
+I (552675) ink_reader: epd claim seq=97 page=READER full=0 submitted=551790ms age=90ms
+I (552675) ink_reader: ui display done seq=96 result=ERROR
+I (552705) ink_reader: render dirty seq=97 page=READER x=8 y=28 w=450 h=768
+I (552705) epd_gdey0426t82: epd area portrait x=8 y=28 w=450 h=768 native x=24 y=22 w=776 h=450
+I (552735) epd_gdey0426t82: epd busy op=partial_area label=reset busy=1ms ret=ESP_OK
+I (552745) epd_gdey0426t82: epd busy op=partial_area label=sw_reset busy=10ms ret=ESP_OK
+I (552745) epd_gdey0426t82: epd busy op=partial_area label=init_done busy=1ms ret=ESP_OK
+I (553615) epd_gdey0426t82: epd busy op=partial_area label=partial_update busy=624ms ret=ESP_OK
+I (553615) epd_gdey0426t82: epd refresh op=partial_area total=906ms convert=161ms prepare=35ms update=625ms tx=79ms tx_bytes=87360 tx_calls=960 busy=634ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (553625) ink_reader: render seq=97 t=552830ms page=READER mode=partial cmd=NAV_NEXT since_cmd=1660ms view=0ms draw=0ms diff=20ms epd=920ms total=940ms dirty=8,28 450x768 cache=+0/-0 evict+0 ret=ESP_OK
+I (553645) ink_reader: epd finish seq=97 result=ESP_OK phase=4
+I (553645) ink_reader: display stats submitted=97 merged=73 cancelled=26 stale=0 completed=58
+I (553655) ink_reader: ui display done seq=97 result=ESP_OK

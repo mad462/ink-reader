@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        "epd_gdey0426t82.c"
+        "epd_test_pattern.c"
+        "ink_button_input.c"
+        "ink_cpfont.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        driver
+        esp_driver_gpio
+        esp_driver_spi
+        esp_timer
+)

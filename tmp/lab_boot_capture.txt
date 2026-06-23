@@ -1,0 +1,134 @@
+ESP-ROM:esp32s3-202103�ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x14f0
+load:0x403c8700,len:0xd24
+load:0x403cb700,len:0x2ef0
+entry 0x403c8924
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (25) boot: compile time Jun 19 2026 13:54:49
+I (25) boot: Multicore bootloader
+I (25) boot: chip revision: v0.2
+I (28) boot: efuse block revision: v1.3
+I (31) boot.esp32s3: Boot SPI Speed : 80MHz
+I (35) boot.esp32s3: SPI Mode       : DIO
+I (39) boot.esp32s3: SPI Flash Size : 16MB
+I (43) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (50) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (63) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 00100000
+I (76) boot: End of partition table
+I (79) esp_image: segment 0: paddr=00010020 vaddr=3c040020 size=3d5c4h (251332) map
+I (131) esp_image: segment 1: paddr=0004d5ec vaddr=3fc96700 size=02a2ch ( 10796) load
+I (133) esp_image: segment 2: paddr=00050020 vaddr=42000020 size=31c28h (203816) map
+I (170) esp_image: segment 3: paddr=00081c50 vaddr=3fc9912c size=00ec4h (  3780) load
+I (172) esp_image: segment 4: paddr=00082b1c vaddr=40374000 size=126d0h ( 75472) load
+I (191) esp_image: segment 5: paddr=000951f4 vaddr=50000000 size=00020h (    32) load
+I (198) boot: Loaded app from partition at offset 0x10000
+I (198) boot: Disabling RNG early entropy source...
+I (209) octal_psram: vendor id    : 0x0d (AP)
+I (209) octal_psram: dev id       : 0x02 (generation 3)
+I (209) octal_psram: density      : 0x03 (64 Mbit)
+I (211) octal_psram: good-die     : 0x01 (Pass)
+I (215) octal_psram: Latency      : 0x01 (Fixed)
+I (220) octal_psram: VCC          : 0x01 (3V)
+I (224) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (229) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (233) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (238) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (243) octal_psram: DriveStrength: 0x00 (1/1)
+I (247) MSPI Timing: Enter psram timing tuning
+I (252) esp_psram: Found 8MB PSRAM device
+I (255) esp_psram: Speed: 80MHz
+I (258) cpu_start: Multicore app
+I (694) esp_psram: SPI SRAM memory test OK
+I (702) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (703) cpu_start: Pro cpu start user code
+I (703) cpu_start: cpu freq: 160000000 Hz
+I (704) app_init: Application information:
+I (708) app_init: Project name:     ink_reader
+I (712) app_init: App version:      faf07a6-dirty
+I (717) app_init: Compile time:     Jun 21 2026 18:38:21
+I (722) app_init: ELF file SHA256:  1eb216afb...
+I (726) app_init: ESP-IDF:          v5.5.4
+I (730) efuse_init: Min chip rev:     v0.0
+I (734) efuse_init: Max chip rev:     v0.99 
+I (738) efuse_init: Chip rev:         v0.2
+I (742) heap_init: Initializing. RAM available for dynamic allocation:
+I (748) heap_init: At 3FC9DE88 len 0004B888 (302 KiB): RAM
+I (753) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (758) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+I (763) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (769) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+I (776) spi_flash: detected chip: boya
+I (779) spi_flash: flash io: dio
+I (782) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (788) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (795) main_task: Started on CPU0
+I (825) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (825) main_task: Calling app_main()
+I (825) ink_reader: boot self-tests skipped; set kRunBootSelfTests=true for strict diagnostics
+I (835) ink_reader: before display alloc free_internal=354795 free_8bit=8740951 largest_8bit=8257536 largest_spiram=8257536
+I (845) ink_reader: alloc framebuffer len=48000 ptr=0x3c080998 free_internal=354795 free_8bit=8692819 largest_8bit=8257536 largest_spiram=8257536
+I (855) ink_reader: alloc previous_framebuffer len=48000 ptr=0x3c08c59c free_internal=354795 free_8bit=8644687 largest_8bit=8257536 largest_spiram=8257536
+I (875) ink_reader: alloc bitmap_snapshot_a len=48000 ptr=0x3c0981a0 free_internal=354795 free_8bit=8596555 largest_8bit=8126464 largest_spiram=8126464
+I (885) ink_reader: alloc bitmap_snapshot_b len=48000 ptr=0x3c0a3da4 free_internal=354795 free_8bit=8548423 largest_8bit=8126464 largest_spiram=8126464
+I (895) ink_reader: alloc native_snapshot_a len=48000 ptr=0x3c0af9a8 free_internal=354795 free_8bit=8500291 largest_8bit=8126464 largest_spiram=8126464
+I (915) ink_reader: alloc native_snapshot_b len=48000 ptr=0x3c0bb5ac free_internal=354795 free_8bit=8452159 largest_8bit=7995392 largest_spiram=7995392
+I (965) ink_reader: TF card mounted at /sdcard
+Name: 00000
+Type: SDSC
+Speed: 20.00 MHz (limit: 20.00 MHz)
+Size: 954MB
+CSD: ver=1, sector_size=512, capacity=1953792 read_bl_len=9
+SSR: bus_width=4
+W (975) ink_cpfont: font open failed: /sdcard/.fonts/LXGWWenKai/LXGWWenKai_18.cpfont
+I (975) ink_cpfont: font loaded: /sdcard/fonts/LXGWWenKai_18.cpfont intervals=18 glyphs=21930 advance_y=44 ascender=35 descender=-10 bitmap_offset=351160 cache=96
+I (985) ink_reader: loaded font path=/sdcard/fonts/LXGWWenKai_18.cpfont
+I (1005) ink_cpfont: font loaded: /sdcard/fonts/SmallSimSunEmbedded_16.cpfont intervals=166 glyphs=28521 advance_y=18 ascender=14 descender=-4 bitmap_offset=458392 cache=96
+I (1015) ink_reader: loaded font path=/sdcard/fonts/SmallSimSunEmbedded_16.cpfont
+I (1025) ink_reader_session: xtc open begin path=/sdcard/books/海底两万里.xtc heap_internal=326999 heap_8bit=8382307
+I (1095) ink_xtc_book: xtc open ok: path=/sdcard/books/海底两万里.xtc pages=1679 chapters=50 index_offset=5112 data_offset=31976 first_offset=31976 first_size=48022 hq=0
+I (1105) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (1115) ink_reader_session: chapter resolve page=1 chapter=1/50 start=6 end=6 name=译 序
+I (1315) ink_reader_session: cache page=1 slot=0 load=90ms convert=110ms total=200ms
+I (1315) ink_reader_session: xtc open ok path=/sdcard/books/海底两万里.xtc pages=1679 chapters=50 current_chapter=1 name=译 序
+I (1325) ink_reader_session: chapter[1] start=6 end=6 name=译 序
+I (1325) ink_reader_session: chapter[2] start=25 end=25 name=上 篇
+I (1335) ink_reader_session: chapter[3] start=26 end=26 name=一 飞驰的礁石
+I (1345) ink_reader_session: chapter[4] start=41 end=41 name=二 赞成与反对
+I (1345) ink_reader_session: chapter[5] start=54 end=54 name=三 先生，悉听尊便
+I (1355) ink_reader_session: chapter[6] start=67 end=67 name=四 尼德·兰
+I (1365) ink_reader_session: chapter[7] start=83 end=83 name=五 瞎转悠
+I (1365) ink_reader_session: chapter[8] start=96 end=96 name=六 全速前进
+I (1375) ink_reader_session: chapter resolve page=65 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (1385) ink_reader_session: chapter resolve page=65 chapter=5/50 start=54 end=54 name=三 先生，悉听尊便
+I (1585) ink_reader_session: cache page=65 slot=1 load=100ms convert=90ms total=190ms
+I (1775) ink_reader_session: cache page=66 slot=2 load=90ms convert=100ms total=190ms
+I (1775) ink_reader_session: prefetch next page=66 load=90ms convert=100ms total=190ms
+I (1785) ink_reader: fixed sample reader ready path=/sdcard/books/海底两万里.xtc page=65/1679
+I (1825) ink_reader: creating EpdTask stack=5120
+I (1825) ink_reader: EpdTask started
+I (1825) ink_reader: create EpdTask result=1 handle=0x3fcabe28 free_internal=314423
+I (1825) ink_reader: creating UiTask stack=6144
+I (1825) ink_reader: UiTask started
+I (1835) ink_reader: epd claim seq=1 page=READER full=1 submitted=1040ms age=0ms
+I (1845) ink_reader: ui submit seq=1 page=READER cmd=NONE full=1 input_to_ui=0ms build=0ms footer='XTC 65/1679' 'CUSTOM_LUT_B #0'
+I (1945) ink_reader: create UiTask result=1 handle=0x3fcabf84 free_internal=307927
+I (1945) ink_reader: creating InputTask stack=3072
+I (1945) ink_reader: InputTask started
+I (1965) epd_gdey0426t82: epd busy op=full label=reset busy=1ms ret=ESP_OK
+I (1975) epd_gdey0426t82: epd busy op=full label=sw_reset busy=10ms ret=ESP_OK
+I (1975) epd_gdey0426t82: epd busy op=full label=init_done busy=1ms ret=ESP_OK
+I (1995) ink_reader: create InputTask result=1 handle=0x3fcb0a14 free_internal=304503
+I (1995) main_task: Returned from app_main()
+I (3695) epd_gdey0426t82: epd busy op=full label=full_update busy=1697ms ret=ESP_OK
+I (3695) epd_gdey0426t82: epd refresh op=full total=1846ms convert=99ms prepare=28ms update=1697ms tx=22ms tx_bytes=48040 tx_calls=52 busy=1707ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (3705) ink_reader: render seq=1 t=2910ms page=READER mode=full cmd=NONE since_cmd=0ms view=0ms draw=0ms diff=0ms epd=1860ms total=1860ms dirty=0,0 480x800 cache=+0/-0 evict+0 ret=ESP_OK
+I (3715) ink_reader: epd finish seq=1 result=ESP_OK phase=4
+I (3725) ink_reader: display stats submitted=1 merged=0 cancelled=0 stale=0 completed=1
+I (3735) ink_reader: ui display done seq=1 result=ESP_OK

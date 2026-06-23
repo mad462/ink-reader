@@ -1,0 +1,41 @@
+I (8679) epd_gdey0426t82: epd busy op=partial_area_grid label=sw_reset busy=10ms ret=ESP_OK
+I (8679) epd_gdey0426t82: epd busy op=partial_area_grid label=init_done busy=1ms ret=ESP_OK
+I (8699) epd_gdey0426t82: grid lut variant=13 phase3=0x00 rep0=1 rep1=0
+I (8989) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=284ms ret=ESP_OK
+I (8989) epd_gdey0426t82: epd refresh op=partial_area_grid total=344ms convert=9ms prepare=31ms update=285ms tx=13ms tx_bytes=4545 tx_calls=281 busy=293ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (8999) ink_reader: render seq=15 t=8200ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=0ms epd=360ms total=380ms dirty=126,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (9019) ink_reader: epd finish seq=15 result=ESP_OK phase=4
+I (9019) ink_reader: display stats submitted=15 merged=0 cancelled=0 stale=0 completed=15
+I (9029) ink_reader: ui display done seq=15 result=ESP_OK
+I (9039) ink_reader: ui auto advance grid compare step=15/16
+I (9039) ink_reader: ui submit seq=16 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID U1 15/16'
+I (9039) ink_reader: epd claim seq=16 page=READER full=0 submitted=8240ms age=0ms
+I (9069) ink_reader: grid compare step=15 cell=14 variant=14
+I (9069) ink_reader: render dirty seq=16 page=READER x=236 y=594 w=104 h=166
+I (9069) epd_gdey0426t82: epd area portrait x=236 y=594 w=104 h=166 native x=592 y=140 w=168 h=104
+I (9099) epd_gdey0426t82: epd busy op=partial_area_grid label=reset busy=1ms ret=ESP_OK
+I (9109) epd_gdey0426t82: epd busy op=partial_area_grid label=sw_reset busy=10ms ret=ESP_OK
+I (9109) epd_gdey0426t82: epd busy op=partial_area_grid label=init_done busy=1ms ret=ESP_OK
+I (9129) epd_gdey0426t82: grid lut variant=14 phase3=0x00 rep0=1 rep1=0
+I (9419) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=284ms ret=ESP_OK
+I (9419) epd_gdey0426t82: epd refresh op=partial_area_grid total=344ms convert=9ms prepare=31ms update=285ms tx=13ms tx_bytes=4545 tx_calls=281 busy=293ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (9429) ink_reader: render seq=16 t=8630ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=360ms total=370ms dirty=236,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (9449) ink_reader: epd finish seq=16 result=ESP_OK phase=4
+I (9449) ink_reader: display stats submitted=16 merged=0 cancelled=0 stale=0 completed=16
+I (9459) ink_reader: ui display done seq=16 result=ESP_OK
+I (9469) ink_reader: ui auto advance grid compare step=16/16
+I (9469) ink_reader: ui submit seq=17 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID U1 16/16'
+I (9469) ink_reader: epd claim seq=17 page=READER full=0 submitted=8670ms age=0ms
+I (9499) ink_reader: grid compare step=16 cell=15 variant=15
+I (9499) ink_reader: render dirty seq=17 page=READER x=346 y=594 w=104 h=166
+I (9499) epd_gdey0426t82: epd area portrait x=346 y=594 w=104 h=166 native x=592 y=30 w=168 h=104
+I (9529) epd_gdey0426t82: epd busy op=partial_area_grid label=reset busy=1ms ret=ESP_OK
+I (9539) epd_gdey0426t82: epd busy op=partial_area_grid label=sw_reset busy=10ms ret=ESP_OK
+I (9539) epd_gdey0426t82: epd busy op=partial_area_grid label=init_done busy=1ms ret=ESP_OK
+I (9559) epd_gdey0426t82: grid lut variant=15 phase3=0x00 rep0=1 rep1=0
+I (9849) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=284ms ret=ESP_OK
+I (9849) epd_gdey0426t82: epd refresh op=partial_area_grid total=344ms convert=9ms prepare=31ms update=285ms tx=13ms tx_bytes=4545 tx_calls=281 busy=293ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (9859) ink_reader: render seq=17 t=9060ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=360ms total=370ms dirty=346,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (9879) ink_reader: epd finish seq=17 result=ESP_OK phase=4
+I (9879) ink_reader: display stats submitted=17 merged=0 cancelled=0 stale=0 completed=17
+I (9889) ink_reader: ui display done seq=17 result=ESP_OK

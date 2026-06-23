@@ -1,0 +1,334 @@
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x14f0
+load:0x403c8700,len:0xd24
+load:0x403cb700,len:0x2ef0
+entry 0x403c8924
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (25) boot: compile time Jun 19 2026 13:54:49
+I (25) boot: Multicore bootloader
+I (25) boot: chip revision: v0.2
+I (28) boot: efuse block revision: v1.3
+I (31) boot.esp32s3: Boot SPI Speed : 80MHz
+I (35) boot.esp32s3: SPI Mode       : DIO
+I (39) boot.esp32s3: SPI Flash Size : 16MB
+I (43) boot: Enabling RNG early entropy source...
+I (47) boot: Partition Table:
+I (50) boot: ## Label            Usage          Type ST Offset   Length
+I (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (63) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (69) boot:  2 factory          factory app      00 00 00010000 00100000
+I (76) boot: End of partition table
+I (79) esp_image: segment 0: paddr=00010020 vaddr=3c040020 size=3d784h (251780) map
+I (131) esp_image: segment 1: paddr=0004d7ac vaddr=3fc96700 size=0286ch ( 10348) load
+I (133) esp_image: segment 2: paddr=00050020 vaddr=42000020 size=32380h (205696) map
+I (171) esp_image: segment 3: paddr=000823a8 vaddr=3fc98f6c size=01084h (  4228) load
+I (172) esp_image: segment 4: paddr=00083434 vaddr=40374000 size=126d0h ( 75472) load
+I (191) esp_image: segment 5: paddr=00095b0c vaddr=50000000 size=00020h (    32) load
+I (199) boot: Loaded app from partition at offset 0x10000
+I (199) boot: Disabling RNG early entropy source...
+I (209) octal_psram: vendor id    : 0x0d (AP)
+I (209) octal_psram: dev id       : 0x02 (generation 3)
+I (209) octal_psram: density      : 0x03 (64 Mbit)
+I (211) octal_psram: good-die     : 0x01 (Pass)
+I (216) octal_psram: Latency      : 0x01 (Fixed)
+I (220) octal_psram: VCC          : 0x01 (3V)
+I (224) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (229) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (234) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (238) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (244) octal_psram: DriveStrength: 0x00 (1/1)
+I (248) MSPI Timing: Enter psram timing tuning
+I (253) esp_psram: Found 8MB PSRAM device
+I (256) esp_psram: Speed: 80MHz
+I (259) cpu_start: Multicore app
+I (694) esp_psram: SPI SRAM memory test OK
+I (702) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (703) cpu_start: Pro cpu start user code
+I (703) cpu_start: cpu freq: 160000000 Hz
+I (705) app_init: Application information:
+I (709) app_init: Project name:     ink_reader
+I (713) app_init: App version:      faf07a6-dirty
+I (717) app_init: Compile time:     Jun 21 2026 18:38:21
+I (722) app_init: ELF file SHA256:  fe3d81fc0...
+I (726) app_init: ESP-IDF:          v5.5.4
+I (730) efuse_init: Min chip rev:     v0.0
+I (734) efuse_init: Max chip rev:     v0.99 
+I (738) efuse_init: Chip rev:         v0.2
+I (742) heap_init: Initializing. RAM available for dynamic allocation:
+I (748) heap_init: At 3FC9DE90 len 0004B880 (302 KiB): RAM
+I (753) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (759) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+I (764) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (769) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+I (777) spi_flash: detected chip: boya
+I (779) spi_flash: flash io: dio
+I (782) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (788) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (795) main_task: Started on CPU0
+I (825) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (825) main_task: Calling app_main()
+I (825) ink_reader: boot self-tests skipped; set kRunBootSelfTests=true for strict diagnostics
+I (835) ink_reader: before display alloc free_internal=354787 free_8bit=8740943 largest_8bit=8257536 largest_spiram=8257536
+I (845) ink_reader: alloc framebuffer len=48000 ptr=0x3c080998 free_internal=354787 free_8bit=8692811 largest_8bit=8257536 largest_spiram=8257536
+I (855) ink_reader: alloc previous_framebuffer len=48000 ptr=0x3c08c59c free_internal=354787 free_8bit=8644679 largest_8bit=8257536 largest_spiram=8257536
+I (875) ink_reader: alloc bitmap_snapshot_a len=48000 ptr=0x3c0981a0 free_internal=354787 free_8bit=8596547 largest_8bit=8126464 largest_spiram=8126464
+I (885) ink_reader: alloc bitmap_snapshot_b len=48000 ptr=0x3c0a3da4 free_internal=354787 free_8bit=8548415 largest_8bit=8126464 largest_spiram=8126464
+I (895) ink_reader: alloc native_snapshot_a len=48000 ptr=0x3c0af9a8 free_internal=354787 free_8bit=8500283 largest_8bit=8126464 largest_spiram=8126464
+I (915) ink_reader: alloc native_snapshot_b len=48000 ptr=0x3c0bb5ac free_internal=354787 free_8bit=8452151 largest_8bit=7995392 largest_spiram=7995392
+I (965) ink_reader: TF card mounted at /sdcard
+Name: 00000
+Type: SDSC
+Speed: 20.00 MHz (limit: 20.00 MHz)
+Size: 954MB
+CSD: ver=1, sector_size=512, capacity=1953792 read_bl_len=9
+SSR: bus_width=4
+W (975) ink_cpfont: font open failed: /sdcard/.fonts/LXGWWenKai/LXGWWenKai_18.cpfont
+I (975) ink_cpfont: font loaded: /sdcard/fonts/LXGWWenKai_18.cpfont intervals=18 glyphs=21930 advance_y=44 ascender=35 descender=-10 bitmap_offset=351160 cache=96
+I (985) ink_reader: loaded font path=/sdcard/fonts/LXGWWenKai_18.cpfont
+I (1005) ink_cpfont: font loaded: /sdcard/fonts/SmallSimSunEmbedded_16.cpfont intervals=166 glyphs=28521 advance_y=18 ascender=14 descender=-4 bitmap_offset=458392 cache=96
+I (1015) ink_reader: loaded font path=/sdcard/fonts/SmallSimSunEmbedded_16.cpfont
+I (1055) ink_reader: creating EpdTask stack=5120
+I (1055) ink_reader: EpdTask started
+I (1055) ink_reader: create EpdTask result=1 handle=0x3fceec68 free_internal=318983
+I (1055) ink_reader: creating UiTask stack=6144
+I (1055) ink_reader: UiTask started
+I (1065) ink_reader: epd claim seq=1 page=READER full=1 submitted=270ms age=0ms
+I (1065) ink_reader: ui submit seq=1 page=READER cmd=NONE full=1 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 00/16'
+I (1165) ink_reader: create UiTask result=1 handle=0x3fcaea38 free_internal=312487
+I (1165) ink_reader: creating InputTask stack=3072
+I (1165) ink_reader: InputTask started
+I (1185) epd_gdey0426t82: epd busy op=full label=reset busy=1ms ret=ESP_OK
+I (1195) epd_gdey0426t82: epd busy op=full label=sw_reset busy=10ms ret=ESP_OK
+I (1195) epd_gdey0426t82: epd busy op=full label=init_done busy=1ms ret=ESP_OK
+I (1215) ink_reader: create InputTask result=1 handle=0x3fcaf798 free_internal=309063
+I (1215) main_task: Returned from app_main()
+I (2915) epd_gdey0426t82: epd busy op=full label=full_update busy=1697ms ret=ESP_OK
+I (2915) epd_gdey0426t82: epd refresh op=full total=1841ms convert=96ms prepare=26ms update=1697ms tx=22ms tx_bytes=48040 tx_calls=52 busy=1707ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (2925) ink_reader: render seq=1 t=2130ms page=READER mode=full cmd=NONE since_cmd=0ms view=10ms draw=0ms diff=0ms epd=1850ms total=1860ms dirty=0,0 480x800 cache=+0/-0 evict+0 ret=ESP_OK
+I (2935) ink_reader: epd finish seq=1 result=ESP_OK phase=4
+I (2945) ink_reader: display stats submitted=1 merged=0 cancelled=0 stale=0 completed=1
+I (2955) ink_reader: ui display done seq=1 result=ESP_OK
+I (2955) ink_reader: ui grid compare submit base page after white clear
+I (2965) ink_reader: epd claim seq=2 page=READER full=1 submitted=2170ms age=0ms
+I (2965) ink_reader: ui submit seq=2 page=READER cmd=NONE full=1 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 00/16'
+I (3145) epd_gdey0426t82: epd busy op=full label=reset busy=1ms ret=ESP_OK
+I (3155) epd_gdey0426t82: epd busy op=full label=sw_reset busy=10ms ret=ESP_OK
+I (3155) epd_gdey0426t82: epd busy op=full label=init_done busy=1ms ret=ESP_OK
+I (4875) epd_gdey0426t82: epd busy op=full label=full_update busy=1697ms ret=ESP_OK
+I (4875) epd_gdey0426t82: epd refresh op=full total=1863ms convert=118ms prepare=27ms update=1697ms tx=22ms tx_bytes=48040 tx_calls=52 busy=1706ms busy_calls=4 spi_hz=20000000 ret=ESP_OK
+I (4885) ink_reader: render seq=2 t=4090ms page=READER mode=full cmd=NONE since_cmd=0ms view=0ms draw=30ms diff=0ms epd=1880ms total=1910ms dirty=0,0 480x800 cache=+0/-0 evict+0 ret=ESP_OK
+I (4895) ink_reader: epd finish seq=2 result=ESP_OK phase=4
+I (4905) ink_reader: display stats submitted=2 merged=0 cancelled=0 stale=0 completed=2
+I (4915) ink_reader: ui display done seq=2 result=ESP_OK
+I (4915) ink_reader: ui auto advance grid compare step=1/16
+I (4925) ink_reader: epd claim seq=3 page=READER full=0 submitted=4130ms age=0ms
+I (4925) ink_reader: ui submit seq=3 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 01/16'
+I (4935) ink_reader: grid compare step=1 cell=0 variant=0
+I (4945) ink_reader: render dirty seq=3 page=READER x=16 y=72 w=104 h=166
+I (4955) epd_gdey0426t82: epd area portrait x=16 y=72 w=104 h=166 native x=72 y=360 w=168 h=104
+I (4985) epd_gdey0426t82: grid lut variant=0 phase3=0x00 rep0=2 rep1=1
+I (5275) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=288ms ret=ESP_OK
+I (5275) epd_gdey0426t82: epd refresh op=partial_area_grid total=318ms convert=9ms prepare=1ms update=289ms tx=12ms tx_bytes=4512 tx_calls=248 busy=288ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (5285) ink_reader: render seq=3 t=4490ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=0ms epd=340ms total=360ms dirty=16,72 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (5305) ink_reader: epd finish seq=3 result=ESP_OK phase=4
+I (5305) ink_reader: display stats submitted=3 merged=0 cancelled=0 stale=0 completed=3
+I (5315) ink_reader: ui display done seq=3 result=ESP_OK
+I (5315) ink_reader: ui auto advance grid compare step=2/16
+I (5325) ink_reader: epd claim seq=4 page=READER full=0 submitted=4530ms age=0ms
+I (5325) ink_reader: ui submit seq=4 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 02/16'
+I (5345) ink_reader: grid compare step=2 cell=1 variant=1
+I (5345) ink_reader: render dirty seq=4 page=READER x=126 y=72 w=104 h=166
+I (5355) epd_gdey0426t82: epd area portrait x=126 y=72 w=104 h=166 native x=72 y=250 w=168 h=104
+I (5385) epd_gdey0426t82: grid lut variant=1 phase3=0x00 rep0=2 rep1=1
+I (5685) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=295ms ret=ESP_OK
+I (5685) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=296ms tx=12ms tx_bytes=4512 tx_calls=248 busy=295ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (5695) ink_reader: render seq=4 t=4900ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=350ms total=360ms dirty=126,72 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (5715) ink_reader: epd finish seq=4 result=ESP_OK phase=4
+I (5715) ink_reader: display stats submitted=4 merged=0 cancelled=0 stale=0 completed=4
+I (5725) ink_reader: ui display done seq=4 result=ESP_OK
+I (5725) ink_reader: ui auto advance grid compare step=3/16
+I (5735) ink_reader: epd claim seq=5 page=READER full=0 submitted=4940ms age=0ms
+I (5735) ink_reader: ui submit seq=5 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 03/16'
+I (5755) ink_reader: grid compare step=3 cell=2 variant=2
+I (5755) ink_reader: render dirty seq=5 page=READER x=236 y=72 w=104 h=166
+I (5765) epd_gdey0426t82: epd area portrait x=236 y=72 w=104 h=166 native x=72 y=140 w=168 h=104
+I (5795) epd_gdey0426t82: grid lut variant=2 phase3=0x00 rep0=2 rep1=1
+I (6095) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=295ms ret=ESP_OK
+I (6095) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=296ms tx=12ms tx_bytes=4512 tx_calls=248 busy=295ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (6105) ink_reader: render seq=5 t=5310ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=350ms total=360ms dirty=236,72 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (6125) ink_reader: epd finish seq=5 result=ESP_OK phase=4
+I (6125) ink_reader: display stats submitted=5 merged=0 cancelled=0 stale=0 completed=5
+I (6135) ink_reader: ui display done seq=5 result=ESP_OK
+I (6135) ink_reader: ui auto advance grid compare step=4/16
+I (6145) ink_reader: ui submit seq=6 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 04/16'
+I (6145) ink_reader: epd claim seq=6 page=READER full=0 submitted=5350ms age=0ms
+I (6175) ink_reader: grid compare step=4 cell=3 variant=3
+I (6175) ink_reader: render dirty seq=6 page=READER x=346 y=72 w=104 h=166
+I (6175) epd_gdey0426t82: epd area portrait x=346 y=72 w=104 h=166 native x=72 y=30 w=168 h=104
+I (6205) epd_gdey0426t82: grid lut variant=3 phase3=0x00 rep0=2 rep1=1
+I (6505) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=295ms ret=ESP_OK
+I (6505) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=296ms tx=12ms tx_bytes=4512 tx_calls=248 busy=295ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (6515) ink_reader: render seq=6 t=5720ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=346,72 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (6535) ink_reader: epd finish seq=6 result=ESP_OK phase=4
+I (6535) ink_reader: display stats submitted=6 merged=0 cancelled=0 stale=0 completed=6
+I (6545) ink_reader: ui display done seq=6 result=ESP_OK
+I (6545) ink_reader: ui auto advance grid compare step=5/16
+I (6555) ink_reader: ui submit seq=7 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 05/16'
+I (6555) ink_reader: epd claim seq=7 page=READER full=0 submitted=5760ms age=0ms
+I (6585) ink_reader: grid compare step=5 cell=4 variant=4
+I (6585) ink_reader: render dirty seq=7 page=READER x=16 y=246 w=104 h=166
+I (6585) epd_gdey0426t82: epd area portrait x=16 y=246 w=104 h=166 native x=240 y=360 w=176 h=104
+I (6615) epd_gdey0426t82: grid lut variant=4 phase3=0x00 rep0=2 rep1=1
+I (6915) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=294ms ret=ESP_OK
+I (6915) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=295ms tx=12ms tx_bytes=4720 tx_calls=248 busy=294ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (6925) ink_reader: render seq=7 t=6130ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=16,246 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (6945) ink_reader: epd finish seq=7 result=ESP_OK phase=4
+I (6945) ink_reader: display stats submitted=7 merged=0 cancelled=0 stale=0 completed=7
+I (6955) ink_reader: ui display done seq=7 result=ESP_OK
+I (6955) ink_reader: ui auto advance grid compare step=6/16
+I (6965) ink_reader: ui submit seq=8 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 06/16'
+I (6965) ink_reader: epd claim seq=8 page=READER full=0 submitted=6170ms age=0ms
+I (6995) ink_reader: grid compare step=6 cell=5 variant=5
+I (6995) ink_reader: render dirty seq=8 page=READER x=126 y=246 w=104 h=166
+I (6995) epd_gdey0426t82: epd area portrait x=126 y=246 w=104 h=166 native x=240 y=250 w=176 h=104
+I (7025) epd_gdey0426t82: grid lut variant=5 phase3=0x00 rep0=2 rep1=1
+I (7325) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=294ms ret=ESP_OK
+I (7325) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=295ms tx=12ms tx_bytes=4720 tx_calls=248 busy=294ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (7335) ink_reader: render seq=8 t=6540ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=126,246 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (7355) ink_reader: epd finish seq=8 result=ESP_OK phase=4
+I (7355) ink_reader: display stats submitted=8 merged=0 cancelled=0 stale=0 completed=8
+I (7365) ink_reader: ui display done seq=8 result=ESP_OK
+I (7375) ink_reader: ui auto advance grid compare step=7/16
+I (7375) ink_reader: ui submit seq=9 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 07/16'
+I (7375) ink_reader: epd claim seq=9 page=READER full=0 submitted=6580ms age=0ms
+I (7405) ink_reader: grid compare step=7 cell=6 variant=6
+I (7405) ink_reader: render dirty seq=9 page=READER x=236 y=246 w=104 h=166
+I (7405) epd_gdey0426t82: epd area portrait x=236 y=246 w=104 h=166 native x=240 y=140 w=176 h=104
+I (7435) epd_gdey0426t82: grid lut variant=6 phase3=0x00 rep0=2 rep1=1
+I (7735) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=294ms ret=ESP_OK
+I (7735) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=295ms tx=12ms tx_bytes=4720 tx_calls=248 busy=294ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (7745) ink_reader: render seq=9 t=6950ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=236,246 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (7765) ink_reader: epd finish seq=9 result=ESP_OK phase=4
+I (7765) ink_reader: display stats submitted=9 merged=0 cancelled=0 stale=0 completed=9
+I (7775) ink_reader: ui display done seq=9 result=ESP_OK
+I (7785) ink_reader: ui auto advance grid compare step=8/16
+I (7785) ink_reader: ui submit seq=10 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 08/16'
+I (7785) ink_reader: epd claim seq=10 page=READER full=0 submitted=6990ms age=0ms
+I (7815) ink_reader: grid compare step=8 cell=7 variant=7
+I (7815) ink_reader: render dirty seq=10 page=READER x=346 y=246 w=104 h=166
+I (7815) epd_gdey0426t82: epd area portrait x=346 y=246 w=104 h=166 native x=240 y=30 w=176 h=104
+I (7845) epd_gdey0426t82: grid lut variant=7 phase3=0x00 rep0=2 rep1=1
+I (8145) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=294ms ret=ESP_OK
+I (8145) epd_gdey0426t82: epd refresh op=partial_area_grid total=325ms convert=9ms prepare=1ms update=295ms tx=12ms tx_bytes=4720 tx_calls=248 busy=294ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (8155) ink_reader: render seq=10 t=7360ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=346,246 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (8175) ink_reader: epd finish seq=10 result=ESP_OK phase=4
+I (8175) ink_reader: display stats submitted=10 merged=0 cancelled=0 stale=0 completed=10
+I (8185) ink_reader: ui display done seq=10 result=ESP_OK
+I (8195) ink_reader: ui auto advance grid compare step=9/16
+I (8195) ink_reader: epd claim seq=11 page=READER full=0 submitted=7400ms age=0ms
+I (8195) ink_reader: ui submit seq=11 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 09/16'
+I (8215) ink_reader: grid compare step=9 cell=8 variant=8
+I (8215) ink_reader: render dirty seq=11 page=READER x=16 y=420 w=104 h=166
+I (8225) epd_gdey0426t82: epd area portrait x=16 y=420 w=104 h=166 native x=416 y=360 w=176 h=104
+I (8255) epd_gdey0426t82: grid lut variant=8 phase3=0x00 rep0=2 rep1=1
+I (8555) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=294ms ret=ESP_OK
+I (8555) epd_gdey0426t82: epd refresh op=partial_area_grid total=324ms convert=9ms prepare=1ms update=295ms tx=12ms tx_bytes=4720 tx_calls=248 busy=294ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (8565) ink_reader: render seq=11 t=7770ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=350ms total=360ms dirty=16,420 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (8585) ink_reader: epd finish seq=11 result=ESP_OK phase=4
+I (8585) ink_reader: display stats submitted=11 merged=0 cancelled=0 stale=0 completed=11
+I (8595) ink_reader: ui display done seq=11 result=ESP_OK
+I (8605) ink_reader: ui auto advance grid compare step=10/16
+I (8605) ink_reader: epd claim seq=12 page=READER full=0 submitted=7810ms age=0ms
+I (8605) ink_reader: ui submit seq=12 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 10/16'
+I (8625) ink_reader: grid compare step=10 cell=9 variant=9
+I (8635) ink_reader: render dirty seq=12 page=READER x=126 y=420 w=104 h=166
+I (8635) epd_gdey0426t82: epd area portrait x=126 y=420 w=104 h=166 native x=416 y=250 w=176 h=104
+I (8665) epd_gdey0426t82: grid lut variant=9 phase3=0x00 rep0=2 rep1=1
+I (8965) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=293ms ret=ESP_OK
+I (8965) epd_gdey0426t82: epd refresh op=partial_area_grid total=324ms convert=9ms prepare=1ms update=294ms tx=12ms tx_bytes=4720 tx_calls=248 busy=293ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (8975) ink_reader: render seq=12 t=8180ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=10ms epd=340ms total=360ms dirty=126,420 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (8995) ink_reader: epd finish seq=12 result=ESP_OK phase=4
+I (8995) ink_reader: display stats submitted=12 merged=0 cancelled=0 stale=0 completed=12
+I (9005) ink_reader: ui display done seq=12 result=ESP_OK
+I (9015) ink_reader: ui auto advance grid compare step=11/16
+I (9015) ink_reader: epd claim seq=13 page=READER full=0 submitted=8220ms age=0ms
+I (9015) ink_reader: ui submit seq=13 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 11/16'
+I (9035) ink_reader: grid compare step=11 cell=10 variant=10
+I (9045) ink_reader: render dirty seq=13 page=READER x=236 y=420 w=104 h=166
+I (9045) epd_gdey0426t82: epd area portrait x=236 y=420 w=104 h=166 native x=416 y=140 w=176 h=104
+I (9075) epd_gdey0426t82: grid lut variant=10 phase3=0x00 rep0=2 rep1=1
+I (9375) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=293ms ret=ESP_OK
+I (9375) epd_gdey0426t82: epd refresh op=partial_area_grid total=324ms convert=9ms prepare=1ms update=294ms tx=12ms tx_bytes=4720 tx_calls=248 busy=293ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (9385) ink_reader: render seq=13 t=8590ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=20ms diff=0ms epd=340ms total=360ms dirty=236,420 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (9405) ink_reader: epd finish seq=13 result=ESP_OK phase=4
+I (9405) ink_reader: display stats submitted=13 merged=0 cancelled=0 stale=0 completed=13
+I (9415) ink_reader: ui display done seq=13 result=ESP_OK
+I (9425) ink_reader: ui auto advance grid compare step=12/16
+I (9425) ink_reader: ui submit seq=14 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 12/16'
+I (9425) ink_reader: epd claim seq=14 page=READER full=0 submitted=8630ms age=0ms
+I (9455) ink_reader: grid compare step=12 cell=11 variant=11
+I (9455) ink_reader: render dirty seq=14 page=READER x=346 y=420 w=104 h=166
+I (9455) epd_gdey0426t82: epd area portrait x=346 y=420 w=104 h=166 native x=416 y=30 w=176 h=104
+I (9485) epd_gdey0426t82: grid lut variant=11 phase3=0x00 rep0=2 rep1=1
+I (9785) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=293ms ret=ESP_OK
+I (9785) epd_gdey0426t82: epd refresh op=partial_area_grid total=324ms convert=9ms prepare=1ms update=294ms tx=12ms tx_bytes=4720 tx_calls=248 busy=293ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (9795) ink_reader: render seq=14 t=9000ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=346,420 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (9815) ink_reader: epd finish seq=14 result=ESP_OK phase=4
+I (9815) ink_reader: display stats submitted=14 merged=0 cancelled=0 stale=0 completed=14
+I (9825) ink_reader: ui display done seq=14 result=ESP_OK
+I (9835) ink_reader: ui auto advance grid compare step=13/16
+I (9835) ink_reader: ui submit seq=15 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 13/16'
+I (9835) ink_reader: epd claim seq=15 page=READER full=0 submitted=9040ms age=0ms
+I (9865) ink_reader: grid compare step=13 cell=12 variant=12
+I (9865) ink_reader: render dirty seq=15 page=READER x=16 y=594 w=104 h=166
+I (9865) epd_gdey0426t82: epd area portrait x=16 y=594 w=104 h=166 native x=592 y=360 w=168 h=104
+I (9895) epd_gdey0426t82: grid lut variant=12 phase3=0x00 rep0=2 rep1=1
+I (10195) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=294ms ret=ESP_OK
+I (10195) epd_gdey0426t82: epd refresh op=partial_area_grid total=324ms convert=9ms prepare=1ms update=295ms tx=12ms tx_bytes=4512 tx_calls=248 busy=294ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (10205) ink_reader: render seq=15 t=9410ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=16,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (10225) ink_reader: epd finish seq=15 result=ESP_OK phase=4
+I (10225) ink_reader: display stats submitted=15 merged=0 cancelled=0 stale=0 completed=15
+I (10235) ink_reader: ui display done seq=15 result=ESP_OK
+I (10245) ink_reader: ui auto advance grid compare step=14/16
+I (10245) ink_reader: ui submit seq=16 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 14/16'
+I (10245) ink_reader: epd claim seq=16 page=READER full=0 submitted=9450ms age=0ms
+I (10275) ink_reader: grid compare step=14 cell=13 variant=13
+I (10275) ink_reader: render dirty seq=16 page=READER x=126 y=594 w=104 h=166
+I (10275) epd_gdey0426t82: epd area portrait x=126 y=594 w=104 h=166 native x=592 y=250 w=168 h=104
+I (10305) epd_gdey0426t82: grid lut variant=13 phase3=0x00 rep0=2 rep1=1
+I (10605) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=293ms ret=ESP_OK
+I (10605) epd_gdey0426t82: epd refresh op=partial_area_grid total=323ms convert=9ms prepare=1ms update=294ms tx=12ms tx_bytes=4512 tx_calls=248 busy=293ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (10615) ink_reader: render seq=16 t=9820ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=126,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (10635) ink_reader: epd finish seq=16 result=ESP_OK phase=4
+I (10635) ink_reader: display stats submitted=16 merged=0 cancelled=0 stale=0 completed=16
+I (10645) ink_reader: ui display done seq=16 result=ESP_OK
+I (10655) ink_reader: ui auto advance grid compare step=15/16
+I (10655) ink_reader: ui submit seq=17 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 15/16'
+I (10655) ink_reader: epd claim seq=17 page=READER full=0 submitted=9860ms age=0ms
+I (10685) ink_reader: grid compare step=15 cell=14 variant=14
+I (10685) ink_reader: render dirty seq=17 page=READER x=236 y=594 w=104 h=166
+I (10685) epd_gdey0426t82: epd area portrait x=236 y=594 w=104 h=166 native x=592 y=140 w=168 h=104
+I (10715) epd_gdey0426t82: grid lut variant=14 phase3=0x00 rep0=2 rep1=1
+I (11015) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=293ms ret=ESP_OK
+I (11015) epd_gdey0426t82: epd refresh op=partial_area_grid total=323ms convert=9ms prepare=1ms update=294ms tx=12ms tx_bytes=4512 tx_calls=248 busy=293ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (11025) ink_reader: render seq=17 t=10230ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=236,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (11045) ink_reader: epd finish seq=17 result=ESP_OK phase=4
+I (11045) ink_reader: display stats submitted=17 merged=0 cancelled=0 stale=0 completed=17
+I (11055) ink_reader: ui display done seq=17 result=ESP_OK
+I (11065) ink_reader: ui auto advance grid compare step=16/16
+I (11065) ink_reader: ui submit seq=18 page=READER cmd=NONE full=0 input_to_ui=0ms build=0ms footer='P5/5 GRID_COMPARE' 'GRID P1 16/16'
+I (11065) ink_reader: epd claim seq=18 page=READER full=0 submitted=10270ms age=0ms
+I (11095) ink_reader: grid compare step=16 cell=15 variant=15
+I (11095) ink_reader: render dirty seq=18 page=READER x=346 y=594 w=104 h=166
+I (11095) epd_gdey0426t82: epd area portrait x=346 y=594 w=104 h=166 native x=592 y=30 w=168 h=104
+I (11125) epd_gdey0426t82: grid lut variant=15 phase3=0x00 rep0=2 rep1=1
+I (11425) epd_gdey0426t82: epd busy op=partial_area_grid label=grid_compare_update busy=292ms ret=ESP_OK
+I (11425) epd_gdey0426t82: epd refresh op=partial_area_grid total=323ms convert=9ms prepare=1ms update=293ms tx=12ms tx_bytes=4512 tx_calls=248 busy=292ms busy_calls=1 spi_hz=20000000 ret=ESP_OK
+I (11435) ink_reader: render seq=18 t=10640ms page=READER mode=partial cmd=NONE since_cmd=0ms view=0ms draw=10ms diff=0ms epd=340ms total=350ms dirty=346,594 104x166 cache=+0/-0 evict+0 ret=ESP_OK
+I (11455) ink_reader: epd finish seq=18 result=ESP_OK phase=4
+I (11455) ink_reader: display stats submitted=18 merged=0 cancelled=0 stale=0 completed=18
+I (11465) ink_reader: ui display done seq=18 result=ESP_OK
