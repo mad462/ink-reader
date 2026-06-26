@@ -6,6 +6,7 @@ idf_component_register(
         "ink_app_fast_browse.c"
         "ink_app_render.c"
         "ink_app_startup.c"
+        "ink_system_runtime.c"
         "ink_tuning_lab.c"
         "ink_app_ui.c"
     INCLUDE_DIRS
