@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        "ink_wifi_setup_state.c"
+        "ink_wifi_setup_input.c"
+        "ink_wifi_setup_render.c"
+        "ink_wifi_setup_ui.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        ink_hw
+        ink_net
+)

@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../../../main/wifi_setup/ink_wifi_setup_state.h"
-#include "../../../main/wifi_setup/ink_wifi_setup_input.h"
+#include "ink_wifi_setup_state.h"
+#include "ink_wifi_setup_input.h"
+#include "ink_wifi_setup_ui.h"
 
 #define tilt_wifi_setup_selectable_count ink_wifi_setup_selectable_count
 #define tilt_wifi_setup_is_scan_selected ink_wifi_setup_is_scan_selected
@@ -20,6 +21,9 @@ typedef ink_wifi_setup_keyboard_layer_t keyboard_layer_t;
 typedef ink_wifi_setup_keyboard_text_t keyboard_text_t;
 typedef ink_wifi_setup_request_type_t wifi_work_type_t;
 typedef ink_wifi_setup_request_t wifi_work_request_t;
+typedef ink_wifi_setup_ui_cursor_t wifi_ui_cursor_t;
+typedef ink_wifi_setup_ui_region_t wifi_ui_region_t;
+typedef ink_wifi_setup_ui_fonts_t wifi_ui_fonts_t;
 
 #define KEYBOARD_LAYER_LOWER INK_WIFI_SETUP_KEYBOARD_LAYER_LOWER
 #define KEYBOARD_LAYER_UPPER INK_WIFI_SETUP_KEYBOARD_LAYER_UPPER
