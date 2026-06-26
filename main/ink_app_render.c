@@ -504,6 +504,9 @@ bool ink_app_render_model_fill_request(
     memset(request, 0, sizeof(*request));
     request->page = INK_RUNTIME_SHELL_PAGE_READER;
     request->full_refresh = model->request_full_refresh;
+    request->refresh_profile = model->request_full_refresh
+        ? INK_TUNING_REFRESH_FULL
+        : INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
     request->use_app_render_model = true;
     request->app_request_partial_refresh = model->request_partial_refresh;
     request->app_render_mode = (uint8_t)model->mode;
@@ -1637,6 +1640,7 @@ static bool app_render_request_self_test(void)
 
     return request.use_app_render_model
         && request.full_refresh
+        && request.refresh_profile == INK_TUNING_REFRESH_FULL
         && !request.app_request_partial_refresh
         && request.app_render_mode == (uint8_t)INK_APP_RENDER_MODE_LAUNCHER
         && request.app_render_state == (void *)0x1234U;
