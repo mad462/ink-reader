@@ -11,6 +11,8 @@
 #include "freertos/task.h"
 
 #include "epd_test_pattern.h"
+#include "apps/ink_launcher_app.h"
+#include "apps/ink_reader_app.h"
 #include "ink_app_boot.h"
 #include "ink_app_priv.h"
 #include "ink_app_render.h"
@@ -26,6 +28,15 @@ static void input_task(void *arg);
 static bool submit_display_request(
     ink_app_context_t *app,
     ink_runtime_shell_command_t command,
+    uint32_t event_ms);
+static bool submit_active_app_display_request(ink_app_context_t *app, uint32_t event_ms);
+static bool map_snapshot_to_app_event(
+    const ink_button_snapshot_t *snapshot,
+    uint32_t event_ms,
+    ink_app_event_t *event);
+static bool handle_runtime_app_button_event(
+    ink_app_context_t *app,
+    const ink_button_snapshot_t *snapshot,
     uint32_t event_ms);
 static bool submit_post_white_refresh_request(ink_app_context_t *app, uint32_t event_ms);
 static bool submit_reader_auto_flip_request(ink_app_context_t *app, uint32_t event_ms);
@@ -139,6 +150,100 @@ static bool submit_display_request(
     return true;
 }
 
+static bool submit_active_app_display_request(ink_app_context_t *app, uint32_t event_ms)
+{
+    ink_app_render_model_t model;
+    ink_display_request_t request;
+    uint32_t seq;
+
+    if (app == NULL
+        || !ink_system_runtime_has_active_app(&app->runtime)
+        || app->runtime.active_app->render == NULL) {
+        return false;
+    }
+
+    if (!app->runtime.active_app->render(&app->runtime, app->runtime.active_app, &model)) {
+        return false;
+    }
+    if (!ink_app_render_model_fill_request(&model, &request)) {
+        return false;
+    }
+    request.input_ms = event_ms;
+    request.submitted_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
+    seq = ink_display_mailbox_submit(&app->services.mailbox, &request);
+    ESP_LOGI(
+        TAG,
+        "ui submit runtime-app seq=%u app=%s mode=%u full=%d",
+        (unsigned)seq,
+        app->runtime.active_app->id != NULL ? app->runtime.active_app->id : "unknown",
+        (unsigned)request.app_render_mode,
+        request.full_refresh ? 1 : 0);
+    return true;
+}
+
+static bool map_snapshot_to_app_event(
+    const ink_button_snapshot_t *snapshot,
+    uint32_t event_ms,
+    ink_app_event_t *event)
+{
+    if (snapshot == NULL || event == NULL) {
+        return false;
+    }
+
+    memset(event, 0, sizeof(*event));
+    event->event_ms = event_ms;
+
+    if ((snapshot->pressed_mask & ink_button_input_mask_for_raw(INK_RAW_BUTTON_BACK)) != 0U) {
+        event->kind = INK_APP_EVENT_BUTTON_BACK;
+        return true;
+    }
+    if ((snapshot->pressed_mask & ink_button_input_mask_for_raw(INK_RAW_BUTTON_CONFIRM)) != 0U) {
+        event->kind = INK_APP_EVENT_BUTTON_CONFIRM;
+        return true;
+    }
+    if ((snapshot->pressed_mask & ink_button_input_mask_for_raw(INK_RAW_BUTTON_LEFT)) != 0U) {
+        event->kind = INK_APP_EVENT_NAV_PREVIOUS;
+        return true;
+    }
+    if ((snapshot->pressed_mask & ink_button_input_mask_for_raw(INK_RAW_BUTTON_RIGHT)) != 0U) {
+        event->kind = INK_APP_EVENT_NAV_NEXT;
+        return true;
+    }
+
+    return false;
+}
+
+static bool handle_runtime_app_button_event(
+    ink_app_context_t *app,
+    const ink_button_snapshot_t *snapshot,
+    uint32_t event_ms)
+{
+    ink_app_event_t app_event;
+    bool dirty = false;
+
+    if (app == NULL || snapshot == NULL || !ink_system_runtime_has_active_app(&app->runtime)) {
+        return false;
+    }
+    if (!map_snapshot_to_app_event(snapshot, event_ms, &app_event)) {
+        return false;
+    }
+
+    if (app->runtime.active_app->input != NULL) {
+        dirty = app->runtime.active_app->input(&app->runtime, app->runtime.active_app, &app_event);
+    }
+    if (app->runtime.pending_app != NULL) {
+        if (!ink_system_runtime_set_active_app(&app->runtime, app->runtime.pending_app)) {
+            return false;
+        }
+        dirty = true;
+    }
+    if (dirty) {
+        return submit_active_app_display_request(app, event_ms);
+    }
+
+    return true;
+}
+
 static bool submit_fast_browse_preview_request(ink_app_context_t *app, uint32_t event_ms)
 {
     if (app == NULL
@@ -224,9 +329,32 @@ static void ui_task(void *arg)
     ink_ui_event_t event;
 
     ESP_LOGI(TAG, "UiTask started");
-    (void)submit_display_request(app, INK_RUNTIME_SHELL_COMMAND_NONE, 0U);
+    if (ink_system_runtime_has_active_app(&app->runtime)) {
+        (void)submit_active_app_display_request(app, 0U);
+    } else {
+        (void)submit_display_request(app, INK_RUNTIME_SHELL_COMMAND_NONE, 0U);
+    }
 
     for (;;) {
+        if (ink_system_runtime_has_active_app(&app->runtime)) {
+            const uint32_t wait_ms = INK_UI_IDLE_WAIT_MS;
+            if (xQueueReceive(app->services.ui_queue, &event, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
+                continue;
+            }
+
+            if (event.kind == INK_UI_EVENT_DISPLAY_DONE) {
+                ESP_LOGI(
+                    TAG,
+                    "ui display done seq=%u result=%s",
+                    (unsigned)event.data.display_done.seq,
+                    esp_err_to_name(event.data.display_done.result));
+                continue;
+            }
+
+            (void)handle_runtime_app_button_event(app, &event.data.snapshot, event.event_ms);
+            continue;
+        }
+
         const uint32_t wait_ms = (app->model.fast_browse.active || app->model.reader_nav_pending)
             ? INK_FAST_BROWSE_IDLE_TICK_MS
             : INK_UI_IDLE_WAIT_MS;
@@ -387,6 +515,10 @@ void app_main(void)
     TaskHandle_t input_handle = NULL;
 
     ink_app_initialize_context(&app);
+    ink_system_runtime_init(&app.runtime);
+    ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_launcher_app_descriptor()) ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_reader_app_descriptor()) ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_system_runtime_set_active_app(&app.runtime, ink_launcher_app_descriptor()) ? ESP_OK : ESP_FAIL);
 
     if (kRunBootSelfTests) {
         run_boot_self_tests();

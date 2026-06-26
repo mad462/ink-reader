@@ -91,8 +91,9 @@ static bool reader_navigation_self_test(void)
         return false;
     }
 
-    reader->enter(&runtime, reader);
-    if (!runtime.force_full_refresh_on_next_render) {
+    if (!ink_system_runtime_set_active_app(&runtime, reader)
+        || runtime.active_app != reader
+        || !runtime.force_full_refresh_on_next_render) {
         return false;
     }
 

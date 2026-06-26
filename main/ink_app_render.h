@@ -5,6 +5,7 @@
 
 #include "esp_err.h"
 
+#include "apps/ink_app_iface.h"
 #include "ink_app_priv.h"
 
 const char *ink_app_shell_page_name(ink_runtime_shell_page_t page);
@@ -28,4 +29,7 @@ esp_err_t ink_app_render_display_request(
     const ink_display_request_t *request,
     epd_gdey0426t82_phase_t *phase_out
 );
+bool ink_app_render_model_fill_request(
+    const ink_app_render_model_t *model,
+    ink_display_request_t *request);
 bool ink_app_render_self_test(void);

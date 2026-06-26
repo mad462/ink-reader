@@ -12,6 +12,7 @@
 #include "ink_file_browser.h"
 #include "ink_reader_session.h"
 #include "ink_runtime_shell.h"
+#include "ink_system_runtime.h"
 #include "ink_system_services.h"
 #include "ink_tuning_lab.h"
 
@@ -131,6 +132,7 @@ typedef struct {
 
 typedef struct {
     ink_system_services_t services;
+    ink_system_runtime_t runtime;
     ink_ui_model_t model;
     bool aggressive_interrupt_mode;
 } ink_app_context_t;

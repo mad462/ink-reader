@@ -27,6 +27,7 @@ static bool launcher_render(
     const ink_app_descriptor_t *app,
     ink_app_render_model_t *out_model);
 static bool launcher_selection_self_test(void);
+static bool launcher_missing_wifi_target_self_test(void);
 
 static const ink_app_descriptor_t kLauncherApp = {
     .id = "launcher",
@@ -128,8 +129,9 @@ static bool launcher_selection_self_test(void)
         return false;
     }
 
-    launcher->enter(&runtime, launcher);
-    if (state->selected_app_index != 0U) {
+    if (!ink_system_runtime_set_active_app(&runtime, launcher)
+        || runtime.active_app != launcher
+        || state->selected_app_index != 0U) {
         return false;
     }
 
@@ -160,7 +162,32 @@ static bool launcher_selection_self_test(void)
     return true;
 }
 
+static bool launcher_missing_wifi_target_self_test(void)
+{
+    ink_system_runtime_t runtime;
+    ink_app_event_t event = {
+        .kind = INK_APP_EVENT_BUTTON_CONFIRM,
+    };
+    ink_launcher_app_state_t *state = &s_launcher_state;
+    const ink_app_descriptor_t *launcher = ink_launcher_app_descriptor();
+
+    ink_system_runtime_init(&runtime);
+    if (!ink_system_runtime_register_app(&runtime, launcher)
+        || !ink_system_runtime_register_app(&runtime, ink_reader_app_descriptor())
+        || !ink_system_runtime_set_active_app(&runtime, launcher)) {
+        return false;
+    }
+
+    state->selected_app_index = 1U;
+    if (launcher->input(&runtime, launcher, &event)) {
+        return false;
+    }
+
+    return runtime.pending_app == NULL;
+}
+
 bool ink_launcher_app_self_test(void)
 {
-    return launcher_selection_self_test();
+    return launcher_selection_self_test()
+        && launcher_missing_wifi_target_self_test();
 }

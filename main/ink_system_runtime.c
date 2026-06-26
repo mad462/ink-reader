@@ -42,6 +42,11 @@ const ink_app_descriptor_t *ink_system_runtime_find_app_by_id(
     return NULL;
 }
 
+bool ink_system_runtime_has_active_app(const ink_system_runtime_t *runtime)
+{
+    return runtime != NULL && runtime->active_app != NULL;
+}
+
 bool ink_system_runtime_set_active_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
 {
     if (runtime == NULL || app == NULL) {
@@ -110,7 +115,8 @@ bool ink_system_runtime_self_test(void)
     if (ink_system_runtime_find_app_by_id(&runtime, "app-a") != &kAppA
         || ink_system_runtime_find_app_by_id(&runtime, "missing") != NULL
         || ink_system_runtime_find_app_by_id(NULL, "app-a") != NULL
-        || ink_system_runtime_find_app_by_id(&runtime, NULL) != NULL) {
+        || ink_system_runtime_find_app_by_id(&runtime, NULL) != NULL
+        || ink_system_runtime_has_active_app(NULL)) {
         return false;
     }
     if (runtime.app_count != 2U) {
@@ -129,7 +135,7 @@ bool ink_system_runtime_self_test(void)
     if (!ink_system_runtime_set_active_app(&runtime, &kAppA)) {
         return false;
     }
-    if (runtime.active_app != &kAppA) {
+    if (runtime.active_app != &kAppA || !ink_system_runtime_has_active_app(&runtime)) {
         return false;
     }
     if (!ink_system_runtime_request_switch(&runtime, &kAppB)) {

@@ -50,6 +50,7 @@ static bool render_model_to_buffer(
     uint8_t *buffer,
     size_t length,
     const ink_app_render_model_t *model);
+static bool app_render_request_self_test(void);
 static bool render_grid_compare_variant(
     ink_app_context_t *app,
     const ink_display_request_t *request);
@@ -492,6 +493,24 @@ static bool render_model_to_buffer(
     }
 }
 
+bool ink_app_render_model_fill_request(
+    const ink_app_render_model_t *model,
+    ink_display_request_t *request)
+{
+    if (model == NULL || request == NULL) {
+        return false;
+    }
+
+    memset(request, 0, sizeof(*request));
+    request->page = INK_RUNTIME_SHELL_PAGE_READER;
+    request->full_refresh = model->request_full_refresh;
+    request->use_app_render_model = true;
+    request->app_request_partial_refresh = model->request_partial_refresh;
+    request->app_render_mode = (uint8_t)model->mode;
+    request->app_render_state = model->state;
+    return true;
+}
+
 esp_err_t ink_app_render_display_request(
     ink_app_context_t *app,
     const ink_display_request_t *request,
@@ -560,7 +579,20 @@ esp_err_t ink_app_render_display_request(
     view_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount()) - phase_ms;
     phase_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
 
-    if (request->force_white_page) {
+    if (request->use_app_render_model) {
+        ink_app_render_model_t model = {
+            .mode = (ink_app_render_mode_t)request->app_render_mode,
+            .request_full_refresh = request->full_refresh,
+            .request_partial_refresh = request->app_request_partial_refresh,
+            .state = request->app_render_state,
+        };
+        if (!render_model_to_buffer(
+                app->services.framebuffer,
+                EPD_GDEY0426T82_BUFFER_SIZE,
+                &model)) {
+            return ESP_ERR_INVALID_ARG;
+        }
+    } else if (request->force_white_page) {
         memset(app->services.framebuffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
     } else if (request->use_fast_browse_overlay) {
         memcpy(app->services.framebuffer, app->services.previous_framebuffer, EPD_GDEY0426T82_BUFFER_SIZE);
@@ -1588,6 +1620,28 @@ static bool app_render_model_reader_placeholder_self_test(void)
     return ok;
 }
 
+static bool app_render_request_self_test(void)
+{
+    ink_app_render_model_t model;
+    ink_display_request_t request;
+
+    memset(&model, 0, sizeof(model));
+    model.mode = INK_APP_RENDER_MODE_LAUNCHER;
+    model.request_full_refresh = true;
+    model.request_partial_refresh = false;
+    model.state = (void *)0x1234U;
+
+    if (!ink_app_render_model_fill_request(&model, &request)) {
+        return false;
+    }
+
+    return request.use_app_render_model
+        && request.full_refresh
+        && !request.app_request_partial_refresh
+        && request.app_render_mode == (uint8_t)INK_APP_RENDER_MODE_LAUNCHER
+        && request.app_render_state == (void *)0x1234U;
+}
+
 bool ink_app_render_self_test(void)
 {
     if (!ink_launcher_app_self_test()) {
@@ -1676,6 +1730,10 @@ bool ink_app_render_self_test(void)
     }
     if (!app_render_model_reader_placeholder_self_test()) {
         printf("FAIL render model_reader_placeholder\n");
+        return false;
+    }
+    if (!app_render_request_self_test()) {
+        printf("FAIL render app_render_request\n");
         return false;
     }
     return true;

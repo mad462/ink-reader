@@ -22,6 +22,7 @@ bool ink_system_runtime_register_app(ink_system_runtime_t *runtime, const ink_ap
 const ink_app_descriptor_t *ink_system_runtime_find_app_by_id(
     const ink_system_runtime_t *runtime,
     const char *app_id);
+bool ink_system_runtime_has_active_app(const ink_system_runtime_t *runtime);
 bool ink_system_runtime_set_active_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app);
 bool ink_system_runtime_request_switch(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app);
 bool ink_system_runtime_self_test(void);
