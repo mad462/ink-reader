@@ -31,7 +31,7 @@ const ink_app_descriptor_t *ink_reader_app_descriptor(void)
 
 static void reader_enter(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
 {
-    if (runtime == NULL || app == NULL || app->state == NULL) {
+    if (runtime == NULL || app == NULL) {
         return;
     }
 
@@ -63,7 +63,7 @@ static bool reader_render(
     const ink_app_descriptor_t *app,
     ink_app_render_model_t *out_model)
 {
-    if (runtime == NULL || app == NULL || app->state == NULL || out_model == NULL) {
+    if (runtime == NULL || app == NULL || out_model == NULL) {
         return false;
     }
 
@@ -98,7 +98,7 @@ static bool reader_navigation_self_test(void)
 
     if (!reader->render(&runtime, reader, &model)
         || model.mode != INK_APP_RENDER_MODE_READER_PLACEHOLDER
-        || model.state != NULL
+        || model.state != reader->state
         || !model.request_full_refresh
         || runtime.force_full_refresh_on_next_render) {
         return false;
