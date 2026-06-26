@@ -6,6 +6,7 @@ idf_component_register(
         "ink_app_fast_browse.c"
         "ink_app_render.c"
         "ink_app_startup.c"
+        "ink_system_services.c"
         "ink_system_runtime.c"
         "ink_tuning_lab.c"
         "ink_app_ui.c"
@@ -18,5 +19,6 @@ idf_component_register(
         ink_app_core
         ink_book_xtc
         ink_hw
+        ink_net
         vfs
 )
