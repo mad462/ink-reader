@@ -3,16 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
-enum {
-    INK_SYSTEM_RUNTIME_APP_CAPACITY = 4,
-};
-
-static void ink_system_runtime_init(ink_system_runtime_t *runtime);
-static bool ink_system_runtime_register_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app);
-static bool ink_system_runtime_set_active_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app);
-static bool ink_system_runtime_request_switch(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app);
-
-static void ink_system_runtime_init(ink_system_runtime_t *runtime)
+void ink_system_runtime_init(ink_system_runtime_t *runtime)
 {
     if (runtime == NULL) {
         return;
@@ -21,7 +12,7 @@ static void ink_system_runtime_init(ink_system_runtime_t *runtime)
     memset(runtime, 0, sizeof(*runtime));
 }
 
-static bool ink_system_runtime_register_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
+bool ink_system_runtime_register_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
 {
     if (runtime == NULL || app == NULL || runtime->app_count >= INK_SYSTEM_RUNTIME_APP_CAPACITY) {
         return false;
@@ -31,7 +22,7 @@ static bool ink_system_runtime_register_app(ink_system_runtime_t *runtime, const
     return true;
 }
 
-static bool ink_system_runtime_set_active_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
+bool ink_system_runtime_set_active_app(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
 {
     if (runtime == NULL || app == NULL) {
         return false;
@@ -41,7 +32,7 @@ static bool ink_system_runtime_set_active_app(ink_system_runtime_t *runtime, con
     return true;
 }
 
-static bool ink_system_runtime_request_switch(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
+bool ink_system_runtime_request_switch(ink_system_runtime_t *runtime, const ink_app_descriptor_t *app)
 {
     if (runtime == NULL || app == NULL) {
         return false;
@@ -62,14 +53,44 @@ bool ink_system_runtime_self_test(void)
         .id = "app-b",
         .name = "App B",
     };
+    static const ink_app_descriptor_t kAppC = {
+        .id = "app-c",
+        .name = "App C",
+    };
+    static const ink_app_descriptor_t kAppD = {
+        .id = "app-d",
+        .name = "App D",
+    };
+    static const ink_app_descriptor_t kAppE = {
+        .id = "app-e",
+        .name = "App E",
+    };
     ink_system_runtime_t runtime;
 
     ink_system_runtime_init(&runtime);
+    if (ink_system_runtime_register_app(NULL, &kAppA)
+        || ink_system_runtime_register_app(&runtime, NULL)
+        || ink_system_runtime_set_active_app(NULL, &kAppA)
+        || ink_system_runtime_set_active_app(&runtime, NULL)
+        || ink_system_runtime_request_switch(NULL, &kAppA)
+        || ink_system_runtime_request_switch(&runtime, NULL)) {
+        return false;
+    }
     if (!ink_system_runtime_register_app(&runtime, &kAppA)
         || !ink_system_runtime_register_app(&runtime, &kAppB)) {
         return false;
     }
     if (runtime.app_count != 2U) {
+        return false;
+    }
+    if (!ink_system_runtime_register_app(&runtime, &kAppC)
+        || !ink_system_runtime_register_app(&runtime, &kAppD)) {
+        return false;
+    }
+    if (runtime.app_count != INK_SYSTEM_RUNTIME_APP_CAPACITY) {
+        return false;
+    }
+    if (ink_system_runtime_register_app(&runtime, &kAppE)) {
         return false;
     }
     if (!ink_system_runtime_set_active_app(&runtime, &kAppA)) {
