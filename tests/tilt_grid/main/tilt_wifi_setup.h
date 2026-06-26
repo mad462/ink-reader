@@ -1,0 +1,32 @@
+#pragma once
+
+#include "../../../main/wifi_setup/ink_wifi_setup_state.h"
+#include "../../../main/wifi_setup/ink_wifi_setup_input.h"
+
+#define tilt_wifi_setup_selectable_count ink_wifi_setup_selectable_count
+#define tilt_wifi_setup_is_scan_selected ink_wifi_setup_is_scan_selected
+#define tilt_wifi_setup_select_strongest ink_wifi_setup_select_strongest
+#define tilt_wifi_setup_sort_scan ink_wifi_setup_sort_scan
+#define tilt_wifi_setup_cycle_selection ink_wifi_setup_cycle_selection
+#define tilt_wifi_setup_selected_ap ink_wifi_setup_selected_ap
+#define tilt_wifi_setup_open_password ink_wifi_setup_open_password
+#define tilt_wifi_setup_open_saved_menu ink_wifi_setup_open_saved_menu
+#define tilt_wifi_setup_cancel_popup ink_wifi_setup_cancel_popup
+#define tilt_wifi_setup_begin_connecting ink_wifi_setup_begin_connecting
+#define tilt_wifi_setup_finish_connecting ink_wifi_setup_finish_connecting
+#define tilt_wifi_setup_confirm_result ink_wifi_setup_confirm_result
+
+typedef ink_wifi_setup_keyboard_layer_t keyboard_layer_t;
+typedef ink_wifi_setup_keyboard_text_t keyboard_text_t;
+typedef ink_wifi_setup_request_type_t wifi_work_type_t;
+typedef ink_wifi_setup_request_t wifi_work_request_t;
+
+#define KEYBOARD_LAYER_LOWER INK_WIFI_SETUP_KEYBOARD_LAYER_LOWER
+#define KEYBOARD_LAYER_UPPER INK_WIFI_SETUP_KEYBOARD_LAYER_UPPER
+#define KEYBOARD_LAYER_SYMBOL INK_WIFI_SETUP_KEYBOARD_LAYER_SYMBOL
+#define KEYBOARD_LAYER_COUNT INK_WIFI_SETUP_KEYBOARD_LAYER_COUNT
+
+#define WIFI_WORK_SCAN INK_WIFI_SETUP_REQUEST_SCAN
+#define WIFI_WORK_CONNECT_PASSWORD INK_WIFI_SETUP_REQUEST_CONNECT_PASSWORD
+#define WIFI_WORK_CONNECT_SAVED INK_WIFI_SETUP_REQUEST_CONNECT_SAVED
+#define WIFI_WORK_DELETE_SAVED INK_WIFI_SETUP_REQUEST_DELETE_SAVED

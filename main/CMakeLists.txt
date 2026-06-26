@@ -12,8 +12,14 @@ idf_component_register(
         "ink_system_runtime.c"
         "ink_tuning_lab.c"
         "ink_app_ui.c"
+        "wifi_setup/ink_wifi_setup_state.c"
+        "wifi_setup/ink_wifi_setup_input.c"
+        "wifi_setup/ink_wifi_setup_render.c"
+        "test/test_ink_wifi_setup_state.c"
+        "test/test_ink_wifi_setup_render.c"
     INCLUDE_DIRS
         "."
+        "wifi_setup"
     REQUIRES
         esp_driver_sdmmc
         esp_timer
@@ -21,5 +27,7 @@ idf_component_register(
         ink_app_core
         ink_book_xtc
         ink_hw
+        ink_net
+        unity
         vfs
 )

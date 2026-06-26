@@ -1,0 +1,20 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "tilt_grid_input.c"
+        "../../../main/wifi_setup/ink_wifi_setup_state.c"
+        "../../../main/wifi_setup/ink_wifi_setup_input.c"
+        "../../../main/wifi_setup/ink_wifi_setup_render.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_driver_gpio
+        esp_driver_i2c
+        esp_driver_sdmmc
+        esp_driver_spi
+        esp_timer
+        fatfs
+        ink_hw
+        ink_net
+        sdmmc
+)
