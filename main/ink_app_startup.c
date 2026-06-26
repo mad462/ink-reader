@@ -79,11 +79,6 @@ static void apply_initial_library_shell(ink_ui_model_t *model)
     }
 
     model->shell.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
-    model->library.active_tab = INK_LIBRARY_TAB_RECENT;
-    model->library.focus = INK_LIBRARY_FOCUS_ITEMS;
-    model->library.popup_open = false;
-    model->library.popup_action_index = 0U;
-    memset(model->library.selected_index, 0, sizeof(model->library.selected_index));
 }
 
 static bool app_initial_library_shell_self_test(void)
@@ -95,10 +90,6 @@ static bool app_initial_library_shell_self_test(void)
     ink_app_state_prepare_default(&model.app_state);
     apply_initial_library_shell(&model);
     if (model.shell.page != INK_RUNTIME_SHELL_PAGE_LIBRARY) {
-        return false;
-    }
-    if (model.library.active_tab != INK_LIBRARY_TAB_RECENT
-        || model.library.focus != INK_LIBRARY_FOCUS_ITEMS) {
         return false;
     }
 

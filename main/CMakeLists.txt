@@ -19,6 +19,5 @@ idf_component_register(
         ink_app_core
         ink_book_xtc
         ink_hw
-        ink_net
         vfs
 )

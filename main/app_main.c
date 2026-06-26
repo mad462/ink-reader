@@ -291,8 +291,7 @@ static void ui_task(void *arg)
         ink_app_button_state_from_snapshot(&event.data.snapshot, &button_state);
         app->model.buttons = button_state;
         if (app->model.shell.page == INK_RUNTIME_SHELL_PAGE_READER
-            && ink_reader_session_is_xtc_active(&app->model.reader_session)
-            && !app->model.reader_menu.open) {
+            && ink_reader_session_is_xtc_active(&app->model.reader_session)) {
             dirty = ink_app_process_reader_xtc_buttons(app, &event.data.snapshot, event.event_ms, &command);
         } else {
             command = ink_app_command_from_snapshot(&app->model, &event.data.snapshot);

@@ -9,7 +9,6 @@
 
 #include "ink_cpfont.h"
 #include "ink_display_mailbox.h"
-#include "ink_wifi_manager.h"
 
 typedef struct ink_system_services {
     QueueHandle_t ui_queue;

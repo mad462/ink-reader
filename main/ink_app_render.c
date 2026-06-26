@@ -38,15 +38,6 @@ static void fill_shell_page(
     size_t length,
     const ink_cpfont_t *font,
     const ink_runtime_shell_view_t *view);
-static void draw_reader_menu_overlay(
-    ink_app_context_t *app,
-    const ink_display_request_t *request,
-    const ink_cpfont_t *reader_font,
-    const ink_cpfont_t *footer_font);
-static void draw_library_overlay(
-    ink_app_context_t *app,
-    const ink_cpfont_t *menu_font,
-    const ink_cpfont_t *footer_font);
 static bool render_grid_compare_variant(
     ink_app_context_t *app,
     const ink_display_request_t *request);
@@ -61,9 +52,6 @@ static bool should_reuse_reader_partial_init(
     const ink_display_request_t *request);
 static bool should_force_fast_full_commit(const ink_display_request_t *request);
 static bool should_route_footer_preview_to_full_window_stock_partial(
-    const ink_display_request_t *request);
-static bool should_route_ui_partial_to_full_window_stock(
-    const ink_app_context_t *app,
     const ink_display_request_t *request);
 static bool should_promote_reader_partial_to_full_window(
     const ink_display_request_t *request,
@@ -101,10 +89,8 @@ static bool app_large_reader_partial_routing_self_test(void);
 static bool app_reader_partial_init_reuse_self_test(void);
 static bool app_reader_full_window_stock_fallback_self_test(void);
 static bool app_footer_preview_route_self_test(void);
-static bool app_ui_partial_stock_route_self_test(void);
 static bool app_fast_browse_cancel_policy_self_test(void);
 static bool app_reader_cancel_policy_self_test(void);
-static void app_format_book_title(const char *name, char *out, size_t out_size);
 
 const char *ink_app_shell_page_name(ink_runtime_shell_page_t page)
 {
@@ -431,426 +417,12 @@ static void fill_shell_page(
         view->line5);
 }
 
-static void app_format_book_title(const char *name, char *out, size_t out_size)
-{
-    const char *dot = NULL;
-    size_t length = 0U;
-
-    if (out == NULL || out_size == 0U) {
-        return;
-    }
-    out[0] = '\0';
-    if (name == NULL || name[0] == '\0') {
-        return;
-    }
-
-    dot = strrchr(name, '.');
-    if (dot != NULL && (strcasecmp(dot, ".xtc") == 0 || strcasecmp(dot, ".xtch") == 0)) {
-        length = (size_t)(dot - name);
-        if (length >= out_size) {
-            length = out_size - 1U;
-        }
-        memcpy(out, name, length);
-        out[length] = '\0';
-        return;
-    }
-
-    snprintf(out, out_size, "%s", name);
-}
-
-static void draw_reader_menu_overlay(
-    ink_app_context_t *app,
-    const ink_display_request_t *request,
-    const ink_cpfont_t *menu_font,
-    const ink_cpfont_t *footer_font)
-{
-    epd_test_pattern_reader_menu_overlay_t overlay = {0};
-    const bool tabs_focus = app->model.reader_menu.level == INK_READER_MENU_LEVEL_TABS;
-    const bool action_popup = app->model.reader_menu.level == INK_READER_MENU_LEVEL_BOOKMARK_ACTIONS;
-    const bool items_focus = !tabs_focus && !action_popup;
-    const bool chapter_tab = app->model.reader_menu.active_tab == INK_READER_MENU_TAB_CHAPTERS;
-    const size_t chapter_count = app->model.reader_session.xtc_book.chapter_entry_count;
-    const size_t bookmark_count = ink_app_state_count_bookmarks_for_path(
-        &app->model.app_state,
-        app->model.reader_session.source_path);
-    const size_t selected_index = app->model.reader_menu.active_tab == INK_READER_MENU_TAB_CHAPTERS
-        ? app->model.reader_menu.chapter_item_index
-        : app->model.reader_menu.bookmark_item_index;
-    const size_t visible_slots = chapter_tab ? EPD_TEST_PATTERN_MENU_CARD_CAPACITY : 4U;
-    size_t start_index = 0U;
-
-    (void)request;
-    if (!app->model.reader_menu.open) {
-        return;
-    }
-
-    overlay.tabs_focus = tabs_focus;
-    overlay.compact_cards = chapter_tab;
-    overlay.tab_count = 2U;
-    snprintf(overlay.tabs[0].label, sizeof(overlay.tabs[0].label), "%s", "章节");
-    overlay.tabs[0].active = app->model.reader_menu.active_tab == INK_READER_MENU_TAB_CHAPTERS;
-    overlay.tabs[0].focused = tabs_focus && overlay.tabs[0].active;
-    snprintf(overlay.tabs[1].label, sizeof(overlay.tabs[1].label), "%s", "书签");
-    overlay.tabs[1].active = app->model.reader_menu.active_tab == INK_READER_MENU_TAB_BOOKMARKS;
-    overlay.tabs[1].focused = tabs_focus && overlay.tabs[1].active;
-
-    if (items_focus && selected_index > (visible_slots / 2U)) {
-        start_index = selected_index - (visible_slots / 2U);
-    }
-
-    if (chapter_tab) {
-        for (size_t slot = 0; slot < visible_slots; ++slot) {
-            const size_t index = start_index + slot;
-            epd_test_pattern_menu_card_t *card = &overlay.cards[overlay.card_count];
-            const ink_xtc_chapter_entry_t *entry;
-
-            if (index >= chapter_count) {
-                break;
-            }
-            entry = &app->model.reader_session.xtc_book.chapter_entries[index];
-            snprintf(card->title, sizeof(card->title), "%.79s", entry->name);
-            card->line1[0] = '\0';
-            card->line2[0] = '\0';
-            card->selected = items_focus && index == app->model.reader_menu.chapter_item_index;
-            overlay.card_count++;
-        }
-    } else {
-        const bool current_marked = ink_app_state_find_xtc_bookmark(
-            &app->model.app_state,
-            app->model.reader_session.source_path,
-            app->model.reader_session.current_page,
-            NULL);
-        for (size_t slot = 0; slot < visible_slots; ++slot) {
-            const size_t index = start_index + slot;
-            epd_test_pattern_menu_card_t *card = &overlay.cards[overlay.card_count];
-
-            if (index == 0U) {
-                snprintf(card->title, sizeof(card->title), "%s", current_marked ? "当前页书签" : "添加当前页书签");
-                snprintf(card->line1, sizeof(card->line1), "当前页 %u/%u", (unsigned)(app->model.reader_session.current_page + 1U), (unsigned)app->model.reader_session.total_pages);
-                snprintf(card->line2, sizeof(card->line2), "%.63s", app->model.reader_session.current_chapter_name);
-            } else {
-                size_t seen = 0U;
-                const ink_app_state_bookmark_t *bookmark = NULL;
-                for (size_t i = 0; i < INK_APP_STATE_BOOKMARK_CAPACITY; ++i) {
-                    const ink_app_state_bookmark_t *candidate = ink_app_state_bookmark_at(&app->model.app_state, i);
-                    if (candidate == NULL
-                        || strcmp(candidate->book_path, app->model.reader_session.source_path) != 0) {
-                        continue;
-                    }
-                    ++seen;
-                    if (seen == index) {
-                        bookmark = candidate;
-                        break;
-                    }
-                }
-                if (bookmark == NULL) {
-                    break;
-                }
-                snprintf(card->title, sizeof(card->title), "%.79s", bookmark->timestamp_text);
-                snprintf(card->line1, sizeof(card->line1), "第 %u 页", (unsigned)(bookmark->page_index + 1U));
-                snprintf(card->line2, sizeof(card->line2), "%.63s", bookmark->chapter_title);
-            }
-            card->selected = items_focus && index == app->model.reader_menu.bookmark_item_index;
-            overlay.card_count++;
-            if (index >= bookmark_count) {
-                break;
-            }
-        }
-    }
-
-    if (action_popup && app->model.reader_menu.active_tab == INK_READER_MENU_TAB_BOOKMARKS) {
-        overlay.action_popup_open = true;
-        snprintf(
-            overlay.action_popup_title,
-            sizeof(overlay.action_popup_title),
-            "%s",
-            "书签操作");
-        overlay.action_count = 3U;
-        snprintf(overlay.actions[0].label, sizeof(overlay.actions[0].label), "%s", "跳转到该页");
-        snprintf(overlay.actions[1].label, sizeof(overlay.actions[1].label), "%s", "保存覆盖标签");
-        snprintf(overlay.actions[2].label, sizeof(overlay.actions[2].label), "%s", "删除标签");
-        for (size_t i = 0; i < overlay.action_count; ++i) {
-            overlay.actions[i].selected = i == app->model.reader_menu.bookmark_action_index;
-        }
-    }
-
-    epd_test_pattern_draw_reader_menu_overlay(
-        app->services.framebuffer,
-        EPD_GDEY0426T82_BUFFER_SIZE,
-        menu_font,
-        footer_font,
-        &overlay);
-}
-
-static void draw_library_overlay(
-    ink_app_context_t *app,
-    const ink_cpfont_t *menu_font,
-    const ink_cpfont_t *footer_font)
-{
-    epd_test_pattern_reader_menu_overlay_t overlay = {0};
-    static const char *kTabs[INK_LIBRARY_TAB_COUNT] = {"最近", "书库", "收藏"};
-    const bool tabs_focus = app->model.library.focus == INK_LIBRARY_FOCUS_TABS;
-    const bool popup_open = app->model.library.popup_open;
-    const bool items_focus = app->model.library.focus == INK_LIBRARY_FOCUS_ITEMS;
-    const ink_library_tab_t tab = app->model.library.active_tab;
-    const size_t visible_slots = 6U;
-    size_t start_index = 0U;
-    size_t total_count = 0U;
-    size_t selected_index = app->model.library.selected_index[tab];
-
-    overlay.tabs_focus = tabs_focus;
-    overlay.compact_cards = false;
-    overlay.frameless_panel = true;
-    overlay.tab_count = INK_LIBRARY_TAB_COUNT;
-    for (size_t i = 0; i < overlay.tab_count; ++i) {
-        snprintf(overlay.tabs[i].label, sizeof(overlay.tabs[i].label), "%s", kTabs[i]);
-        overlay.tabs[i].active = i == tab;
-        overlay.tabs[i].focused = tabs_focus && i == tab;
-    }
-
-    total_count = 0U;
-    for (size_t i = 0; i < app->model.browser.entry_count; ++i) {
-        const ink_file_browser_entry_t *entry = &app->model.browser.entries[i];
-        size_t shelf_index = 0U;
-        const ink_app_state_bookshelf_entry_t *shelf = NULL;
-        const bool has_shelf = ink_app_state_find_xtc_bookshelf_entry(
-            &app->model.app_state,
-            entry->full_path,
-            &shelf_index);
-        if (entry->type != INK_FILE_BROWSER_ENTRY_XTC) {
-            continue;
-        }
-        if (has_shelf) {
-            shelf = ink_app_state_bookshelf_entry_at(&app->model.app_state, shelf_index);
-        }
-        if (tab == INK_LIBRARY_TAB_RECENT && (shelf == NULL || !shelf->has_opened)) {
-            continue;
-        }
-        if (tab == INK_LIBRARY_TAB_FAVORITES && (shelf == NULL || !shelf->is_favorite)) {
-            continue;
-        }
-        ++total_count;
-    }
-
-    if (selected_index > (visible_slots / 2U)) {
-        start_index = selected_index - (visible_slots / 2U);
-    }
-    if (total_count > visible_slots && start_index + visible_slots > total_count) {
-        start_index = total_count - visible_slots;
-    }
-
-    {
-        size_t visible_seen = 0U;
-        size_t card_slot = 0U;
-        size_t ranked[INK_FILE_BROWSER_MAX_ENTRIES];
-        size_t ranked_count = 0U;
-
-        for (size_t i = 0; i < app->model.browser.entry_count && ranked_count < INK_FILE_BROWSER_MAX_ENTRIES; ++i) {
-            const ink_file_browser_entry_t *entry = &app->model.browser.entries[i];
-            size_t shelf_index = 0U;
-            const ink_app_state_bookshelf_entry_t *shelf = NULL;
-            const bool has_shelf = ink_app_state_find_xtc_bookshelf_entry(
-                &app->model.app_state,
-                entry->full_path,
-                &shelf_index);
-            if (entry->type != INK_FILE_BROWSER_ENTRY_XTC) {
-                continue;
-            }
-            if (has_shelf) {
-                shelf = ink_app_state_bookshelf_entry_at(&app->model.app_state, shelf_index);
-            }
-            if (tab == INK_LIBRARY_TAB_RECENT && (shelf == NULL || !shelf->has_opened)) {
-                continue;
-            }
-            if (tab == INK_LIBRARY_TAB_FAVORITES && (shelf == NULL || !shelf->is_favorite)) {
-                continue;
-            }
-            ranked[ranked_count++] = i;
-        }
-        if (tab == INK_LIBRARY_TAB_RECENT) {
-            for (size_t i = 0; i < ranked_count; ++i) {
-                for (size_t j = i + 1U; j < ranked_count; ++j) {
-                    size_t a_index = 0U;
-                    size_t b_index = 0U;
-                    const ink_app_state_bookshelf_entry_t *a = NULL;
-                    const ink_app_state_bookshelf_entry_t *b = NULL;
-                    (void)ink_app_state_find_xtc_bookshelf_entry(
-                        &app->model.app_state,
-                        app->model.browser.entries[ranked[i]].full_path,
-                        &a_index);
-                    (void)ink_app_state_find_xtc_bookshelf_entry(
-                        &app->model.app_state,
-                        app->model.browser.entries[ranked[j]].full_path,
-                        &b_index);
-                    a = ink_app_state_bookshelf_entry_at(&app->model.app_state, a_index);
-                    b = ink_app_state_bookshelf_entry_at(&app->model.app_state, b_index);
-                    if (a != NULL && b != NULL && b->recent_order > a->recent_order) {
-                        const size_t tmp = ranked[i];
-                        ranked[i] = ranked[j];
-                        ranked[j] = tmp;
-                    }
-                }
-            }
-        }
-
-        for (size_t i = 0; i < ranked_count && card_slot < visible_slots; ++i) {
-            const size_t rank = i;
-            const size_t browser_index = ranked[i];
-            const ink_file_browser_entry_t *entry = &app->model.browser.entries[browser_index];
-            size_t shelf_index = 0U;
-            const ink_app_state_bookshelf_entry_t *shelf = NULL;
-            char book_title[INK_FILE_BROWSER_NAME_LENGTH + 1];
-            char progress[64];
-            if (rank < start_index) {
-                continue;
-            }
-            if (visible_seen++ >= visible_slots) {
-                break;
-            }
-            if (ink_app_state_find_xtc_bookshelf_entry(&app->model.app_state, entry->full_path, &shelf_index)) {
-                shelf = ink_app_state_bookshelf_entry_at(&app->model.app_state, shelf_index);
-            }
-            memset(progress, 0, sizeof(progress));
-            if (shelf != NULL && shelf->has_opened && shelf->total_pages_snapshot > 0U) {
-                const unsigned percent = (unsigned)(((shelf->page_index + 1U) * 100U) / shelf->total_pages_snapshot);
-                const char *chapter_label =
-                    shelf->chapter_title[0] != '\0' ? shelf->chapter_title : "未读";
-                snprintf(
-                    progress,
-                    sizeof(progress),
-                    "%.32s  %u%% %u/%u",
-                    chapter_label,
-                    percent > 100U ? 100U : percent,
-                    (unsigned)(shelf->page_index + 1U),
-                    (unsigned)shelf->total_pages_snapshot);
-            } else {
-                snprintf(progress, sizeof(progress), "%s", "未开始阅读");
-            }
-            app_format_book_title(entry->name, book_title, sizeof(book_title));
-            snprintf(
-                overlay.cards[card_slot].title,
-                sizeof(overlay.cards[card_slot].title),
-                "%s",
-                book_title);
-            snprintf(
-                overlay.cards[card_slot].line1,
-                sizeof(overlay.cards[card_slot].line1),
-                "%s",
-                progress);
-            overlay.cards[card_slot].line2[0] = '\0';
-            overlay.cards[card_slot].trailing_favorite = shelf != NULL && shelf->is_favorite;
-            overlay.cards[card_slot].selected = items_focus && rank == selected_index;
-            ++overlay.card_count;
-            ++card_slot;
-        }
-    }
-
-    if (popup_open) {
-        char title[INK_FILE_BROWSER_NAME_LENGTH + 1];
-        char popup_title[INK_FILE_BROWSER_NAME_LENGTH + 1];
-        size_t shelf_index = 0U;
-        const ink_app_state_bookshelf_entry_t *shelf = NULL;
-        bool has_progress = false;
-        bool is_favorite = false;
-        size_t selected_browser_index = 0U;
-
-        title[0] = '\0';
-        if (selected_index < total_count) {
-            size_t ranked[INK_FILE_BROWSER_MAX_ENTRIES];
-            size_t ranked_count = 0U;
-
-            for (size_t i = 0; i < app->model.browser.entry_count && ranked_count < INK_FILE_BROWSER_MAX_ENTRIES; ++i) {
-                const ink_file_browser_entry_t *entry = &app->model.browser.entries[i];
-                size_t candidate_shelf_index = 0U;
-                const ink_app_state_bookshelf_entry_t *candidate_shelf = NULL;
-                const bool has_candidate = ink_app_state_find_xtc_bookshelf_entry(
-                    &app->model.app_state,
-                    entry->full_path,
-                    &candidate_shelf_index);
-                if (entry->type != INK_FILE_BROWSER_ENTRY_XTC) {
-                    continue;
-                }
-                if (has_candidate) {
-                    candidate_shelf = ink_app_state_bookshelf_entry_at(&app->model.app_state, candidate_shelf_index);
-                }
-                if (tab == INK_LIBRARY_TAB_RECENT && (candidate_shelf == NULL || !candidate_shelf->has_opened)) {
-                    continue;
-                }
-                if (tab == INK_LIBRARY_TAB_FAVORITES && (candidate_shelf == NULL || !candidate_shelf->is_favorite)) {
-                    continue;
-                }
-                ranked[ranked_count++] = i;
-            }
-            if (tab == INK_LIBRARY_TAB_RECENT) {
-                for (size_t i = 0; i < ranked_count; ++i) {
-                    for (size_t j = i + 1U; j < ranked_count; ++j) {
-                        size_t a_index = 0U;
-                        size_t b_index = 0U;
-                        const ink_app_state_bookshelf_entry_t *a = NULL;
-                        const ink_app_state_bookshelf_entry_t *b = NULL;
-                        (void)ink_app_state_find_xtc_bookshelf_entry(
-                            &app->model.app_state,
-                            app->model.browser.entries[ranked[i]].full_path,
-                            &a_index);
-                        (void)ink_app_state_find_xtc_bookshelf_entry(
-                            &app->model.app_state,
-                            app->model.browser.entries[ranked[j]].full_path,
-                            &b_index);
-                        a = ink_app_state_bookshelf_entry_at(&app->model.app_state, a_index);
-                        b = ink_app_state_bookshelf_entry_at(&app->model.app_state, b_index);
-                        if (a != NULL && b != NULL && b->recent_order > a->recent_order) {
-                            const size_t tmp = ranked[i];
-                            ranked[i] = ranked[j];
-                            ranked[j] = tmp;
-                        }
-                    }
-                }
-            }
-            if (selected_index < ranked_count) {
-                selected_browser_index = ranked[selected_index];
-                snprintf(title, sizeof(title), "%s", app->model.browser.entries[selected_browser_index].name);
-            }
-        }
-        app_format_book_title(title, popup_title, sizeof(popup_title));
-        if (title[0] != '\0') {
-            if (ink_app_state_find_xtc_bookshelf_entry(
-                    &app->model.app_state,
-                    app->model.browser.entries[selected_browser_index].full_path,
-                    &shelf_index)) {
-                shelf = ink_app_state_bookshelf_entry_at(&app->model.app_state, shelf_index);
-            }
-        }
-        has_progress = shelf != NULL && shelf->has_opened && shelf->total_pages_snapshot > 0U;
-        is_favorite = shelf != NULL && shelf->is_favorite;
-
-        overlay.action_popup_open = true;
-        snprintf(
-            overlay.action_popup_title,
-            sizeof(overlay.action_popup_title),
-            "%s",
-            popup_title[0] != '\0' ? popup_title : "未命名书籍");
-        overlay.action_count = 2U;
-        snprintf(overlay.actions[0].label, sizeof(overlay.actions[0].label), "%s", has_progress ? "继续阅读" : "开始阅读");
-        snprintf(overlay.actions[1].label, sizeof(overlay.actions[1].label), "%s", is_favorite ? "取消收藏" : "收藏本书");
-        overlay.actions[0].selected = app->model.library.popup_action_index == 0U;
-        overlay.actions[1].selected = app->model.library.popup_action_index == 1U;
-    }
-
-    epd_test_pattern_draw_reader_menu_overlay(
-        app->services.framebuffer,
-        EPD_GDEY0426T82_BUFFER_SIZE,
-        menu_font,
-        footer_font,
-        &overlay);
-}
-
 esp_err_t ink_app_render_display_request(
     ink_app_context_t *app,
     const ink_display_request_t *request,
     epd_gdey0426t82_phase_t *phase_out)
 {
     const ink_cpfont_t *page_font = NULL;
-    const ink_cpfont_t *menu_font = NULL;
     const ink_cpfont_t *footer_font = NULL;
     ink_epd_cancel_ctx_t cancel_ctx = {
         .app = app,
@@ -905,14 +477,6 @@ esp_err_t ink_app_render_display_request(
         footer_font = &app->services.reader_font;
     }
 
-    if (ink_cpfont_is_loaded(&app->services.menu_font)) {
-        menu_font = &app->services.menu_font;
-    } else if (ink_cpfont_is_loaded(&app->services.footer_font)) {
-        menu_font = &app->services.footer_font;
-    } else {
-        menu_font = page_font;
-    }
-
     s_render_sequence = request->seq;
     if (ink_cpfont_is_loaded(&app->services.reader_font)) {
         ink_cpfont_cache_snapshot(&app->services.reader_font, &cache_before);
@@ -929,9 +493,6 @@ esp_err_t ink_app_render_display_request(
         if (!render_grid_compare_variant(app, request)) {
             return ESP_ERR_INVALID_STATE;
         }
-    } else if (request->use_library_overlay) {
-        memset(app->services.framebuffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
-        draw_library_overlay(app, menu_font, footer_font);
     } else if (request->page == INK_RUNTIME_SHELL_PAGE_LIBRARY) {
         fill_shell_page(
             app->services.framebuffer,
@@ -977,9 +538,6 @@ esp_err_t ink_app_render_display_request(
                 EPD_GDEY0426T82_BUFFER_SIZE,
                 request->overlay_right);
         }
-    }
-    if (app->model.reader_menu.open && request->page == INK_RUNTIME_SHELL_PAGE_READER) {
-        draw_reader_menu_overlay(app, request, menu_font, footer_font);
     }
     draw_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount()) - phase_ms;
 
@@ -1138,30 +696,6 @@ esp_err_t ink_app_render_display_request(
                     EPD_GDEY0426T82_BUFFER_SIZE,
                     &full_window_control);
             }
-        } else if (should_route_ui_partial_to_full_window_stock(app, request)) {
-            epd_gdey0426t82_refresh_control_t full_window_control = control;
-
-            full_window_control.use_custom_lut_a = false;
-            full_window_control.use_custom_lut_b = false;
-            full_window_control.use_grid_compare_variant = false;
-            full_window_control.reuse_partial_init = false;
-            ESP_LOGI(
-                TAG,
-                "render promote seq=%u page=%s dirty=%u,%u %ux%u route=ui_full_window_stock",
-                (unsigned)request->seq,
-                ink_app_shell_page_name(request->page),
-                (unsigned)dirty_x,
-                (unsigned)dirty_y,
-                (unsigned)dirty_w,
-                (unsigned)dirty_h);
-            dirty_x = 0U;
-            dirty_y = 0U;
-            dirty_w = EPD_GDEY0426T82_WIDTH;
-            dirty_h = EPD_GDEY0426T82_HEIGHT;
-            ret = epd_gdey0426t82_partial_refresh_ex(
-                app->services.framebuffer,
-                EPD_GDEY0426T82_BUFFER_SIZE,
-                &full_window_control);
         } else {
             ESP_LOGI(
                 TAG,
@@ -1329,27 +863,6 @@ static bool should_route_footer_preview_to_full_window_stock_partial(
         && !request->full_refresh
         && !request->force_white_page
         && !request->use_grid_compare_variant;
-}
-
-static bool should_route_ui_partial_to_full_window_stock(
-    const ink_app_context_t *app,
-    const ink_display_request_t *request)
-{
-    if (app == NULL
-        || request == NULL
-        || request->full_refresh
-        || request->force_fixed_footer_partial
-        || request->force_white_page
-        || request->use_grid_compare_variant) {
-        return false;
-    }
-
-    if (request->page == INK_RUNTIME_SHELL_PAGE_LIBRARY) {
-        return true;
-    }
-
-    return request->page == INK_RUNTIME_SHELL_PAGE_READER
-        && app->model.reader_menu.open;
 }
 
 static bool should_reuse_reader_partial_init(
@@ -1907,37 +1420,6 @@ static bool app_footer_preview_route_self_test(void)
     return true;
 }
 
-static bool app_ui_partial_stock_route_self_test(void)
-{
-    ink_app_context_t app;
-    ink_display_request_t request;
-
-    memset(&app, 0, sizeof(app));
-    memset(&request, 0, sizeof(request));
-
-    request.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
-    if (!should_route_ui_partial_to_full_window_stock(&app, &request)) {
-        return false;
-    }
-
-    request.page = INK_RUNTIME_SHELL_PAGE_READER;
-    if (should_route_ui_partial_to_full_window_stock(&app, &request)) {
-        return false;
-    }
-
-    app.model.reader_menu.open = true;
-    if (!should_route_ui_partial_to_full_window_stock(&app, &request)) {
-        return false;
-    }
-
-    request.force_fixed_footer_partial = true;
-    if (should_route_ui_partial_to_full_window_stock(&app, &request)) {
-        return false;
-    }
-
-    return true;
-}
-
 static bool app_fast_browse_cancel_policy_self_test(void)
 {
     ink_app_context_t app;
@@ -2052,10 +1534,6 @@ bool ink_app_render_self_test(void)
     }
     if (!app_footer_preview_route_self_test()) {
         printf("FAIL render footer_preview_route\n");
-        return false;
-    }
-    if (!app_ui_partial_stock_route_self_test()) {
-        printf("FAIL render ui_partial_stock_route\n");
         return false;
     }
     if (!app_fast_browse_cancel_policy_self_test()) {
