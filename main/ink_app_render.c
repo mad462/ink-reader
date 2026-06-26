@@ -1,10 +1,13 @@
 #include "ink_app_render.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "apps/ink_launcher_app.h"
+#include "apps/ink_reader_app.h"
 #include "esp_log.h"
 #include "freertos/task.h"
 
@@ -38,6 +41,15 @@ static void fill_shell_page(
     size_t length,
     const ink_cpfont_t *font,
     const ink_runtime_shell_view_t *view);
+static void fill_launcher_page(
+    uint8_t *buffer,
+    size_t length,
+    const ink_launcher_app_state_t *state);
+static void fill_reader_placeholder_page(uint8_t *buffer, size_t length);
+static bool render_model_to_buffer(
+    uint8_t *buffer,
+    size_t length,
+    const ink_app_render_model_t *model);
 static bool render_grid_compare_variant(
     ink_app_context_t *app,
     const ink_display_request_t *request);
@@ -91,6 +103,8 @@ static bool app_reader_full_window_stock_fallback_self_test(void);
 static bool app_footer_preview_route_self_test(void);
 static bool app_fast_browse_cancel_policy_self_test(void);
 static bool app_reader_cancel_policy_self_test(void);
+static bool app_render_model_launcher_self_test(void);
+static bool app_render_model_reader_placeholder_self_test(void);
 
 const char *ink_app_shell_page_name(ink_runtime_shell_page_t page)
 {
@@ -415,6 +429,67 @@ static void fill_shell_page(
         view->line3,
         view->line4,
         view->line5);
+}
+
+static void fill_launcher_page(
+    uint8_t *buffer,
+    size_t length,
+    const ink_launcher_app_state_t *state)
+{
+    const char *reader_line = "  Reader";
+    const char *wifi_line = "  WiFi Setup";
+
+    if (state != NULL) {
+        if (state->selected_app_index == 0U) {
+            reader_line = "> Reader";
+        } else if (state->selected_app_index == 1U) {
+            wifi_line = "> WiFi Setup";
+        }
+    }
+
+    epd_test_pattern_fill_text_page(
+        buffer,
+        length,
+        "Launcher",
+        reader_line,
+        wifi_line,
+        "",
+        "",
+        "");
+}
+
+static void fill_reader_placeholder_page(uint8_t *buffer, size_t length)
+{
+    epd_test_pattern_fill_text_page(
+        buffer,
+        length,
+        "Reader App",
+        "Phase 1",
+        "Back to Launcher",
+        "",
+        "",
+        "");
+}
+
+static bool render_model_to_buffer(
+    uint8_t *buffer,
+    size_t length,
+    const ink_app_render_model_t *model)
+{
+    if (buffer == NULL || model == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
+        return false;
+    }
+
+    switch (model->mode) {
+        case INK_APP_RENDER_MODE_LAUNCHER:
+            fill_launcher_page(buffer, length, (const ink_launcher_app_state_t *)model->state);
+            return true;
+        case INK_APP_RENDER_MODE_READER_PLACEHOLDER:
+            fill_reader_placeholder_page(buffer, length);
+            return true;
+        default:
+            return false;
+    }
 }
 
 esp_err_t ink_app_render_display_request(
@@ -1470,8 +1545,59 @@ static bool app_reader_cancel_policy_self_test(void)
     return true;
 }
 
+static bool app_render_model_launcher_self_test(void)
+{
+    uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_app_render_model_t model;
+    ink_launcher_app_state_t state;
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+    memset(&model, 0, sizeof(model));
+    state.selected_app_index = 1U;
+    model.mode = INK_APP_RENDER_MODE_LAUNCHER;
+    model.state = &state;
+
+    ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+        && memcmp(buffer, "\xAA", 1) != 0;
+    free(buffer);
+    return ok;
+}
+
+static bool app_render_model_reader_placeholder_self_test(void)
+{
+    uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_app_render_model_t model;
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+    memset(&model, 0, sizeof(model));
+    model.mode = INK_APP_RENDER_MODE_READER_PLACEHOLDER;
+
+    ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+        && memcmp(buffer, "\xAA", 1) != 0;
+    free(buffer);
+    return ok;
+}
+
 bool ink_app_render_self_test(void)
 {
+    if (!ink_launcher_app_self_test()) {
+        printf("FAIL render launcher_app\n");
+        return false;
+    }
+    if (!ink_reader_app_self_test()) {
+        printf("FAIL render reader_app\n");
+        return false;
+    }
     if (!app_partial_region_self_test()) {
         printf("FAIL render partial_region\n");
         return false;
@@ -1542,6 +1668,14 @@ bool ink_app_render_self_test(void)
     }
     if (!app_reader_cancel_policy_self_test()) {
         printf("FAIL render reader_cancel_policy\n");
+        return false;
+    }
+    if (!app_render_model_launcher_self_test()) {
+        printf("FAIL render model_launcher\n");
+        return false;
+    }
+    if (!app_render_model_reader_placeholder_self_test()) {
+        printf("FAIL render model_reader_placeholder\n");
         return false;
     }
     return true;

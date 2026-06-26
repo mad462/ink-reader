@@ -1,6 +1,8 @@
 idf_component_register(
     SRCS
         "app_main.c"
+        "apps/ink_launcher_app.c"
+        "apps/ink_reader_app.c"
         "ink_app_boot.c"
         "ink_app_display_request.c"
         "ink_app_fast_browse.c"
