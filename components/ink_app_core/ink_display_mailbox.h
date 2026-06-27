@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 
 #include "epd_gdey0426t82.h"
+#include "epd_test_pattern.h"
 #include "ink_runtime_shell.h"
 
 typedef struct {
@@ -26,7 +27,9 @@ typedef struct {
     bool use_native_page;
     bool use_footer_overlay;
     bool use_fast_browse_overlay;
+    bool use_reader_hold_navigation;
     bool use_library_overlay;
+    bool use_reader_menu_overlay;
     bool force_fixed_footer_partial;
     bool force_white_page;
     bool force_fast_full_commit;
@@ -37,13 +40,19 @@ typedef struct {
     uint8_t refresh_profile;
     uint8_t grid_compare_step;
     uint8_t grid_compare_variant_index;
+    uint16_t app_partial_x;
+    uint16_t app_partial_y;
+    uint16_t app_partial_w;
+    uint16_t app_partial_h;
     void *app_render_state;
+    void *owner_ui_model;
     const uint8_t *bitmap_page_buffer;
     size_t bitmap_page_length;
     const uint8_t *native_page_buffer;
     size_t native_page_length;
     ink_runtime_shell_view_t shell_view;
     ink_reader_session_view_t reader_view;
+    epd_test_pattern_reader_menu_overlay_t menu_overlay;
     char overlay_left[48];
     char overlay_right[64];
 } ink_display_request_t;
@@ -87,6 +96,8 @@ bool ink_display_mailbox_try_claim_latest(
     ink_display_request_t *request);
 bool ink_display_mailbox_has_newer_than(const ink_display_mailbox_t *mailbox, uint32_t seq);
 bool ink_display_mailbox_is_idle(const ink_display_mailbox_t *mailbox);
+void ink_display_mailbox_invalidate_pending(ink_display_mailbox_t *mailbox);
+void ink_display_mailbox_discard_queued_only(ink_display_mailbox_t *mailbox);
 void ink_display_mailbox_note_cancelled(ink_display_mailbox_t *mailbox);
 void ink_display_mailbox_note_discarded_stale(ink_display_mailbox_t *mailbox);
 void ink_display_mailbox_note_completed(ink_display_mailbox_t *mailbox, uint32_t seq);

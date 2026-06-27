@@ -5,7 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_memory_utils.h"
 
 #include "epd_gdey0426t82.h"
 
@@ -18,6 +20,43 @@ enum {
     INK_XTC_METADATA_SIZE = 256,
     INK_XTC_CHAPTER_ENTRY_SIZE = 96,
 };
+
+static void *xtc_malloc_prefer_psram(size_t size)
+{
+    void *ptr = NULL;
+
+    if (size == 0U) {
+        return NULL;
+    }
+    ptr = heap_caps_malloc_prefer(
+        size,
+        2,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    if (ptr == NULL) {
+        ptr = malloc(size);
+    }
+    return ptr;
+}
+
+static void *xtc_calloc_prefer_psram(size_t count, size_t size)
+{
+    void *ptr = NULL;
+
+    if (count == 0U || size == 0U) {
+        return NULL;
+    }
+    ptr = heap_caps_calloc_prefer(
+        count,
+        size,
+        2,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    if (ptr == NULL) {
+        ptr = calloc(count, size);
+    }
+    return ptr;
+}
 
 static uint16_t read_le16(const uint8_t *p)
 {
@@ -272,8 +311,8 @@ static bool load_metadata_and_chapters(ink_xtc_book_t *book, FILE *file)
                 (unsigned)chapter_count);
         }
         if (chapter_bytes_length > 0U) {
-            chapter_bytes = malloc(chapter_bytes_length);
-            chapter_entries = calloc(chapter_count, sizeof(*chapter_entries));
+            chapter_bytes = xtc_malloc_prefer_psram(chapter_bytes_length);
+            chapter_entries = xtc_calloc_prefer_psram(chapter_count, sizeof(*chapter_entries));
             if (chapter_bytes == NULL || chapter_entries == NULL) {
                 ESP_LOGW(TAG, "xtc chapter alloc failed: path=%s count=%u", book->path, (unsigned)chapter_count);
                 goto cleanup;
@@ -371,8 +410,8 @@ bool ink_xtc_book_open(ink_xtc_book_t *book, const char *path)
     if (index_bytes == 0U || index_bytes > SIZE_MAX) {
         goto cleanup;
     }
-    index_buffer = malloc((size_t)index_bytes);
-    entries = calloc(book->header.page_count, sizeof(*entries));
+    index_buffer = xtc_malloc_prefer_psram((size_t)index_bytes);
+    entries = xtc_calloc_prefer_psram(book->header.page_count, sizeof(*entries));
     if (index_buffer == NULL || entries == NULL) {
         ESP_LOGW(TAG, "xtc alloc failed: path=%s index_bytes=%u page_count=%u", path, (unsigned)index_bytes, (unsigned)book->header.page_count);
         goto cleanup;
@@ -614,6 +653,7 @@ bool ink_xtc_book_self_test(void)
         {.name = "C1", .start_page = 0U, .end_page = 1U},
         {.name = "C2", .start_page = 2U, .end_page = 2U},
     };
+    uint8_t *psram_probe = NULL;
     ink_xtc_book_t book;
     ink_xtc_file_header_t header;
     ink_xtc_page_entry_t *entries = NULL;
@@ -628,11 +668,21 @@ bool ink_xtc_book_self_test(void)
     if (book.opened || book.page_entry_count != 0U) {
         return false;
     }
+    psram_probe = xtc_malloc_prefer_psram(4096U);
+    if (psram_probe == NULL) {
+        return false;
+    }
+    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) > 0U && !esp_ptr_external_ram(psram_probe)) {
+        free(psram_probe);
+        return false;
+    }
+    free(psram_probe);
+    psram_probe = NULL;
     if (!ink_xtc_parse_header_bytes(kHeaderBytes, sizeof(kHeaderBytes), &header)) {
         return false;
     }
 
-    entries = calloc(header.page_count, sizeof(*entries));
+    entries = xtc_calloc_prefer_psram(header.page_count, sizeof(*entries));
     if (entries == NULL) {
         return false;
     }
@@ -650,7 +700,7 @@ bool ink_xtc_book_self_test(void)
     }
     entries = NULL;
 
-    book.chapter_entries = calloc(2U, sizeof(*book.chapter_entries));
+    book.chapter_entries = xtc_calloc_prefer_psram(2U, sizeof(*book.chapter_entries));
     if (book.chapter_entries == NULL) {
         goto cleanup;
     }
@@ -669,7 +719,7 @@ bool ink_xtc_book_self_test(void)
         goto cleanup;
     }
 
-    entries_reattach = calloc(header.page_count, sizeof(*entries_reattach));
+    entries_reattach = xtc_calloc_prefer_psram(header.page_count, sizeof(*entries_reattach));
     if (entries_reattach == NULL) {
         goto cleanup;
     }
@@ -719,7 +769,7 @@ bool ink_xtc_book_self_test(void)
         || book.page_entries[2].data_offset != 96436U) {
         goto cleanup;
     }
-    entries_alias = calloc(book.page_entry_count, sizeof(*entries_alias));
+    entries_alias = xtc_calloc_prefer_psram(book.page_entry_count, sizeof(*entries_alias));
     if (entries_alias == NULL) {
         goto cleanup;
     }

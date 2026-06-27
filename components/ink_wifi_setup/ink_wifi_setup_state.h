@@ -33,3 +33,4 @@ void ink_wifi_setup_cancel_popup(wifi_setup_state_t *state);
 void ink_wifi_setup_begin_connecting(wifi_setup_state_t *state);
 void ink_wifi_setup_finish_connecting(wifi_setup_state_t *state, esp_err_t result);
 void ink_wifi_setup_confirm_result(wifi_setup_state_t *state);
+bool ink_wifi_setup_state_self_test(void);

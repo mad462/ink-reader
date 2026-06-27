@@ -2,9 +2,6 @@ idf_component_register(
     SRCS
         "app_main.c"
         "tilt_grid_input.c"
-        "../../../main/wifi_setup/ink_wifi_setup_state.c"
-        "../../../main/wifi_setup/ink_wifi_setup_input.c"
-        "../../../main/wifi_setup/ink_wifi_setup_render.c"
     INCLUDE_DIRS
         "."
     REQUIRES
@@ -16,5 +13,6 @@ idf_component_register(
         fatfs
         ink_hw
         ink_net
+        ink_wifi_setup
         sdmmc
 )

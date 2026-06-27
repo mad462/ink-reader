@@ -30,6 +30,7 @@ enum {
     INK_UI_TASK_STACK_BYTES = 6144,
     INK_EPD_TASK_STACK_BYTES = 5120,
     INK_FAST_BROWSE_ENTER_MS = 220,
+    INK_READER_CONFIRM_LONG_PRESS_MS = 450,
 };
 
 typedef enum {
@@ -99,6 +100,7 @@ typedef struct {
 
 typedef struct {
     bool active;
+    bool overlay_mode;
     bool dirty;
     bool commit_pending;
     bool cancel_pending;
@@ -124,9 +126,16 @@ typedef struct {
     ink_library_state_t library;
     ink_reader_menu_state_t reader_menu;
     bool reader_fast_full_commit_pending;
+    bool reader_hold_navigation_active;
+    bool reader_opening;
     bool reader_nav_pending;
     ink_fast_browse_dir_t reader_nav_pending_dir;
     uint32_t reader_nav_pending_start_ms;
+    bool reader_confirm_pending;
+    uint32_t reader_confirm_pending_start_ms;
+    char reader_loading_title[32];
+    char reader_loading_line[64];
+    char reader_loading_hint[32];
     ink_tuning_lab_state_t lab;
 } ink_ui_model_t;
 

@@ -1,5 +1,6 @@
 #include "ink_cpfont.h"
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,6 +17,9 @@ enum {
 static const char *TAG = "ink_cpfont";
 static const char kCpfontMagic[8] = { 'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0' };
 static const uint16_t kCpfontVersion = 4;
+static uint32_t s_last_missing_glyph_cp;
+static uint32_t s_last_missing_glyph_hash;
+static uint32_t s_last_missing_glyph_count;
 
 typedef struct {
     bool valid;
@@ -36,6 +40,64 @@ static void draw_glyph_1bit_scaled(
     const ink_cpfont_glyph_t *glyph,
     const uint8_t *bitmap,
     uint8_t scale_divisor);
+static bool missing_glyph_log_state_self_test(void);
+
+static void *cpfont_malloc_prefer_psram(size_t size)
+{
+    void *ptr = NULL;
+
+    if (size == 0U) {
+        return NULL;
+    }
+    ptr = heap_caps_malloc_prefer(
+        size,
+        2,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    if (ptr == NULL) {
+        ptr = malloc(size);
+    }
+    return ptr;
+}
+
+static void *cpfont_calloc_prefer_psram(size_t count, size_t size)
+{
+    void *ptr = NULL;
+
+    if (count == 0U || size == 0U) {
+        return NULL;
+    }
+    ptr = heap_caps_calloc_prefer(
+        count,
+        size,
+        2,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    if (ptr == NULL) {
+        ptr = calloc(count, size);
+    }
+    return ptr;
+}
+
+static void *cpfont_realloc_prefer_psram(void *ptr, size_t size)
+{
+    void *reallocated = NULL;
+
+    if (size == 0U) {
+        free(ptr);
+        return NULL;
+    }
+    reallocated = heap_caps_realloc_prefer(
+        ptr,
+        size,
+        2,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    if (reallocated == NULL) {
+        reallocated = realloc(ptr, size);
+    }
+    return reallocated;
+}
 
 static uint16_t read_u16(const uint8_t *p)
 {
@@ -84,10 +146,50 @@ static uint32_t utf8_next_codepoint(const char **text)
     return cp;
 }
 
+static uint32_t text_prefix_hash(const char *text)
+{
+    const unsigned char *p = (const unsigned char *)text;
+    uint32_t hash = 2166136261U;
+    size_t count = 0U;
+
+    if (p == NULL) {
+        return 0U;
+    }
+
+    while (*p != 0U && count < 32U) {
+        hash ^= (uint32_t)(*p++);
+        hash *= 16777619U;
+        ++count;
+    }
+
+    return hash;
+}
+
+static void log_missing_glyph_once(uint32_t cp, const char *text)
+{
+    const uint32_t text_hash = text_prefix_hash(text);
+
+    if (s_last_missing_glyph_cp == cp && s_last_missing_glyph_hash == text_hash) {
+        ++s_last_missing_glyph_count;
+        return;
+    }
+
+    s_last_missing_glyph_cp = cp;
+    s_last_missing_glyph_hash = text_hash;
+    s_last_missing_glyph_count = 1U;
+    ESP_LOGW(TAG, "glyph missing cp=U+%04X text_hash=0x%08" PRIX32, (unsigned)cp, text_hash);
+}
+
 static inline void set_pixel_unchecked(uint8_t *buffer, int x, int y)
 {
     const size_t index = (size_t)y * (EPD_GDEY0426T82_WIDTH / 8) + (size_t)(x / 8);
     buffer[index] &= (uint8_t)~(uint8_t)(0x80U >> (x % 8));
+}
+
+static inline void clear_pixel_unchecked(uint8_t *buffer, int x, int y)
+{
+    const size_t index = (size_t)y * (EPD_GDEY0426T82_WIDTH / 8) + (size_t)(x / 8);
+    buffer[index] |= (uint8_t)(0x80U >> (x % 8));
 }
 
 static bool interval_contains(const ink_cpfont_interval_t *intervals, uint32_t count, uint32_t cp, uint32_t *glyph_index)
@@ -263,7 +365,7 @@ static bool load_glyph_cached(
         slot->bitmap_is_1bit = true;
     } else {
         const uint16_t bitmap_length = glyph_1bit_size_bytes(&loaded_glyph);
-        uint8_t *bitmap_copy = realloc(slot->bitmap, bitmap_length);
+        uint8_t *bitmap_copy = cpfont_realloc_prefer_psram(slot->bitmap, bitmap_length);
         if (bitmap_copy == NULL) {
             ESP_LOGW(TAG, "glyph cache realloc failed glyph=%u bytes=%u", (unsigned)glyph_index, (unsigned)bitmap_length);
             *glyph = loaded_glyph;
@@ -350,6 +452,87 @@ static void draw_glyph_1bit(uint8_t *buffer, int x, int baseline_y, const ink_cp
         const int py = base_y + gy;
         if (px >= 0 && px < EPD_GDEY0426T82_WIDTH && py >= 0 && py < EPD_GDEY0426T82_HEIGHT) {
             set_pixel_unchecked(buffer, px, py);
+        }
+    }
+}
+
+static void draw_glyph_1bit_inverted(uint8_t *buffer, int x, int baseline_y, const ink_cpfont_glyph_t *glyph, const uint8_t *bitmap)
+{
+    const int base_x = x + glyph->left;
+    const int base_y = baseline_y - glyph->top;
+    const uint32_t pixel_count = (uint32_t)glyph->width * (uint32_t)glyph->height;
+
+    for (uint32_t pixel = 0; pixel < pixel_count; ++pixel) {
+        if ((bitmap[pixel >> 3] & (uint8_t)(0x80U >> (pixel & 7U))) == 0U) {
+            continue;
+        }
+
+        const int gx = (int)(pixel % glyph->width);
+        const int gy = (int)(pixel / glyph->width);
+        const int px = base_x + gx;
+        const int py = base_y + gy;
+        if (px >= 0 && px < EPD_GDEY0426T82_WIDTH && py >= 0 && py < EPD_GDEY0426T82_HEIGHT) {
+            clear_pixel_unchecked(buffer, px, py);
+        }
+    }
+}
+
+static void draw_glyph_1bit_scaled_inverted(
+    uint8_t *buffer,
+    int x,
+    int baseline_y,
+    const ink_cpfont_glyph_t *glyph,
+    const uint8_t *bitmap,
+    uint8_t scale_divisor)
+{
+    if (scale_divisor <= 1U) {
+        draw_glyph_1bit_inverted(buffer, x, baseline_y, glyph, bitmap);
+        return;
+    }
+
+    const uint32_t pixel_count = (uint32_t)glyph->width * (uint32_t)glyph->height;
+    const int scaled_left = glyph->left / (int16_t)scale_divisor;
+    const int scaled_top = glyph->top / (int16_t)scale_divisor;
+    const int base_x = x + scaled_left;
+    const int base_y = baseline_y - scaled_top;
+
+    for (uint32_t pixel = 0; pixel < pixel_count; ++pixel) {
+        if ((bitmap[pixel >> 3] & (uint8_t)(0x80U >> (pixel & 7U))) == 0U) {
+            continue;
+        }
+
+        const int gx = (int)(pixel % glyph->width);
+        const int gy = (int)(pixel / glyph->width);
+        if ((gx % scale_divisor) != 0 || (gy % scale_divisor) != 0) {
+            continue;
+        }
+
+        const int px = base_x + (gx / scale_divisor);
+        const int py = base_y + (gy / scale_divisor);
+        if (px >= 0 && px < EPD_GDEY0426T82_WIDTH && py >= 0 && py < EPD_GDEY0426T82_HEIGHT) {
+            clear_pixel_unchecked(buffer, px, py);
+        }
+    }
+}
+
+static void draw_glyph_2bit_inverted(uint8_t *buffer, int x, int baseline_y, const ink_cpfont_glyph_t *glyph, const uint8_t *bitmap)
+{
+    int pixel_pos = 0;
+    const int base_x = x + glyph->left;
+    const int base_y = baseline_y - glyph->top;
+
+    for (int gy = 0; gy < glyph->height; ++gy) {
+        for (int gx = 0; gx < glyph->width; ++gx, ++pixel_pos) {
+            const uint8_t byte = bitmap[pixel_pos >> 2];
+            const uint8_t shift = (uint8_t)((3 - (pixel_pos & 3)) * 2);
+            const uint8_t raw = (byte >> shift) & 0x3U;
+            if (raw > 0) {
+                const int px = base_x + gx;
+                const int py = base_y + gy;
+                if (px >= 0 && px < EPD_GDEY0426T82_WIDTH && py >= 0 && py < EPD_GDEY0426T82_HEIGHT) {
+                    clear_pixel_unchecked(buffer, px, py);
+                }
+            }
         }
     }
 }
@@ -556,14 +739,14 @@ esp_err_t ink_cpfont_load(ink_cpfont_t *font, const char *path)
         kern_matrix_file_offset + (uint32_t)kern_left_class_count * (uint32_t)kern_right_class_count;
     font->bitmap_file_offset = ligature_file_offset + (uint32_t)ligature_count * 8U;
     font->bitmap_scratch_size = INK_CPFONT_MAX_BITMAP_SCRATCH;
-    font->bitmap_scratch = malloc(font->bitmap_scratch_size);
+    font->bitmap_scratch = cpfont_malloc_prefer_psram(font->bitmap_scratch_size);
     if (font->bitmap_scratch == NULL) {
         ESP_LOGW(TAG, "font bitmap scratch allocation failed: %s bytes=%u", path, (unsigned)font->bitmap_scratch_size);
         ink_cpfont_close(font);
         return ESP_ERR_NO_MEM;
     }
     font->glyph_cache_capacity = INK_CPFONT_GLYPH_CACHE_CAPACITY;
-    font->glyph_cache_entries = calloc(font->glyph_cache_capacity, sizeof(ink_cpfont_cache_entry_t));
+    font->glyph_cache_entries = cpfont_calloc_prefer_psram(font->glyph_cache_capacity, sizeof(ink_cpfont_cache_entry_t));
     if (font->glyph_cache_entries == NULL) {
         ESP_LOGW(
             TAG,
@@ -648,7 +831,7 @@ esp_err_t ink_cpfont_draw_text_bw(
         const uint8_t *bitmap = NULL;
         bool bitmap_is_1bit = false;
         if (!load_glyph_cached(font, glyph_index, &glyph, &bitmap, &bitmap_is_1bit)) {
-            ESP_LOGW(TAG, "glyph read failed cp=U+%04X", (unsigned)cp);
+            log_missing_glyph_once(cp, text);
             measured_width += font->advance_y / 2;
             cursor_x += font->advance_y / 2;
             continue;
@@ -722,7 +905,7 @@ esp_err_t ink_cpfont_draw_text_bw_scaled(
         bool bitmap_is_1bit = false;
         if (!load_glyph_cached(font, glyph_index, &glyph, &bitmap, &bitmap_is_1bit)) {
             const int fallback_advance = (font->advance_y / (int)scale_divisor) / 2;
-            ESP_LOGW(TAG, "glyph read failed cp=U+%04X", (unsigned)cp);
+            log_missing_glyph_once(cp, text);
             measured_width += fallback_advance;
             cursor_x += fallback_advance;
             continue;
@@ -733,6 +916,147 @@ esp_err_t ink_cpfont_draw_text_bw_scaled(
                 ESP_LOGW(TAG, "scaled draw requires 1bit glyph cp=U+%04X", (unsigned)cp);
             }
             draw_glyph_1bit_scaled(buffer, cursor_x, baseline_y, &glyph, bitmap, scale_divisor);
+        }
+        cursor_x += (int)(((glyph.advance_x + 8U) >> 4) / scale_divisor);
+        measured_width = cursor_x - x;
+
+        if (before == cursor) {
+            break;
+        }
+    }
+
+    if (out_width_px != NULL) {
+        *out_width_px = measured_width;
+    }
+    return ESP_OK;
+}
+
+esp_err_t ink_cpfont_draw_text_bw_inverted(
+    ink_cpfont_t *font,
+    uint8_t *buffer,
+    int x,
+    int top_y,
+    const char *text,
+    int *out_width_px)
+{
+    int cursor_x = x;
+    int measured_width = 0;
+
+    if (out_width_px != NULL) {
+        *out_width_px = 0;
+    }
+    if (font == NULL || text == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!ink_cpfont_is_loaded(font)) {
+        return ESP_FAIL;
+    }
+
+    const int baseline_y = top_y + font->ascender;
+    const char *cursor = text;
+    while (*cursor != '\0') {
+        const char *before = cursor;
+        const uint32_t cp = utf8_next_codepoint(&cursor);
+        if (cp == 0 || cp == '\r' || cp == '\n') {
+            break;
+        }
+
+        uint32_t glyph_index = 0;
+        if (!interval_contains(font->intervals, font->interval_count, cp, &glyph_index)) {
+            measured_width += font->advance_y / 2;
+            cursor_x += font->advance_y / 2;
+            continue;
+        }
+
+        ink_cpfont_glyph_t glyph;
+        const uint8_t *bitmap = NULL;
+        bool bitmap_is_1bit = false;
+        if (!load_glyph_cached(font, glyph_index, &glyph, &bitmap, &bitmap_is_1bit)) {
+            log_missing_glyph_once(cp, text);
+            measured_width += font->advance_y / 2;
+            cursor_x += font->advance_y / 2;
+            continue;
+        }
+
+        if (bitmap != NULL && buffer != NULL) {
+            if (bitmap_is_1bit) {
+                draw_glyph_1bit_inverted(buffer, cursor_x, baseline_y, &glyph, bitmap);
+            } else {
+                draw_glyph_2bit_inverted(buffer, cursor_x, baseline_y, &glyph, bitmap);
+            }
+        }
+        cursor_x += (int)((glyph.advance_x + 8U) >> 4);
+        measured_width = cursor_x - x;
+
+        if (before == cursor) {
+            break;
+        }
+    }
+
+    if (out_width_px != NULL) {
+        *out_width_px = measured_width;
+    }
+    return ESP_OK;
+}
+
+esp_err_t ink_cpfont_draw_text_bw_scaled_inverted(
+    ink_cpfont_t *font,
+    uint8_t *buffer,
+    int x,
+    int top_y,
+    const char *text,
+    uint8_t scale_divisor,
+    int *out_width_px)
+{
+    int cursor_x = x;
+    int measured_width = 0;
+
+    if (out_width_px != NULL) {
+        *out_width_px = 0;
+    }
+    if (font == NULL || text == NULL || scale_divisor == 0U) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!ink_cpfont_is_loaded(font)) {
+        return ESP_FAIL;
+    }
+    if (scale_divisor == 1U) {
+        return ink_cpfont_draw_text_bw_inverted(font, buffer, x, top_y, text, out_width_px);
+    }
+
+    const int baseline_y = top_y + (font->ascender / (int16_t)scale_divisor);
+    const char *cursor = text;
+    while (*cursor != '\0') {
+        const char *before = cursor;
+        const uint32_t cp = utf8_next_codepoint(&cursor);
+        if (cp == 0U || cp == '\r' || cp == '\n') {
+            break;
+        }
+
+        uint32_t glyph_index = 0;
+        if (!interval_contains(font->intervals, font->interval_count, cp, &glyph_index)) {
+            const int fallback_advance = (font->advance_y / (int)scale_divisor) / 2;
+            measured_width += fallback_advance;
+            cursor_x += fallback_advance;
+            continue;
+        }
+
+        ink_cpfont_glyph_t glyph;
+        const uint8_t *bitmap = NULL;
+        bool bitmap_is_1bit = false;
+        if (!load_glyph_cached(font, glyph_index, &glyph, &bitmap, &bitmap_is_1bit)) {
+            const int fallback_advance = (font->advance_y / (int)scale_divisor) / 2;
+            log_missing_glyph_once(cp, text);
+            measured_width += fallback_advance;
+            cursor_x += fallback_advance;
+            continue;
+        }
+
+        if (bitmap != NULL && buffer != NULL) {
+            if (!bitmap_is_1bit) {
+                ESP_LOGW(TAG, "scaled draw requires 1bit glyph cp=U+%04X", (unsigned)cp);
+            }
+            draw_glyph_1bit_scaled_inverted(buffer, cursor_x, baseline_y, &glyph, bitmap, scale_divisor);
         }
         cursor_x += (int)(((glyph.advance_x + 8U) >> 4) / scale_divisor);
         measured_width = cursor_x - x;
@@ -773,6 +1097,9 @@ bool ink_cpfont_self_test(void)
     int pixel_count = 0;
 
     ink_cpfont_init(&font);
+    if (!missing_glyph_log_state_self_test()) {
+        return false;
+    }
     ok = !ink_cpfont_is_loaded(&font);
     if (!ok) {
         goto cleanup;
@@ -874,4 +1201,40 @@ bool ink_cpfont_self_test(void)
 cleanup:
     ink_cpfont_close(&font);
     return ok;
+}
+
+static bool missing_glyph_log_state_self_test(void)
+{
+    const uint32_t hash_abc = text_prefix_hash("abc");
+    const uint32_t hash_abd = text_prefix_hash("abd");
+
+    if (text_prefix_hash(NULL) != 0U || hash_abc == 0U || hash_abc == hash_abd) {
+        return false;
+    }
+
+    s_last_missing_glyph_cp = 0U;
+    s_last_missing_glyph_hash = 0U;
+    s_last_missing_glyph_count = 0U;
+
+    log_missing_glyph_once('A', "abc");
+    if (s_last_missing_glyph_cp != 'A' || s_last_missing_glyph_hash != hash_abc || s_last_missing_glyph_count != 1U) {
+        return false;
+    }
+
+    log_missing_glyph_once('A', "abc");
+    if (s_last_missing_glyph_count != 2U) {
+        return false;
+    }
+
+    log_missing_glyph_once('A', "abd");
+    if (s_last_missing_glyph_hash != hash_abd || s_last_missing_glyph_count != 1U) {
+        return false;
+    }
+
+    log_missing_glyph_once('B', "abd");
+    if (s_last_missing_glyph_cp != 'B' || s_last_missing_glyph_count != 1U) {
+        return false;
+    }
+
+    return true;
 }

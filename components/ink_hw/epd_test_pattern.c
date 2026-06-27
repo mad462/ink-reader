@@ -78,6 +78,7 @@ enum {
     FOOTER_LEFT_X = 8,
     FOOTER_RIGHT_MARGIN = 8,
     FOOTER_BITMAP_SCALE = 2,
+    FOOTER_RIGHT_RESERVED_W = 156,
     FOOTER_PROBE_X = 436,
     FOOTER_PROBE_Y = 782,
     FOOTER_PROBE_W = 36,
@@ -101,6 +102,8 @@ enum {
 static const int s_reader_line_y[READER_SUBLINE_COUNT] = {
     110, 178, 246, 314, 382, 450, 518, 586
 };
+
+static size_t epd_utf8_codepoint_length(unsigned char lead);
 
 static uint32_t epd_hash_text(const char *text)
 {
@@ -247,6 +250,50 @@ static void epd_draw_text_maybe_font_scaled(
     epd_draw_text(buffer, x, y, text, fallback_scale);
 }
 
+static void epd_draw_text_maybe_font_inverted(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int scale)
+{
+    if (ink_cpfont_is_loaded(font)) {
+        int width_px = 0;
+        if (ink_cpfont_draw_text_bw_inverted((ink_cpfont_t *)font, buffer, x, y, text, &width_px) == ESP_OK) {
+            return;
+        }
+    }
+
+    epd_draw_text(buffer, x, y, text, scale);
+}
+
+static void epd_draw_text_maybe_font_scaled_inverted(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor)
+{
+    if (ink_cpfont_is_loaded(font)) {
+        int width_px = 0;
+        if (ink_cpfont_draw_text_bw_scaled_inverted(
+                (ink_cpfont_t *)font,
+                buffer,
+                x,
+                y,
+                text,
+                font_scale_divisor,
+                &width_px) == ESP_OK) {
+            return;
+        }
+    }
+
+    epd_draw_text(buffer, x, y, text, fallback_scale);
+}
+
 static int epd_measure_text_width_ascii(const char *text, int scale)
 {
     if (text == NULL || scale <= 0) {
@@ -284,6 +331,84 @@ static int epd_measure_text_width_maybe_font_scaled(
     return epd_measure_text_width_ascii(text, fallback_scale);
 }
 
+static size_t epd_utf8_copy_prefix(char *dst, size_t dst_size, const char *src, size_t byte_count)
+{
+    size_t copied = 0U;
+
+    if (dst == NULL || dst_size == 0U) {
+        return 0U;
+    }
+    dst[0] = '\0';
+    if (src == NULL || byte_count == 0U) {
+        return 0U;
+    }
+
+    while (copied < byte_count && copied + 1U < dst_size && src[copied] != '\0') {
+        dst[copied] = src[copied];
+        ++copied;
+    }
+    dst[copied] = '\0';
+    return copied;
+}
+
+static void epd_copy_text_with_ellipsis(
+    char *dst,
+    size_t dst_size,
+    const ink_cpfont_t *font,
+    const char *src,
+    int max_width_px,
+    int fallback_scale,
+    uint8_t font_scale_divisor)
+{
+    static const char *kEllipsis = "...";
+    const int ellipsis_width = epd_measure_text_width_maybe_font_scaled(
+        font,
+        kEllipsis,
+        fallback_scale,
+        font_scale_divisor);
+    size_t last_good_bytes = 0U;
+    const char *cursor = src;
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+    dst[0] = '\0';
+    if (src == NULL || src[0] == '\0') {
+        return;
+    }
+
+    if (epd_measure_text_width_maybe_font_scaled(font, src, fallback_scale, font_scale_divisor) <= max_width_px) {
+        snprintf(dst, dst_size, "%s", src);
+        return;
+    }
+
+    while (*cursor != '\0') {
+        const char *before = cursor;
+        char candidate[96];
+        const size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
+        size_t actual_len = 0U;
+        while (actual_len < cp_len && cursor[actual_len] != '\0') {
+            ++actual_len;
+        }
+        cursor += actual_len;
+        if (before == cursor) {
+            break;
+        }
+
+        last_good_bytes = (size_t)(cursor - src);
+        epd_utf8_copy_prefix(candidate, sizeof(candidate), src, last_good_bytes);
+        if (epd_measure_text_width_maybe_font_scaled(font, candidate, fallback_scale, font_scale_divisor) + ellipsis_width > max_width_px) {
+            last_good_bytes = (size_t)(before - src);
+            break;
+        }
+    }
+
+    epd_utf8_copy_prefix(dst, dst_size, src, last_good_bytes);
+    if (dst[0] != '\0' && strlen(dst) + 3U < dst_size) {
+        strcat(dst, kEllipsis);
+    }
+}
+
 static void epd_draw_text_right_aligned_maybe_font_scaled(
     uint8_t *buffer,
     const ink_cpfont_t *font,
@@ -312,6 +437,76 @@ static void epd_draw_text_right_aligned_maybe_font_scaled(
         text,
         fallback_scale,
         font_scale_divisor);
+}
+
+static void epd_draw_text_clipped_maybe_font_scaled(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int max_width_px,
+    int fallback_scale,
+    uint8_t font_scale_divisor,
+    bool inverted)
+{
+    char clipped[96];
+
+    epd_copy_text_with_ellipsis(
+        clipped,
+        sizeof(clipped),
+        font,
+        text,
+        max_width_px,
+        fallback_scale,
+        font_scale_divisor);
+    if (inverted) {
+        epd_draw_text_maybe_font_scaled_inverted(
+            buffer,
+            font,
+            x,
+            y,
+            clipped,
+            fallback_scale,
+            font_scale_divisor);
+    } else {
+        epd_draw_text_maybe_font_scaled(
+            buffer,
+            font,
+            x,
+            y,
+            clipped,
+            fallback_scale,
+            font_scale_divisor);
+    }
+}
+
+static void epd_draw_text_left_clipped_maybe_font_scaled(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor,
+    int right_reserved_width_px)
+{
+    int max_width_px = EPD_GDEY0426T82_WIDTH - FOOTER_RIGHT_MARGIN - right_reserved_width_px - x;
+
+    if (max_width_px < 24) {
+        max_width_px = 24;
+    }
+
+    epd_draw_text_clipped_maybe_font_scaled(
+        buffer,
+        font,
+        x,
+        y,
+        text,
+        max_width_px,
+        fallback_scale,
+        font_scale_divisor,
+        false);
 }
 
 static uint8_t epd_footer_font_scale_divisor(const ink_cpfont_t *font)
@@ -413,6 +608,33 @@ static void epd_draw_rect_outline(uint8_t *buffer, int x, int y, int w, int h, i
     epd_fill_rect(buffer, x, y + h - thickness, w, thickness, true);
     epd_fill_rect(buffer, x, y, thickness, h, true);
     epd_fill_rect(buffer, x + w - thickness, y, thickness, h, true);
+}
+
+static void epd_draw_heart_icon(uint8_t *buffer, int x, int y, bool inverted)
+{
+    static const uint16_t kRows[] = {
+        0b0011110011110000,
+        0b0111111011111000,
+        0b1111111111111100,
+        0b1111111111111100,
+        0b1111111111111100,
+        0b0111111111111000,
+        0b0011111111110000,
+        0b0001111111100000,
+        0b0000111111000000,
+        0b0000011110000000,
+        0b0000001100000000,
+        0b0000000000000000,
+    };
+
+    for (int row = 0; row < 12; ++row) {
+        for (int col = 0; col < 16; ++col) {
+            if ((kRows[row] & (uint16_t)(0x8000U >> col)) == 0U) {
+                continue;
+            }
+            epd_set_pixel(buffer, x + col, y + row, !inverted);
+        }
+    }
 }
 
 static void epd_gray_mark_region(uint8_t *buffer, int x, int y, int w, int h)
@@ -547,10 +769,53 @@ void epd_test_pattern_fill_gray_demo_planes(
 
     const int light_top = GRAY_BAR_Y0 + (GRAY_BAR_HEIGHT + GRAY_BAR_GAP) + 5;
     const int dark_top = GRAY_BAR_Y0 + 2 * (GRAY_BAR_HEIGHT + GRAY_BAR_GAP) + 5;
+    const int black_top = GRAY_BAR_Y0 + 3 * (GRAY_BAR_HEIGHT + GRAY_BAR_GAP) + 5;
 
     epd_gray_mark_region(msb_buffer, GRAY_BAR_X + 5, light_top, GRAY_BAR_WIDTH - 10, GRAY_BAR_HEIGHT - 10);
     epd_gray_mark_region(lsb_buffer, GRAY_BAR_X + 5, dark_top, GRAY_BAR_WIDTH - 10, GRAY_BAR_HEIGHT - 10);
-    epd_gray_mark_region(msb_buffer, GRAY_BAR_X + 5, dark_top, GRAY_BAR_WIDTH - 10, GRAY_BAR_HEIGHT - 10);
+    epd_gray_mark_region(lsb_buffer, GRAY_BAR_X + 5, black_top, GRAY_BAR_WIDTH - 10, GRAY_BAR_HEIGHT - 10);
+    epd_gray_mark_region(msb_buffer, GRAY_BAR_X + 5, black_top, GRAY_BAR_WIDTH - 10, GRAY_BAR_HEIGHT - 10);
+}
+
+void epd_test_pattern_fill_gray_calibration_page(uint8_t *buffer, size_t length)
+{
+    const int panel_x = 20;
+    const int panel_y = 72;
+    const int panel_w = EPD_GDEY0426T82_WIDTH - 40;
+    const int panel_h = EPD_GDEY0426T82_HEIGHT - 150;
+    const int cols = 2;
+    const int rows = 4;
+    const int gap_x = 18;
+    const int gap_y = 14;
+    const int cell_w = (panel_w - 40 - gap_x) / cols;
+    const int cell_h = (panel_h - 60 - gap_y * (rows - 1)) / rows;
+    static const char *const labels[8] = {
+        "RAW 00", "INV 11",
+        "RAW 01", "INV 10",
+        "RAW 10", "INV 01",
+        "RAW 11", "INV 00",
+    };
+
+    if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
+        return;
+    }
+
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+    epd_draw_rect_outline(buffer, 0, 0, EPD_GDEY0426T82_WIDTH, EPD_GDEY0426T82_HEIGHT, 8);
+    epd_draw_text(buffer, 26, 24, "GRAY CAL", 3);
+    epd_draw_text(buffer, 28, 58, "SSD1677 RAW / INVERT", 2);
+    epd_draw_rect_outline(buffer, panel_x, panel_y, panel_w, panel_h, 3);
+
+    for (int index = 0; index < 8; ++index) {
+        const int row = index / cols;
+        const int col = index % cols;
+        const int x = panel_x + 18 + col * (cell_w + gap_x);
+        const int y = panel_y + 18 + row * (cell_h + gap_y);
+
+        epd_draw_rect_outline(buffer, x, y, cell_w, cell_h, 2);
+        epd_draw_text(buffer, x + 10, y + 10, labels[index], 2);
+        epd_draw_text(buffer, x + 10, y + cell_h - 30, "OBSERVE SHADE", 2);
+    }
 }
 
 bool epd_test_pattern_gray_demo_self_test(void)
@@ -596,10 +861,10 @@ bool epd_test_pattern_gray_demo_self_test(void)
     if (!epd_pixel_is_black(lsb, bar_center_x, dark_y)) {
         goto cleanup;
     }
-    if (!epd_pixel_is_black(msb, bar_center_x, dark_y)) {
+    if (epd_pixel_is_black(msb, bar_center_x, dark_y)) {
         goto cleanup;
     }
-    if (epd_pixel_is_black(lsb, bar_center_x, black_y) || epd_pixel_is_black(msb, bar_center_x, black_y)) {
+    if (!epd_pixel_is_black(lsb, bar_center_x, black_y) || !epd_pixel_is_black(msb, bar_center_x, black_y)) {
         goto cleanup;
     }
 
@@ -736,6 +1001,7 @@ bool epd_test_pattern_footer_overlay_self_test(void)
     uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
     bool left_ok = false;
     bool right_ok = false;
+    bool middle_gap_ok = true;
 
     if (buffer == NULL) {
         return false;
@@ -771,9 +1037,22 @@ bool epd_test_pattern_footer_overlay_self_test(void)
             break;
         }
     }
+    for (int x = EPD_GDEY0426T82_WIDTH - FOOTER_RIGHT_RESERVED_W;
+         x < EPD_GDEY0426T82_WIDTH - FOOTER_RIGHT_RESERVED_W + 24;
+         ++x) {
+        for (int y = FOOTER_TEXT_Y; y < FOOTER_TEXT_Y + 14; ++y) {
+            if (epd_pixel_is_black(buffer, x, y)) {
+                middle_gap_ok = false;
+                break;
+            }
+        }
+        if (!middle_gap_ok) {
+            break;
+        }
+    }
 
     free(buffer);
-    return left_ok && right_ok;
+    return left_ok && right_ok && middle_gap_ok;
 }
 
 void epd_test_pattern_fill_text_page(
@@ -866,14 +1145,15 @@ void epd_test_pattern_draw_footer_overlay(
 
     epd_fill_rect(buffer, 0, FOOTER_BAND_Y, EPD_GDEY0426T82_WIDTH, FOOTER_BAND_H, false);
     epd_fill_rect(buffer, 0, FOOTER_BAND_Y - 1, EPD_GDEY0426T82_WIDTH, 1, true);
-    epd_draw_text_maybe_font_scaled(
+    epd_draw_text_left_clipped_maybe_font_scaled(
         buffer,
         font,
         FOOTER_LEFT_X,
         FOOTER_TEXT_Y,
         left_text != NULL ? left_text : "",
         FOOTER_BITMAP_SCALE,
-        epd_footer_font_scale_divisor(font));
+        epd_footer_font_scale_divisor(font),
+        FOOTER_RIGHT_RESERVED_W);
     epd_draw_text_right_aligned_maybe_font_scaled(
         buffer,
         font,
@@ -972,6 +1252,230 @@ void epd_test_pattern_draw_footer_probe(
         const int slot_x = FOOTER_PROBE_X + 3 + slot * 8;
         if (((hash >> slot) & 0x1U) != 0U) {
             epd_fill_rect(buffer, slot_x, FOOTER_PROBE_Y + 3, 5, 8, true);
+        }
+    }
+}
+
+void epd_test_pattern_draw_reader_menu_overlay(
+    uint8_t *buffer,
+    size_t length,
+    const ink_cpfont_t *menu_font,
+    const ink_cpfont_t *footer_font,
+    const epd_test_pattern_reader_menu_overlay_t *overlay)
+{
+    const bool frameless_panel = overlay != NULL && overlay->frameless_panel;
+    const int panel_x = frameless_panel ? 8 : 24;
+    const int panel_y = frameless_panel ? 8 : 118;
+    const int panel_w = frameless_panel ? (EPD_GDEY0426T82_WIDTH - 16) : (EPD_GDEY0426T82_WIDTH - 48);
+    const int panel_h = frameless_panel ? (EPD_GDEY0426T82_HEIGHT - 24) : 534;
+    const int tab_y = panel_y + (frameless_panel ? 8 : 18);
+    const int tab_h = 42;
+    const int tab_gap = frameless_panel ? 8 : 10;
+    const int tab_count = overlay != NULL && overlay->tab_count > 0U ? (int)overlay->tab_count : 1;
+    const int tab_side_pad = frameless_panel ? 4 : 24;
+    const int tab_w = (panel_w - tab_side_pad * 2 - tab_gap * (tab_count - 1)) / tab_count;
+    const int tab_x0 = panel_x + tab_side_pad;
+    const int cards_y0 = frameless_panel ? (panel_y + 62) : (panel_y + 82);
+    const bool bookmark_cards_tall = overlay != NULL && overlay->bookmark_cards_tall;
+    const int card_h = overlay != NULL && overlay->compact_cards
+        ? (frameless_panel ? 44 : 34)
+        : (bookmark_cards_tall ? 58 : (frameless_panel ? 78 : 82));
+    const int card_gap = overlay != NULL && overlay->compact_cards
+        ? (frameless_panel ? 6 : 4)
+        : (bookmark_cards_tall ? 8 : (frameless_panel ? 8 : 10));
+    const int card_x = panel_x + (frameless_panel ? 4 : 24);
+    const int card_w = panel_w - (frameless_panel ? 8 : 48);
+    const int popup_w = panel_w - 92;
+    const int popup_h =
+        frameless_panel && overlay->action_popup_open && overlay->action_count <= 2U ? 164 : 208;
+    const int popup_x = panel_x + (panel_w - popup_w) / 2;
+    const int popup_y = panel_y + (panel_h - popup_h) / 2;
+    const int popup_action_h = 34;
+    const int popup_action_gap =
+        frameless_panel && overlay->action_popup_open && overlay->action_count <= 2U ? 10 : 12;
+
+    if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE || overlay == NULL) {
+        return;
+    }
+
+    if (!frameless_panel) {
+        epd_fill_rect(buffer, panel_x, panel_y, panel_w, panel_h, false);
+        epd_draw_rect_outline(buffer, panel_x, panel_y, panel_w, panel_h, 2);
+    }
+
+    for (size_t i = 0; i < overlay->tab_count && i < EPD_TEST_PATTERN_MENU_TAB_CAPACITY; ++i) {
+        const int x = tab_x0 + (int)i * (tab_w + tab_gap);
+        const epd_test_pattern_menu_tab_t *tab = &overlay->tabs[i];
+        if (tab->active) {
+            epd_fill_rect(buffer, x, tab_y, tab_w, tab_h, true);
+        } else {
+            epd_draw_rect_outline(buffer, x, tab_y, tab_w, tab_h, 2);
+        }
+        if (tab->active) {
+            epd_draw_text_maybe_font_inverted(buffer, footer_font, x + 18, tab_y + 10, tab->label, 2);
+        } else {
+            epd_draw_text_maybe_font(buffer, footer_font, x + 18, tab_y + 10, tab->label, 2);
+        }
+    }
+
+    for (size_t i = 0; i < overlay->card_count && i < EPD_TEST_PATTERN_MENU_CARD_CAPACITY; ++i) {
+        const int y = cards_y0 + (int)i * (card_h + card_gap);
+        const epd_test_pattern_menu_card_t *card = &overlay->cards[i];
+
+        if (card->selected) {
+            epd_fill_rect(buffer, card_x, y, card_w, card_h, true);
+        } else {
+            epd_draw_rect_outline(buffer, card_x, y, card_w, card_h, 1);
+        }
+
+        if (overlay->compact_cards) {
+            epd_draw_text_clipped_maybe_font_scaled(
+                buffer,
+                menu_font,
+                card_x + 12,
+                y + (frameless_panel ? 10 : 8),
+                card->title,
+                card_w - 24,
+                2,
+                ink_cpfont_is_loaded(menu_font) && menu_font->advance_y > 22U ? 2U : 1U,
+                card->selected);
+            if (card->line1[0] != '\0') {
+                if (card->selected) {
+                    epd_draw_text_clipped_maybe_font_scaled(
+                        buffer,
+                        footer_font,
+                        card_x + 12,
+                        y + (frameless_panel ? 24 : 20),
+                        card->line1,
+                        card_w - 24,
+                        2,
+                        epd_footer_font_scale_divisor(footer_font),
+                        true);
+                } else {
+                    epd_draw_text_clipped_maybe_font_scaled(
+                        buffer,
+                        footer_font,
+                        card_x + 12,
+                        y + (frameless_panel ? 24 : 20),
+                        card->line1,
+                        card_w - 24,
+                        2,
+                        epd_footer_font_scale_divisor(footer_font),
+                        false);
+                }
+            }
+            continue;
+        }
+
+        const bool library_card = frameless_panel;
+        const int favorite_icon_x = card_x + card_w - 28;
+        const int title_max_width = library_card ? (card_w - 28) : (card_w - 52);
+        const int line1_max_width = card_w - (card->trailing_favorite ? 42 : 20);
+
+        if (card->selected) {
+            epd_draw_text_clipped_maybe_font_scaled(
+                buffer,
+                menu_font,
+                card_x + 14,
+                y + 10,
+                card->title,
+                title_max_width,
+                2,
+                ink_cpfont_is_loaded(menu_font) && menu_font->advance_y > 22U ? 2U : 1U,
+                true);
+            if (!library_card) {
+                epd_draw_text_maybe_font_scaled_inverted(
+                    buffer,
+                    footer_font,
+                    card_x + 14,
+                    y + 58,
+                    card->line2,
+                    2,
+                    epd_footer_font_scale_divisor(footer_font));
+            } else {
+                epd_draw_text_clipped_maybe_font_scaled(
+                    buffer,
+                    footer_font,
+                    card_x + 14,
+                    y + 44,
+                    card->line1,
+                    line1_max_width,
+                    2,
+                    epd_footer_font_scale_divisor(footer_font),
+                    true);
+            }
+            if (card->trailing_favorite) {
+                epd_draw_heart_icon(buffer, favorite_icon_x, y + (library_card ? 42 : 34), true);
+            }
+        } else {
+            epd_draw_text_clipped_maybe_font_scaled(
+                buffer,
+                menu_font,
+                card_x + 14,
+                y + 10,
+                card->title,
+                title_max_width,
+                2,
+                ink_cpfont_is_loaded(menu_font) && menu_font->advance_y > 22U ? 2U : 1U,
+                false);
+            if (!library_card) {
+                epd_draw_text_maybe_font_scaled(
+                    buffer,
+                    footer_font,
+                    card_x + 14,
+                    y + 38,
+                    card->line1,
+                    2,
+                    epd_footer_font_scale_divisor(footer_font));
+                epd_draw_text_maybe_font_scaled(
+                    buffer,
+                    footer_font,
+                    card_x + 14,
+                    y + 58,
+                    card->line2,
+                    2,
+                    epd_footer_font_scale_divisor(footer_font));
+            } else {
+                epd_draw_text_clipped_maybe_font_scaled(
+                    buffer,
+                    footer_font,
+                    card_x + 14,
+                    y + 44,
+                    card->line1,
+                    line1_max_width,
+                    2,
+                    epd_footer_font_scale_divisor(footer_font),
+                    false);
+            }
+            if (card->trailing_favorite) {
+                epd_draw_heart_icon(buffer, favorite_icon_x, y + (library_card ? 42 : 34), false);
+            }
+        }
+    }
+
+    if (overlay->action_popup_open) {
+        epd_fill_rect(buffer, popup_x, popup_y, popup_w, popup_h, false);
+        epd_draw_rect_outline(buffer, popup_x, popup_y, popup_w, popup_h, 2);
+        epd_draw_text_clipped_maybe_font_scaled(
+            buffer,
+            menu_font,
+            popup_x + 18,
+            popup_y + 14,
+            overlay->action_popup_title,
+            popup_w - 36,
+            2,
+            ink_cpfont_is_loaded(menu_font) && menu_font->advance_y > 22U ? 2U : 1U,
+            false);
+        for (size_t i = 0; i < overlay->action_count && i < EPD_TEST_PATTERN_MENU_ACTION_CAPACITY; ++i) {
+            const int action_y = popup_y + 52 + (int)i * (popup_action_h + popup_action_gap);
+            const epd_test_pattern_menu_action_t *action = &overlay->actions[i];
+            if (action->selected) {
+                epd_fill_rect(buffer, popup_x + 18, action_y, popup_w - 36, popup_action_h, true);
+                epd_draw_text_maybe_font_inverted(buffer, footer_font, popup_x + 30, action_y + 8, action->label, 2);
+            } else {
+                epd_draw_rect_outline(buffer, popup_x + 18, action_y, popup_w - 36, popup_action_h, 1);
+                epd_draw_text_maybe_font(buffer, footer_font, popup_x + 30, action_y + 8, action->label, 2);
+            }
         }
     }
 }

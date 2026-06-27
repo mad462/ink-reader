@@ -65,3 +65,4 @@ bool ink_wifi_setup_prepare_selected_saved_request(
     const wifi_setup_state_t *wifi,
     ink_wifi_setup_request_type_t type,
     ink_wifi_setup_request_t *request);
+bool ink_wifi_setup_input_self_test(void);

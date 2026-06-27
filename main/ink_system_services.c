@@ -6,9 +6,14 @@
 
 #include "epd_gdey0426t82.h"
 #include "ink_app_boot.h"
+#include "ink_photo_catalog.h"
 #include "ink_app_priv.h"
+#include "ink_usb_msc_service.h"
+#include "ink_wifi_manager.h"
 
 static const char *TAG = "ink_services";
+
+static void reload_service_fonts(ink_system_services_t *services);
 
 void ink_system_services_reset(ink_system_services_t *services)
 {
@@ -17,6 +22,8 @@ void ink_system_services_reset(ink_system_services_t *services)
     }
 
     memset(services, 0, sizeof(*services));
+    ink_photo_catalog_init(&services->photo_catalog);
+    ink_usb_msc_service_reset(&services->usb_msc);
 }
 
 esp_err_t ink_system_services_init_mailbox_only(ink_system_services_t *services)
@@ -33,6 +40,41 @@ esp_err_t ink_system_services_init_mailbox_only(ink_system_services_t *services)
         services->native_snapshot_a,
         services->native_snapshot_b);
     return ESP_OK;
+}
+
+esp_err_t ink_system_services_reload_storage(ink_system_services_t *services)
+{
+    if (services == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    services->tf_ready = ink_app_mount_tf_card() == ESP_OK;
+    if (!services->tf_ready) {
+        ink_cpfont_close(&services->reader_font);
+        ink_cpfont_close(&services->footer_font);
+        ink_cpfont_close(&services->menu_font);
+        ink_photo_catalog_init(&services->photo_catalog);
+        return ESP_FAIL;
+    }
+
+    (void)ink_photo_catalog_reload(&services->photo_catalog);
+    reload_service_fonts(services);
+    services->storage_epoch++;
+    return ESP_OK;
+}
+
+static void reload_service_fonts(ink_system_services_t *services)
+{
+    if (services == NULL) {
+        return;
+    }
+
+    ink_cpfont_close(&services->reader_font);
+    ink_cpfont_close(&services->footer_font);
+    ink_cpfont_close(&services->menu_font);
+    (void)ink_app_load_reader_font(&services->reader_font);
+    (void)ink_app_load_footer_font(&services->footer_font);
+    (void)ink_app_load_menu_font(&services->menu_font);
 }
 
 esp_err_t ink_system_services_init(ink_system_services_t *services)
@@ -62,12 +104,12 @@ esp_err_t ink_system_services_init(ink_system_services_t *services)
     services->ui_queue = xQueueCreate(INK_UI_QUEUE_LENGTH, sizeof(ink_ui_event_t));
     ESP_RETURN_ON_FALSE(services->ui_queue != NULL, ESP_ERR_NO_MEM, TAG, "ui queue alloc");
 
-    services->tf_ready = ink_app_mount_tf_card() == ESP_OK;
-    if (services->tf_ready) {
-        (void)ink_app_load_reader_font(&services->reader_font);
-        (void)ink_app_load_footer_font(&services->footer_font);
-        (void)ink_app_load_menu_font(&services->menu_font);
+    services->tf_ready = false;
+    if (ink_system_services_reload_storage(services) == ESP_OK) {
+        /* Fonts are reloaded as part of storage init/reload. */
     }
+    (void)ink_usb_msc_service_init(&services->usb_msc);
+    services->wifi_ready = ink_wifi_manager_init() == ESP_OK;
 
     return ESP_OK;
 }
@@ -99,5 +141,7 @@ bool ink_system_services_self_test(void)
     return services.mailbox.bitmap_snapshot_buffers[0] == services.bitmap_snapshot_a
         && services.mailbox.bitmap_snapshot_buffers[1] == services.bitmap_snapshot_b
         && services.mailbox.native_snapshot_buffers[0] == services.native_snapshot_a
-        && services.mailbox.native_snapshot_buffers[1] == services.native_snapshot_b;
+        && services.mailbox.native_snapshot_buffers[1] == services.native_snapshot_b
+        && services.photo_catalog.initialized
+        && services.usb_msc.state == INK_USB_MSC_STATE_DISABLED;
 }

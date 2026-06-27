@@ -120,6 +120,8 @@ const char *ink_tuning_lab_page_name(ink_tuning_page_t page)
             return "HIGH_DELTA";
         case INK_TUNING_PAGE_GRID_COMPARE:
             return "GRID_COMPARE";
+        case INK_TUNING_PAGE_GRAY_CAL:
+            return "GRAY_CAL";
         default:
             return "UNKNOWN";
     }
@@ -168,8 +170,14 @@ bool ink_tuning_lab_self_test(void)
     if (!ink_tuning_lab_next_page(&lab) || lab.current_page != INK_TUNING_PAGE_FOOTER) {
         return false;
     }
-    lab.current_page = INK_TUNING_PAGE_HIGH_DELTA;
+    lab.current_page = INK_TUNING_PAGE_GRID_COMPARE;
     if (!ink_tuning_lab_next_page(&lab)) {
+        return false;
+    }
+    if (lab.current_page != INK_TUNING_PAGE_GRAY_CAL || lab.grid_compare_active) {
+        return false;
+    }
+    if (!ink_tuning_lab_previous_page(&lab)) {
         return false;
     }
     if (lab.current_page != INK_TUNING_PAGE_GRID_COMPARE || !lab.grid_compare_active) {

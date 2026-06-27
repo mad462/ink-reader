@@ -5,3 +5,17 @@ build/
 *.tmp
 *.bak
 .worktrees/
+tmp/
+managed_components/
+TF卡内容/
+tools/__pycache__/
+tools/cpfont-studio/output/
+tools/cpfont-studio/tmp/
+tools/ebook-canvas-studio/node_modules/
+tools/ebook-canvas-studio/dist/
+tools/ebook-canvas-studio/temp/
+tools/ebook-canvas-studio/tmp/
+tools/ebook-canvas-studio/.vite-*.pid
+tools/epub-to-xtc-converter-main/
+tools/epub-to-xtc-converter-main.zip
+tests/tilt_grid/sdkconfig.old

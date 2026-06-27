@@ -21,8 +21,8 @@ typedef struct {
 } ink_wifi_setup_ui_region_t;
 
 typedef struct {
-    ink_cpfont_t *menu;
-    ink_cpfont_t *footer;
+    const ink_cpfont_t *menu;
+    const ink_cpfont_t *footer;
 } ink_wifi_setup_ui_fonts_t;
 
 const char *ink_wifi_setup_keyboard_layer_name(ink_wifi_setup_keyboard_layer_t layer);

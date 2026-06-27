@@ -4,6 +4,7 @@
 #include <string.h>
 
 static portMUX_TYPE s_mailbox_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool mailbox_has_pending_request_locked(const ink_display_mailbox_t *mailbox);
 
 void ink_display_mailbox_init(
     ink_display_mailbox_t *mailbox,
@@ -27,13 +28,20 @@ void ink_display_mailbox_init(
 
 void ink_display_mailbox_set_notify_task(ink_display_mailbox_t *mailbox, TaskHandle_t notify_task)
 {
+    bool should_notify = false;
+
     if (mailbox == NULL) {
         return;
     }
 
     taskENTER_CRITICAL(&s_mailbox_lock);
     mailbox->notify_task = notify_task;
+    should_notify = notify_task != NULL && mailbox_has_pending_request_locked(mailbox);
     taskEXIT_CRITICAL(&s_mailbox_lock);
+
+    if (should_notify) {
+        xTaskNotifyGive(notify_task);
+    }
 }
 
 uint32_t ink_display_mailbox_submit(
@@ -157,6 +165,31 @@ bool ink_display_mailbox_is_idle(const ink_display_mailbox_t *mailbox)
     return idle;
 }
 
+void ink_display_mailbox_invalidate_pending(ink_display_mailbox_t *mailbox)
+{
+    if (mailbox == NULL) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_mailbox_lock);
+    mailbox->latest_seq = mailbox->completed_seq;
+    mailbox->active_seq = 0U;
+    taskEXIT_CRITICAL(&s_mailbox_lock);
+}
+
+void ink_display_mailbox_discard_queued_only(ink_display_mailbox_t *mailbox)
+{
+    if (mailbox == NULL) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_mailbox_lock);
+    if (mailbox->latest_seq != mailbox->active_seq) {
+        mailbox->latest_seq = mailbox->completed_seq;
+    }
+    taskEXIT_CRITICAL(&s_mailbox_lock);
+}
+
 void ink_display_mailbox_note_cancelled(ink_display_mailbox_t *mailbox)
 {
     if (mailbox == NULL) {
@@ -205,6 +238,14 @@ void ink_display_mailbox_snapshot_stats(
     taskENTER_CRITICAL(&s_mailbox_lock);
     *stats = mailbox->stats;
     taskEXIT_CRITICAL(&s_mailbox_lock);
+}
+
+static bool mailbox_has_pending_request_locked(const ink_display_mailbox_t *mailbox)
+{
+    return mailbox != NULL
+        && mailbox->latest_seq != 0U
+        && mailbox->latest_seq != mailbox->completed_seq
+        && mailbox->latest_seq != mailbox->active_seq;
 }
 
 bool ink_display_mailbox_self_test(void)
@@ -330,6 +371,25 @@ bool ink_display_mailbox_self_test(void)
         return false;
     }
 
+    request.input_ms = 11;
+    request.submitted_ms = 21;
+    (void)ink_display_mailbox_submit(&mailbox, &request);
+    ink_display_mailbox_invalidate_pending(&mailbox);
+    if (ink_display_mailbox_try_claim_latest(&mailbox, &claimed)) {
+        free(page_a);
+        free(page_b);
+        free(native_a);
+        free(native_b);
+        return false;
+    }
+    if (!ink_display_mailbox_is_idle(&mailbox)) {
+        free(page_a);
+        free(page_b);
+        free(native_a);
+        free(native_b);
+        return false;
+    }
+
     request.input_ms = 12;
     request.submitted_ms = 22;
     if (ink_display_mailbox_submit(&mailbox, &request) != 3U) {
@@ -411,6 +471,34 @@ bool ink_display_mailbox_self_test(void)
         return false;
     }
     if (stats.completed_count != 1U) {
+        free(page_a);
+        free(page_b);
+        free(native_a);
+        free(native_b);
+        return false;
+    }
+
+    ink_display_mailbox_init(&mailbox, NULL, page_a, page_b, native_a, native_b);
+    request.input_ms = 14;
+    request.submitted_ms = 24;
+    if (ulTaskNotifyTake(pdTRUE, 0) != 0U) {
+        free(page_a);
+        free(page_b);
+        free(native_a);
+        free(native_b);
+        return false;
+    }
+    if (ink_display_mailbox_submit(&mailbox, &request) == 0U) {
+        free(page_a);
+        free(page_b);
+        free(native_a);
+        free(native_b);
+        return false;
+    }
+    ink_display_mailbox_set_notify_task(&mailbox, xTaskGetCurrentTaskHandle());
+    if (ulTaskNotifyTake(pdTRUE, 0) != 1U
+        || !ink_display_mailbox_try_claim_latest(&mailbox, &claimed)
+        || claimed.seq == 0U) {
         free(page_a);
         free(page_b);
         free(native_a);

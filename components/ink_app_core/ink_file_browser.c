@@ -129,6 +129,56 @@ static bool has_xtc_extension(const char *name)
     return false;
 }
 
+static size_t xtc_extension_length(const char *name)
+{
+    size_t len;
+
+    if (name == NULL) {
+        return 0U;
+    }
+
+    len = strlen(name);
+    if (len >= 5U) {
+        const char *ext5 = name + len - 5U;
+        if (ext5[0] == '.'
+            && ascii_char_equal_ignore_case(ext5[1], 'x')
+            && ascii_char_equal_ignore_case(ext5[2], 't')
+            && ascii_char_equal_ignore_case(ext5[3], 'c')
+            && ascii_char_equal_ignore_case(ext5[4], 'h')) {
+            return 5U;
+        }
+    }
+    if (len >= 4U) {
+        const char *ext4 = name + len - 4U;
+        if (ext4[0] == '.'
+            && ascii_char_equal_ignore_case(ext4[1], 'x')
+            && ascii_char_equal_ignore_case(ext4[2], 't')
+            && ascii_char_equal_ignore_case(ext4[3], 'c')) {
+            return 4U;
+        }
+    }
+    return 0U;
+}
+
+static void copy_display_name_without_xtc_extension(const char *src, char *dst, size_t dst_size)
+{
+    char full_name[INK_FILE_BROWSER_NAME_LENGTH + 1];
+    size_t ext_len;
+    size_t full_len;
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+
+    copy_utf8_snippet(src, full_name, sizeof(full_name));
+    ext_len = xtc_extension_length(full_name);
+    full_len = strlen(full_name);
+    if (ext_len > 0U && full_len > ext_len) {
+        full_name[full_len - ext_len] = '\0';
+    }
+    snprintf(dst, dst_size, "%s", full_name);
+}
+
 static bool should_skip_name(const char *name)
 {
     return name == NULL
@@ -243,7 +293,11 @@ static esp_err_t load_entries(ink_file_browser_t *browser)
         ink_file_browser_entry_t *dst = &browser->entries[browser->entry_count++];
         memset(dst, 0, sizeof(*dst));
         dst->type = type;
-        copy_utf8_snippet(entry->d_name, dst->name, sizeof(dst->name));
+        if (type == INK_FILE_BROWSER_ENTRY_XTC) {
+            copy_display_name_without_xtc_extension(entry->d_name, dst->name, sizeof(dst->name));
+        } else {
+            copy_utf8_snippet(entry->d_name, dst->name, sizeof(dst->name));
+        }
         snprintf(dst->full_path, sizeof(dst->full_path), "%s", full_path);
     }
 
@@ -444,6 +498,10 @@ bool ink_file_browser_self_test(void)
 {
     static ink_file_browser_t browser;
     static ink_file_browser_view_t view;
+    char long_name[INK_FILE_BROWSER_NAME_LENGTH + 1];
+    const char *long_xtc_name =
+        "\xE4\xBD\x9C\xE5\xAE\xB6\xE6\xA6\x9C\xE7\xBB\x8F\xE5\x85\xB8\xEF\xBC\x9A"
+        "\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD.xtc";
 
     memset(&browser, 0, sizeof(browser));
     snprintf(browser.mount_point, sizeof(browser.mount_point), "%s", "/sdcard");
@@ -512,12 +570,27 @@ bool ink_file_browser_self_test(void)
     browser.selected_index = 0;
     browser.entries[0].type = INK_FILE_BROWSER_ENTRY_XTC;
     snprintf(browser.entries[0].full_path, sizeof(browser.entries[0].full_path), "%s", "/sdcard/books/\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD.xtc");
-    copy_utf8_snippet("\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD.xtc", browser.entries[0].name, sizeof(browser.entries[0].name));
+    copy_display_name_without_xtc_extension(
+        "\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD.xtc",
+        browser.entries[0].name,
+        sizeof(browser.entries[0].name));
     ink_file_browser_render(&browser, &view);
     if (strcmp(view.title, "books") != 0) {
         return false;
     }
-    if (strcmp(view.lines[0], ">\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD.xtc") != 0) {
+    if (strcmp(view.lines[0], ">\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD") != 0) {
+        return false;
+    }
+
+    memset(long_name, 0, sizeof(long_name));
+    copy_display_name_without_xtc_extension(long_xtc_name, long_name, sizeof(long_name));
+    if (strstr(long_name, ".xtc") != NULL || strstr(long_name, ".XTC") != NULL) {
+        return false;
+    }
+    if (strcmp(
+            long_name,
+            "\xE4\xBD\x9C\xE5\xAE\xB6\xE6\xA6\x9C\xE7\xBB\x8F\xE5\x85\xB8\xEF\xBC\x9A"
+            "\xE7\xA3\xA8\xE5\x9D\x8A\xE4\xBF\xA1\xE6\x9C\xAD") != 0) {
         return false;
     }
 

@@ -464,6 +464,8 @@ static bool update_xtc_view_and_page(
 
 static bool persist_xtc_progress(ink_reader_session_t *session, ink_app_state_t *state)
 {
+    const char *leaf;
+
     if (session == NULL || state == NULL || !session->xtc_active) {
         return false;
     }
@@ -473,7 +475,17 @@ static bool persist_xtc_progress(ink_reader_session_t *session, ink_app_state_t 
         session->source_path,
         session->current_page,
         session->current_chapter_index,
-        session->total_chapters);
+        session->total_pages);
+    leaf = strrchr(session->source_path, '/');
+    leaf = (leaf != NULL && leaf[1] != '\0') ? leaf + 1 : session->source_path;
+    (void)ink_app_state_note_xtc_opened(
+        state,
+        session->source_path,
+        leaf,
+        session->current_page,
+        session->current_chapter_index,
+        session->total_pages,
+        session->current_chapter_name);
     return true;
 }
 

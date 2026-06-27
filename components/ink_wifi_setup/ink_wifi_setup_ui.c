@@ -135,6 +135,22 @@ static const glyph5x7_t s_font5x7[] = {
     {'}', {0x08, 0x04, 0x04, 0x02, 0x04, 0x04, 0x08}},
 };
 
+static uint8_t wifi_menu_font_scale_divisor(const ink_cpfont_t *font)
+{
+    if (!ink_cpfont_is_loaded(font)) {
+        return 1U;
+    }
+    return font->advance_y > 22U ? 2U : 1U;
+}
+
+static uint8_t wifi_footer_font_scale_divisor(const ink_cpfont_t *font)
+{
+    if (!ink_cpfont_is_loaded(font)) {
+        return 1U;
+    }
+    return font->advance_y > 24U ? 2U : 1U;
+}
+
 static void set_pixel(uint8_t *buffer, int x, int y, bool black)
 {
     if (buffer == NULL || x < 0 || x >= EPD_GDEY0426T82_WIDTH || y < 0 || y >= EPD_GDEY0426T82_HEIGHT) {
@@ -213,7 +229,7 @@ static void draw_text(uint8_t *buffer, int x, int y, const char *text, int scale
 
 static void draw_ui_text(
     uint8_t *buffer,
-    ink_cpfont_t *font,
+    const ink_cpfont_t *font,
     int x,
     int y,
     const char *text,
@@ -234,7 +250,7 @@ static void draw_ui_text(
 
 static void draw_ui_text_inverted(
     uint8_t *buffer,
-    ink_cpfont_t *font,
+    const ink_cpfont_t *font,
     int x,
     int y,
     const char *text,
@@ -475,8 +491,8 @@ static void draw_keyboard_status(
     char ssid[24];
     const char *value = text != NULL ? text->text : "";
     const ink_wifi_scan_result_t *ap = ink_wifi_setup_selected_ap(wifi);
-    ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
-    ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
+    const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
     (void)state;
     copy_ascii_clipped(preview, sizeof(preview), value, 24);
@@ -503,14 +519,14 @@ static void draw_keyboard_status(
         snprintf(wifi_status, sizeof(wifi_status), "OFFLINE");
     }
 
-    draw_ui_text(buffer, menu, 24, 34, "WiFi Password", 2, 1, true);
-    draw_ui_text(buffer, footer, 24, 76, wifi_line, 1, 1, true);
-    draw_ui_text(buffer, footer, 24, 106, wifi_status, 1, 1, true);
+    draw_ui_text(buffer, menu, 24, 34, "WiFi Password", 2, wifi_menu_font_scale_divisor(menu), true);
+    draw_ui_text(buffer, footer, 24, 76, wifi_line, 1, wifi_footer_font_scale_divisor(footer), true);
+    draw_ui_text(buffer, footer, 24, 106, wifi_status, 1, wifi_footer_font_scale_divisor(footer), true);
     draw_rect_outline(buffer, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_W, PASSWORD_BOX_H, 3);
     if (preview[0] != '\0') {
         draw_text(buffer, 36, 156, preview, 3, true);
     }
-    draw_ui_text(buffer, footer, 24, 224, ink_wifi_setup_keyboard_layer_name(layer), 1, 1, true);
+    draw_ui_text(buffer, footer, 24, 224, ink_wifi_setup_keyboard_layer_name(layer), 1, wifi_footer_font_scale_divisor(footer), true);
 }
 
 static void draw_keyboard(
@@ -543,8 +559,8 @@ void ink_wifi_setup_ui_draw_wifi_list_row(
     ink_wifi_setup_ui_region_t region;
     char ssid[30];
     char meta[64];
-    ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
-    ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
+    const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
     if (buffer == NULL || wifi == NULL || index < 0 || index >= count
         || !ink_wifi_setup_ui_wifi_list_row_region(wifi, index, &region)) {
@@ -571,11 +587,41 @@ void ink_wifi_setup_ui_draw_wifi_list_row(
     fill_rect(buffer, region.x, region.y, region.w, region.h, selected);
     draw_rect_outline(buffer, region.x, region.y, region.w, region.h, selected ? 3 : 1);
     if (selected) {
-        draw_ui_text_inverted(buffer, menu, region.x + WIFI_LIST_CARD_INSET, region.y + 8, ssid, 2, 1);
-        draw_ui_text_inverted(buffer, footer, region.x + WIFI_LIST_CARD_INSET, region.y + 34, meta, 1, 1);
+        draw_ui_text_inverted(
+            buffer,
+            menu,
+            region.x + WIFI_LIST_CARD_INSET,
+            region.y + 8,
+            ssid,
+            2,
+            wifi_menu_font_scale_divisor(menu));
+        draw_ui_text_inverted(
+            buffer,
+            footer,
+            region.x + WIFI_LIST_CARD_INSET,
+            region.y + 34,
+            meta,
+            1,
+            wifi_footer_font_scale_divisor(footer));
     } else {
-        draw_ui_text(buffer, menu, region.x + WIFI_LIST_CARD_INSET, region.y + 8, ssid, 2, 1, true);
-        draw_ui_text(buffer, footer, region.x + WIFI_LIST_CARD_INSET, region.y + 34, meta, 1, 1, true);
+        draw_ui_text(
+            buffer,
+            menu,
+            region.x + WIFI_LIST_CARD_INSET,
+            region.y + 8,
+            ssid,
+            2,
+            wifi_menu_font_scale_divisor(menu),
+            true);
+        draw_ui_text(
+            buffer,
+            footer,
+            region.x + WIFI_LIST_CARD_INSET,
+            region.y + 34,
+            meta,
+            1,
+            wifi_footer_font_scale_divisor(footer),
+            true);
     }
 }
 
@@ -585,17 +631,17 @@ static void draw_wifi_list(
     const ink_wifi_setup_ui_fonts_t *fonts)
 {
     const int count = ink_wifi_setup_selectable_count(wifi);
-    ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
-    ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
+    const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
     memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
-    draw_ui_text(buffer, menu, 24, 34, "WiFi Setup", 2, 1, true);
+    draw_ui_text(buffer, menu, 24, 34, "WiFi Setup", 2, wifi_menu_font_scale_divisor(menu), true);
     if (wifi != NULL && wifi->mode == WIFI_SETUP_UI_CONNECTING) {
-        draw_ui_text(buffer, footer, 24, 70, "Connecting ...", 1, 1, true);
+        draw_ui_text(buffer, footer, 24, 70, "Connecting ...", 1, wifi_footer_font_scale_divisor(footer), true);
     } else if (wifi != NULL && wifi->scan_in_progress) {
-        draw_ui_text(buffer, footer, 24, 70, "Scanning nearby WiFi ...", 1, 1, true);
+        draw_ui_text(buffer, footer, 24, 70, "Scanning nearby WiFi ...", 1, wifi_footer_font_scale_divisor(footer), true);
     } else {
-        draw_ui_text(buffer, footer, 24, 70, "WiFi networks", 1, 1, true);
+        draw_ui_text(buffer, footer, 24, 70, "WiFi networks", 1, wifi_footer_font_scale_divisor(footer), true);
     }
 
     if (wifi == NULL || count == 0) {
@@ -618,8 +664,8 @@ static void draw_result_popup(
     char line[96];
     char ssid[24];
     const ink_wifi_scan_result_t *ap = ink_wifi_setup_selected_ap(wifi);
-    ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
-    ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
+    const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
     draw_wifi_list(buffer, wifi, fonts);
     fill_rect(buffer, 48, 210, EPD_GDEY0426T82_WIDTH - 96, 190, false);
@@ -633,21 +679,21 @@ static void draw_result_popup(
 
     if (wifi != NULL && wifi->mode == WIFI_SETUP_UI_CONNECTING) {
         snprintf(line, sizeof(line), "Connecting %s ...", ssid);
-        draw_ui_text(buffer, menu, 76, 250, "Connecting", 2, 1, true);
-        draw_ui_text(buffer, footer, 76, 302, line, 1, 1, true);
-        draw_ui_text(buffer, footer, 76, 344, "Please wait ...", 1, 1, true);
+        draw_ui_text(buffer, menu, 76, 250, "Connecting", 2, wifi_menu_font_scale_divisor(menu), true);
+        draw_ui_text(buffer, footer, 76, 302, line, 1, wifi_footer_font_scale_divisor(footer), true);
+        draw_ui_text(buffer, footer, 76, 344, "Please wait ...", 1, wifi_footer_font_scale_divisor(footer), true);
         return;
     }
 
     const bool ok = wifi != NULL && wifi->result_error == ESP_OK;
-    draw_ui_text(buffer, menu, 76, 250, ok ? "Success" : "Failed", 2, 1, true);
+    draw_ui_text(buffer, menu, 76, 250, ok ? "Success" : "Failed", 2, wifi_menu_font_scale_divisor(menu), true);
     snprintf(line, sizeof(line), "%s %s", ok ? "Connected" : "Not connected", ssid);
-    draw_ui_text(buffer, footer, 76, 304, line, 1, 1, true);
+    draw_ui_text(buffer, footer, 76, 304, line, 1, wifi_footer_font_scale_divisor(footer), true);
     if (!ok && wifi != NULL) {
         snprintf(line, sizeof(line), "Reason: %s", esp_err_to_name(wifi->result_error));
-        draw_ui_text(buffer, footer, 76, 334, line, 1, 1, true);
+        draw_ui_text(buffer, footer, 76, 334, line, 1, wifi_footer_font_scale_divisor(footer), true);
     }
-    draw_ui_text(buffer, footer, 76, 364, "Press OK to return", 1, 1, true);
+    draw_ui_text(buffer, footer, 76, 364, "Press OK to return", 1, wifi_footer_font_scale_divisor(footer), true);
 }
 
 static void draw_saved_wifi_menu(
@@ -658,8 +704,8 @@ static void draw_saved_wifi_menu(
     char line[96];
     char ssid[24];
     const ink_wifi_scan_result_t *ap = ink_wifi_setup_selected_ap(wifi);
-    ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
-    ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
+    const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
     draw_wifi_list(buffer, wifi, fonts);
     fill_rect(buffer, 48, 210, EPD_GDEY0426T82_WIDTH - 96, 220, false);
@@ -671,26 +717,26 @@ static void draw_saved_wifi_menu(
         snprintf(ssid, sizeof(ssid), "%s", "-");
     }
 
-    draw_ui_text(buffer, menu, 76, 244, "Saved WiFi", 2, 1, true);
+    draw_ui_text(buffer, menu, 76, 244, "Saved WiFi", 2, wifi_menu_font_scale_divisor(menu), true);
     snprintf(line, sizeof(line), "%s", ssid);
-    draw_ui_text(buffer, footer, 76, 292, line, 1, 1, true);
+    draw_ui_text(buffer, footer, 76, 292, line, 1, wifi_footer_font_scale_divisor(footer), true);
 
     const bool connect_selected = wifi == NULL || wifi->menu_index == 0;
     const int btn_y = 334;
     fill_rect(buffer, 76, btn_y, 150, 46, connect_selected);
     draw_rect_outline(buffer, 76, btn_y, 150, 46, connect_selected ? 3 : 1);
     if (connect_selected) {
-        draw_ui_text_inverted(buffer, footer, 96, btn_y + 14, "CONNECT", 1, 1);
+        draw_ui_text_inverted(buffer, footer, 96, btn_y + 14, "CONNECT", 1, wifi_footer_font_scale_divisor(footer));
     } else {
-        draw_ui_text(buffer, footer, 96, btn_y + 14, "CONNECT", 1, 1, true);
+        draw_ui_text(buffer, footer, 96, btn_y + 14, "CONNECT", 1, wifi_footer_font_scale_divisor(footer), true);
     }
 
     fill_rect(buffer, 254, btn_y, 150, 46, !connect_selected);
     draw_rect_outline(buffer, 254, btn_y, 150, 46, connect_selected ? 1 : 3);
     if (!connect_selected) {
-        draw_ui_text_inverted(buffer, footer, 282, btn_y + 14, "DELETE", 1, 1);
+        draw_ui_text_inverted(buffer, footer, 282, btn_y + 14, "DELETE", 1, wifi_footer_font_scale_divisor(footer));
     } else {
-        draw_ui_text(buffer, footer, 282, btn_y + 14, "DELETE", 1, 1, true);
+        draw_ui_text(buffer, footer, 282, btn_y + 14, "DELETE", 1, wifi_footer_font_scale_divisor(footer), true);
     }
 }
 
@@ -815,10 +861,25 @@ static bool test_pad_align_region_expands_and_aligns(void)
     return region.x == 16 && region.y == 16 && region.w == 24 && region.h == 32;
 }
 
+static bool test_font_scale_divisors_match_compact_wifi_layout(void)
+{
+    ink_cpfont_t menu = {0};
+    ink_cpfont_t footer = {0};
+
+    menu.loaded = true;
+    menu.advance_y = 59;
+    footer.loaded = true;
+    footer.advance_y = 18;
+
+    return wifi_menu_font_scale_divisor(&menu) == 2U
+        && wifi_footer_font_scale_divisor(&footer) == 1U;
+}
+
 bool ink_wifi_setup_ui_self_test(void)
 {
     return test_visible_first_centers_selection()
         && test_wifi_row_region_for_scan_action()
         && test_keyboard_key_region_matches_grid()
-        && test_pad_align_region_expands_and_aligns();
+        && test_pad_align_region_expands_and_aligns()
+        && test_font_scale_divisors_match_compact_wifi_layout();
 }

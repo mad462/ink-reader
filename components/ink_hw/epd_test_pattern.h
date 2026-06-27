@@ -13,6 +13,44 @@
 
 typedef bool (*epd_test_pattern_should_abort_fn)(void *ctx);
 
+#define EPD_TEST_PATTERN_MENU_TAB_CAPACITY 3
+#define EPD_TEST_PATTERN_MENU_CARD_CAPACITY 8
+#define EPD_TEST_PATTERN_MENU_ACTION_CAPACITY 3
+
+typedef struct {
+    char label[16];
+    bool active;
+    bool focused;
+} epd_test_pattern_menu_tab_t;
+
+typedef struct {
+    char title[96];
+    char line1[64];
+    char line2[64];
+    bool selected;
+    bool trailing_favorite;
+} epd_test_pattern_menu_card_t;
+
+typedef struct {
+    char label[24];
+    bool selected;
+} epd_test_pattern_menu_action_t;
+
+typedef struct {
+    bool tabs_focus;
+    bool compact_cards;
+    bool bookmark_cards_tall;
+    bool frameless_panel;
+    size_t tab_count;
+    epd_test_pattern_menu_tab_t tabs[EPD_TEST_PATTERN_MENU_TAB_CAPACITY];
+    size_t card_count;
+    epd_test_pattern_menu_card_t cards[EPD_TEST_PATTERN_MENU_CARD_CAPACITY];
+    bool action_popup_open;
+    char action_popup_title[96];
+    size_t action_count;
+    epd_test_pattern_menu_action_t actions[EPD_TEST_PATTERN_MENU_ACTION_CAPACITY];
+} epd_test_pattern_reader_menu_overlay_t;
+
 void epd_test_pattern_fill_stripes(uint8_t *buffer, size_t length);
 void epd_test_pattern_fill_layout(uint8_t *buffer, size_t length);
 void epd_test_pattern_fill_text_demo(uint8_t *buffer, size_t length);
@@ -23,6 +61,7 @@ void epd_test_pattern_fill_gray_demo_planes(
     uint8_t *msb_buffer,
     size_t msb_length
 );
+void epd_test_pattern_fill_gray_calibration_page(uint8_t *buffer, size_t length);
 bool epd_test_pattern_gray_demo_self_test(void);
 bool epd_test_pattern_reader_page_self_test(void);
 bool epd_test_pattern_copy_page_buffer(
@@ -80,6 +119,13 @@ void epd_test_pattern_draw_footer_probe(
     uint8_t *buffer,
     size_t length,
     const char *seed_text
+);
+void epd_test_pattern_draw_reader_menu_overlay(
+    uint8_t *buffer,
+    size_t length,
+    const ink_cpfont_t *menu_font,
+    const ink_cpfont_t *footer_font,
+    const epd_test_pattern_reader_menu_overlay_t *overlay
 );
 void epd_test_pattern_fill_grid_compare_base_page(
     uint8_t *buffer,

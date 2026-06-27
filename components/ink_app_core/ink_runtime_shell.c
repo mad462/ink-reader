@@ -88,54 +88,11 @@ void ink_runtime_shell_init(ink_runtime_shell_t *shell)
     copy_text(shell->last_event, sizeof(shell->last_event), "EVENT NONE");
 }
 
-bool ink_runtime_shell_set_resume_available(ink_runtime_shell_t *shell, bool available)
-{
-    bool changed;
-
-    if (shell == NULL) {
-        return false;
-    }
-
-    changed = shell->can_resume_book != available;
-    shell->can_resume_book = available;
-    if (!available) {
-        shell->resume_selected = false;
-    }
-    return changed;
-}
-
-bool ink_runtime_shell_is_resume_selected(const ink_runtime_shell_t *shell)
-{
-    return shell != NULL
-        && shell->page == INK_RUNTIME_SHELL_PAGE_LIBRARY
-        && shell->can_resume_book
-        && shell->resume_selected;
-}
-
 bool ink_runtime_shell_handle_command(ink_runtime_shell_t *shell, ink_runtime_shell_command_t command)
 {
-    if (shell == NULL || command == INK_RUNTIME_SHELL_COMMAND_NONE) {
-        return false;
-    }
-
-    switch (shell->page) {
-        case INK_RUNTIME_SHELL_PAGE_LIBRARY:
-            if (!shell->can_resume_book) {
-                return false;
-            }
-            if (command == INK_RUNTIME_SHELL_COMMAND_NAV_PREVIOUS
-                || command == INK_RUNTIME_SHELL_COMMAND_NAV_NEXT) {
-                shell->resume_selected = !shell->resume_selected;
-                return true;
-            }
-            return false;
-
-        case INK_RUNTIME_SHELL_PAGE_READER:
-            return false;
-
-        default:
-            return false;
-    }
+    (void)shell;
+    (void)command;
+    return false;
 }
 
 bool ink_runtime_shell_note_buttons(
@@ -195,36 +152,21 @@ static void render_library(
     ink_runtime_shell_view_t *view)
 {
     ink_file_browser_view_t browser_view;
+    (void)shell;
 
     copy_text(view->title, sizeof(view->title), "书库");
 
     if (browser == NULL) {
-        copy_text(view->line1, sizeof(view->line1), "继续阅读");
-        copy_text(view->line2, sizeof(view->line2), "暂无书籍");
+        copy_text(view->line1, sizeof(view->line1), "暂无书籍");
         return;
     }
 
     ink_file_browser_render(browser, &browser_view);
-    if (shell != NULL && shell->can_resume_book) {
-        copy_text(
-            view->line1,
-            sizeof(view->line1),
-            shell->resume_selected ? ">继续阅读" : " 继续阅读");
-        copy_browser_line_with_prefix(
-            view->line2,
-            sizeof(view->line2),
-            browser_view.lines[0],
-            shell->resume_selected ? ' ' : '>');
-        copy_text(view->line3, sizeof(view->line3), browser_view.lines[1]);
-        copy_text(view->line4, sizeof(view->line4), browser_view.lines[2]);
-        view->line5[0] = '\0';
-    } else {
-        copy_text(view->line1, sizeof(view->line1), browser_view.lines[0]);
-        copy_text(view->line2, sizeof(view->line2), browser_view.lines[1]);
-        copy_text(view->line3, sizeof(view->line3), browser_view.lines[2]);
-        copy_text(view->line4, sizeof(view->line4), browser_view.lines[3]);
-        view->line5[0] = '\0';
-    }
+    copy_text(view->line1, sizeof(view->line1), browser_view.lines[0]);
+    copy_text(view->line2, sizeof(view->line2), browser_view.lines[1]);
+    copy_text(view->line3, sizeof(view->line3), browser_view.lines[2]);
+    copy_text(view->line4, sizeof(view->line4), browser_view.lines[3]);
+    view->line5[0] = '\0';
 }
 
 static void render_reader(
@@ -318,16 +260,6 @@ bool ink_runtime_shell_self_test(void)
         return false;
     }
     if (strcmp(view.line1, ">A.XTC") != 0) {
-        return false;
-    }
-
-    if (!ink_runtime_shell_set_resume_available(&shell, true)) {
-        return false;
-    }
-    ink_runtime_shell_render(&shell, &browser, &session, &view);
-    shell.resume_selected = true;
-    ink_runtime_shell_render(&shell, &browser, &session, &view);
-    if (strcmp(view.line1, ">继续阅读") != 0) {
         return false;
     }
     if (view.line5[0] != '\0') {

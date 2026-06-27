@@ -15,7 +15,10 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 
+#include "ink_photo_catalog.h"
+
 static const char *TAG = "ink_reader";
+static sdmmc_card_t *s_app_tf_card;
 static const char *kFixedSampleBookPaths[] = {
     "/sdcard/books/sample.xtc",
     "/sdcard/sample.xtc",
@@ -28,7 +31,24 @@ static const char *kReaderFontPaths[] = {
     "/sdcard/fonts/NotoSansSC_18.cpfont",
     "/sdcard/.fonts/NotoSansSC/NotoSansSC_18.cpfont",
 };
+static const char *kMenuFontPaths[] = {
+    "/sdcard/.fonts/LXGWWenKai/LXGWWenKai_24.cpfont",
+    "/sdcard/fonts/LXGWWenKai_24.cpfont",
+    "/sdcard/FONTS/LXGWWENKAI_24.CPFONT",
+    "/sdcard/.fonts/LXGWWenKai/LXGWWenKai_20.cpfont",
+    "/sdcard/fonts/LXGWWenKai_20.cpfont",
+    "/sdcard/FONTS/LXGWWENKAI_20.CPFONT",
+    "/sdcard/fonts/SmallSimSunBitmap_16.cpfont",
+    "/sdcard/.fonts/SmallSimSun/SmallSimSunBitmap_16.cpfont",
+    "/sdcard/fonts/SmallSimSunEmbedded_16.cpfont",
+    "/sdcard/.fonts/SmallSimSun/SmallSimSunEmbedded_16.cpfont",
+};
 static const char *kFooterFontPaths[] = {
+    "/sdcard/.fonts/LXGWWenKai/LXGWWenKai_18.cpfont",
+    "/sdcard/fonts/LXGWWenKai_18.cpfont",
+    "/sdcard/FONTS/LXGWWENKAI_18.CPFONT",
+    "/sdcard/fonts/NotoSansSC_18.cpfont",
+    "/sdcard/.fonts/NotoSansSC/NotoSansSC_18.cpfont",
     "/sdcard/fonts/SmallSimSunEmbedded_16.cpfont",
     "/sdcard/.fonts/SmallSimSun/SmallSimSunEmbedded_16.cpfont",
     "/sdcard/FONTS/SMALLSIMSUNEMBEDDED_16.CPFONT",
@@ -57,12 +77,14 @@ static bool find_first_xtc_book_path(char *path, size_t path_size);
 static bool load_first_cpfont_from_dir(ink_cpfont_t *font, const char *dir_path);
 static size_t fixed_sample_start_page(size_t total_pages);
 static bool try_fixup_state_book_path(ink_app_state_t *state);
+static bool try_fixup_progress_paths(ink_app_state_t *state);
 static bool load_font_from_candidates(
     ink_cpfont_t *font,
     const char *const *paths,
     size_t path_count,
     const char *const *dirs,
     size_t dir_count);
+static void fill_sd_host_and_slot(sdmmc_host_t *host, sdmmc_slot_config_t *slot_config);
 
 esp_err_t ink_app_persist_state(const ink_app_state_t *state)
 {
@@ -71,14 +93,6 @@ esp_err_t ink_app_persist_state(const ink_app_state_t *state)
     }
     ESP_RETURN_ON_ERROR(ensure_state_directory(), TAG, "state dir");
     return ink_app_state_save_file(INK_APP_STATE_FILE_PATH, state);
-}
-
-bool ink_app_should_auto_resume_reader(const ink_app_state_t *state)
-{
-    return state != NULL
-        && state->has_open_book
-        && state->open_book_kind == INK_APP_STATE_BOOK_KIND_XTC
-        && state->open_book_path[0] != '\0';
 }
 
 static esp_err_t ensure_state_directory(void)
@@ -101,6 +115,20 @@ static esp_err_t ensure_books_directory(void)
             return ESP_FAIL;
         }
         ESP_LOGI(TAG, "created books dir path=%s", INK_APP_BOOKS_PATH);
+    }
+    return ESP_OK;
+}
+
+esp_err_t ink_app_ensure_photo_directory(void)
+{
+    struct stat st;
+
+    if (stat(INK_PHOTO_ALBUM_DIR, &st) != 0) {
+        if (mkdir(INK_PHOTO_ALBUM_DIR, 0777) != 0 && errno != EEXIST) {
+            ESP_LOGW(TAG, "photos dir create failed path=%s errno=%d", INK_PHOTO_ALBUM_DIR, errno);
+            return ESP_FAIL;
+        }
+        ESP_LOGI(TAG, "created photos dir path=%s", INK_PHOTO_ALBUM_DIR);
     }
     return ESP_OK;
 }
@@ -266,6 +294,20 @@ bool ink_app_load_reader_font(ink_cpfont_t *font)
     return false;
 }
 
+bool ink_app_load_menu_font(ink_cpfont_t *font)
+{
+    if (load_font_from_candidates(
+            font,
+            kMenuFontPaths,
+            sizeof(kMenuFontPaths) / sizeof(kMenuFontPaths[0]),
+            kReaderFontDirs,
+            sizeof(kReaderFontDirs) / sizeof(kReaderFontDirs[0]))) {
+        return true;
+    }
+    ESP_LOGW(TAG, "menu font 24px not found, fallback to footer or reader font");
+    return false;
+}
+
 bool ink_app_load_footer_font(ink_cpfont_t *font)
 {
     if (load_font_from_candidates(
@@ -325,28 +367,66 @@ uint8_t *ink_app_alloc_display_buffer(const char *name, size_t length)
     return buffer;
 }
 
-bool ink_app_load_book_from_state(ink_ui_model_t *model)
+bool ink_app_open_book_from_path(ink_ui_model_t *model, const char *path)
 {
-    if (model == NULL || !ink_app_should_auto_resume_reader(&model->app_state)) {
-        return false;
-    }
+    size_t saved_page = 0U;
+    size_t saved_chapter = 0U;
+    size_t saved_total = 0U;
+    bool has_saved_progress = false;
 
-    if (model->app_state.open_book_kind != INK_APP_STATE_BOOK_KIND_XTC) {
+    if (model == NULL || path == NULL || path[0] == '\0') {
         return false;
     }
 
     (void)try_fixup_state_book_path(&model->app_state);
-
-    if (!ink_reader_session_open_xtc(&model->reader_session, model->app_state.open_book_path, &model->app_state)) {
+    (void)try_fixup_progress_paths(&model->app_state);
+    has_saved_progress = ink_app_state_find_xtc_progress(
+        &model->app_state,
+        path,
+        &saved_page,
+        &saved_chapter,
+        &saved_total);
+    if (!ink_reader_session_open_xtc(&model->reader_session, path, &model->app_state)) {
+        ESP_LOGW(TAG, "open xtc failed path=%s", path);
         return false;
     }
-    if (model->app_state.open_book_page < model->reader_session.total_pages) {
-        (void)ink_reader_session_jump_to_page(
+
+    if (has_saved_progress && saved_page < model->reader_session.total_pages) {
+        if (!ink_reader_session_jump_to_page(
             &model->reader_session,
-            model->app_state.open_book_page,
-            &model->app_state);
+            saved_page,
+            &model->app_state)) {
+            ESP_LOGW(
+                TAG,
+                "resume book failed path=%s page=%u/%u chapter=%u snapshot_total=%u fallback=first_page",
+                path,
+                (unsigned)(saved_page + 1U),
+                (unsigned)model->reader_session.total_pages,
+                (unsigned)(saved_chapter + 1U),
+                (unsigned)saved_total);
+        } else {
+            ESP_LOGI(
+                TAG,
+                "resume book path=%s page=%u/%u chapter=%u snapshot_total=%u",
+                path,
+                (unsigned)(saved_page + 1U),
+                (unsigned)model->reader_session.total_pages,
+                (unsigned)(saved_chapter + 1U),
+                (unsigned)saved_total);
+        }
     }
     model->shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ESP_LOGI(
+        TAG,
+        "open book ready path=%s active=%d xtc=%d page=%u/%u prepared=%d native=%d shell=%d",
+        path,
+        model->reader_session.active ? 1 : 0,
+        model->reader_session.xtc_active ? 1 : 0,
+        (unsigned)(model->reader_session.current_page + 1U),
+        (unsigned)model->reader_session.total_pages,
+        ink_reader_session_has_prepared_page(&model->reader_session) ? 1 : 0,
+        ink_reader_session_has_native_page(&model->reader_session) ? 1 : 0,
+        (int)model->shell.page);
     return true;
 }
 
@@ -421,28 +501,48 @@ static bool try_fixup_state_book_path(ink_app_state_t *state)
     return true;
 }
 
+static bool try_fixup_progress_paths(ink_app_state_t *state)
+{
+    bool changed = false;
+    struct stat st;
+
+    if (state == NULL) {
+        return false;
+    }
+
+    for (size_t i = 0; i < INK_APP_STATE_PROGRESS_CAPACITY; ++i) {
+        ink_app_state_progress_entry_t *entry = &state->progress[i];
+        const char *leaf;
+        char candidate[INK_APP_STATE_PATH_LENGTH + 1];
+
+        if (!entry->used || entry->book_path[0] == '\0') {
+            continue;
+        }
+        if (stat(entry->book_path, &st) == 0) {
+            continue;
+        }
+
+        leaf = strrchr(entry->book_path, '/');
+        leaf = (leaf != NULL && leaf[1] != '\0') ? leaf + 1 : entry->book_path;
+        if (snprintf(candidate, sizeof(candidate), "%s/%s", INK_APP_BOOKS_PATH, leaf) >= (int)sizeof(candidate)) {
+            continue;
+        }
+        if (stat(candidate, &st) != 0) {
+            continue;
+        }
+
+        ESP_LOGI(TAG, "progress path migrated old=%s new=%s", entry->book_path, candidate);
+        snprintf(entry->book_path, sizeof(entry->book_path), "%s", candidate);
+        changed = true;
+    }
+
+    return changed;
+}
+
 esp_err_t ink_app_mount_tf_card(void)
 {
-    static const int kSdSdioClk = 40;
-    static const int kSdSdioCmd = 39;
-    static const int kSdSdioD0 = 41;
-    static const int kSdSdioD1 = 42;
-    static const int kSdSdioD2 = 48;
-    static const int kSdSdioD3 = 38;
-
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
-
-    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.width = 4;
-    slot_config.clk = kSdSdioClk;
-    slot_config.cmd = kSdSdioCmd;
-    slot_config.d0 = kSdSdioD0;
-    slot_config.d1 = kSdSdioD1;
-    slot_config.d2 = kSdSdioD2;
-    slot_config.d3 = kSdSdioD3;
-    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
-
+    sdmmc_host_t host;
+    sdmmc_slot_config_t slot_config;
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
         .max_files = 8,
@@ -451,6 +551,13 @@ esp_err_t ink_app_mount_tf_card(void)
         .use_one_fat = false,
     };
 
+    if (s_app_tf_card != NULL) {
+        ESP_LOGI(TAG, "TF card already mounted at %s", INK_APP_MOUNT_POINT);
+        return ESP_OK;
+    }
+
+    fill_sd_host_and_slot(&host, &slot_config);
+
     sdmmc_card_t *card = NULL;
     esp_err_t ret = esp_vfs_fat_sdmmc_mount(INK_APP_MOUNT_POINT, &host, &slot_config, &mount_config, &card);
     if (ret != ESP_OK) {
@@ -458,12 +565,96 @@ esp_err_t ink_app_mount_tf_card(void)
         return ret;
     }
 
+    s_app_tf_card = card;
     ESP_LOGI(TAG, "TF card mounted at %s", INK_APP_MOUNT_POINT);
     sdmmc_card_print_info(stdout, card);
     (void)ensure_state_directory();
     (void)ensure_books_directory();
+    (void)ink_app_ensure_photo_directory();
     migrate_root_books_into_library();
     return ESP_OK;
+}
+
+esp_err_t ink_app_unmount_tf_card(void)
+{
+    if (s_app_tf_card == NULL) {
+        return ESP_OK;
+    }
+
+    esp_err_t ret = esp_vfs_fat_sdcard_unmount(INK_APP_MOUNT_POINT, s_app_tf_card);
+    if (ret == ESP_OK) {
+        s_app_tf_card = NULL;
+    }
+    return ret;
+}
+
+esp_err_t ink_app_open_tf_card_for_usb(sdmmc_card_t **out_card)
+{
+    sdmmc_host_t host;
+    sdmmc_slot_config_t slot_config;
+    sdmmc_card_t *card = NULL;
+    esp_err_t ret;
+
+    if (out_card == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_card = NULL;
+    fill_sd_host_and_slot(&host, &slot_config);
+
+    card = calloc(1U, sizeof(*card));
+    if (card == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    ret = host.init();
+    if (ret != ESP_OK) {
+        free(card);
+        return ret;
+    }
+
+    ret = sdmmc_host_init_slot(host.slot, &slot_config);
+    if (ret != ESP_OK) {
+        if (host.flags & SDMMC_HOST_FLAG_DEINIT_ARG) {
+            host.deinit_p(host.slot);
+        } else {
+            host.deinit();
+        }
+        free(card);
+        return ret;
+    }
+
+    ret = sdmmc_card_init(&host, card);
+    if (ret != ESP_OK) {
+        if (host.flags & SDMMC_HOST_FLAG_DEINIT_ARG) {
+            host.deinit_p(host.slot);
+        } else {
+            host.deinit();
+        }
+        free(card);
+        return ret;
+    }
+
+    *out_card = card;
+    return ESP_OK;
+}
+
+void ink_app_close_tf_card_for_usb(sdmmc_card_t *card)
+{
+    sdmmc_host_t host;
+    sdmmc_slot_config_t slot_config;
+
+    if (card == NULL) {
+        return;
+    }
+
+    fill_sd_host_and_slot(&host, &slot_config);
+    if (host.flags & SDMMC_HOST_FLAG_DEINIT_ARG) {
+        host.deinit_p(host.slot);
+    } else {
+        host.deinit();
+    }
+    free(card);
 }
 
 void ink_app_prepare_browser_fallback(ink_file_browser_t *browser)
@@ -474,4 +665,33 @@ void ink_app_prepare_browser_fallback(ink_file_browser_t *browser)
     memset(browser, 0, sizeof(*browser));
     snprintf(browser->mount_point, sizeof(browser->mount_point), "%s", INK_APP_BOOKS_PATH);
     snprintf(browser->current_path, sizeof(browser->current_path), "%s", INK_APP_BOOKS_PATH);
+}
+static void fill_sd_host_and_slot(sdmmc_host_t *host, sdmmc_slot_config_t *slot_config)
+{
+    static const int kSdSdioClk = 40;
+    static const int kSdSdioCmd = 39;
+    static const int kSdSdioD0 = 41;
+    static const int kSdSdioD1 = 42;
+    static const int kSdSdioD2 = 48;
+    static const int kSdSdioD3 = 38;
+
+    if (host == NULL || slot_config == NULL) {
+        return;
+    }
+
+    sdmmc_host_t host_cfg = SDMMC_HOST_DEFAULT();
+    sdmmc_slot_config_t slot_cfg = SDMMC_SLOT_CONFIG_DEFAULT();
+
+    *host = host_cfg;
+    host->max_freq_khz = SDMMC_FREQ_DEFAULT;
+
+    *slot_config = slot_cfg;
+    slot_config->width = 4;
+    slot_config->clk = kSdSdioClk;
+    slot_config->cmd = kSdSdioCmd;
+    slot_config->d0 = kSdSdioD0;
+    slot_config->d1 = kSdSdioD1;
+    slot_config->d2 = kSdSdioD2;
+    slot_config->d3 = kSdSdioD3;
+    slot_config->flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 }

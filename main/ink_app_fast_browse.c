@@ -13,8 +13,7 @@ static uint32_t fast_browse_step_size_from_hold_ms(uint32_t held_ms);
 static uint32_t fast_browse_step_interval_ms(uint32_t held_ms);
 static bool fast_browse_begin(ink_ui_model_t *model, ink_fast_browse_dir_t direction, uint32_t now_ms);
 static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t held_ms, uint32_t now_ms);
-static bool fast_browse_apply_step(ink_ui_model_t *model, const ink_button_snapshot_t *snapshot, uint32_t now_ms);
-static bool fast_browse_finish_pending(ink_ui_model_t *model);
+static bool fast_browse_cancel(ink_ui_model_t *model);
 static bool button_state_is_down(const ink_runtime_shell_button_state_t *buttons, ink_logical_button_t button);
 static bool app_fast_browse_state_self_test(void);
 
@@ -43,21 +42,14 @@ void ink_app_clear_fast_browse(ink_ui_model_t *model)
     if (model == NULL) {
         return;
     }
+    model->reader_hold_navigation_active = false;
     memset(&model->fast_browse, 0, sizeof(model->fast_browse));
 }
 
 static uint32_t fast_browse_step_size_from_hold_ms(uint32_t held_ms)
 {
-    if (held_ms < 5000U) {
-        return 1U;
-    }
-    if (held_ms < 10000U) {
-        return 5U;
-    }
-    if (held_ms < 20000U) {
-        return 10U;
-    }
-    return 20U;
+    (void)held_ms;
+    return 5U;
 }
 
 static uint32_t fast_browse_step_interval_ms(uint32_t held_ms)
@@ -82,7 +74,8 @@ static bool fast_browse_begin(ink_ui_model_t *model, ink_fast_browse_dir_t direc
     }
 
     model->fast_browse.active = true;
-    model->fast_browse.dirty = true;
+    model->fast_browse.overlay_mode = false;
+    model->fast_browse.dirty = false;
     model->fast_browse.origin_page = ink_app_reader_current_page(model);
     model->fast_browse.target_page = model->fast_browse.origin_page;
     model->fast_browse.visible_page = model->fast_browse.origin_page;
@@ -93,6 +86,7 @@ static bool fast_browse_begin(ink_ui_model_t *model, ink_fast_browse_dir_t direc
     model->fast_browse.direction = direction;
     model->fast_browse.hold_start_ms = now_ms;
     model->fast_browse.last_step_ms = now_ms;
+    model->reader_hold_navigation_active = true;
     ESP_LOGI(
         TAG,
         "fast browse begin page=%u total=%u dir=%s",
@@ -106,11 +100,9 @@ static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t 
 {
     const bool first_step = model != NULL
         && model->fast_browse.active
-        && model->fast_browse.target_page == model->fast_browse.origin_page
         && model->fast_browse.last_step_ms == model->fast_browse.hold_start_ms;
-    uint32_t step;
     uint32_t step_interval_ms;
-    size_t next_page;
+    bool dirty = false;
 
     if (model == NULL || !model->fast_browse.active || model->fast_browse.total_pages == 0U) {
         return false;
@@ -121,98 +113,60 @@ static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t 
         return false;
     }
 
-    step = fast_browse_step_size_from_hold_ms(held_ms);
-    next_page = model->fast_browse.target_page;
-    if (model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD) {
-        next_page = next_page + step >= model->fast_browse.total_pages
-            ? model->fast_browse.total_pages - 1U
-            : next_page + step;
-    } else {
-        next_page = step > next_page ? 0U : next_page - step;
+    model->fast_browse.last_step_ms = now_ms;
+    model->lab.auto_flip_stress_enabled = false;
+    for (uint32_t step = fast_browse_step_size_from_hold_ms(held_ms); step > 0U; --step) {
+        bool step_dirty;
+
+        if (model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD) {
+            step_dirty = ink_reader_session_next_page(&model->reader_session, &model->app_state);
+        } else {
+            step_dirty = ink_reader_session_previous_page(&model->reader_session, &model->app_state);
+        }
+
+        if (!step_dirty) {
+            break;
+        }
+        dirty = true;
     }
 
-    model->fast_browse.last_step_ms = now_ms;
-    if (next_page == model->fast_browse.target_page) {
+    if (!dirty) {
         return false;
     }
 
-    model->fast_browse.target_page = next_page;
-    model->fast_browse.dirty = true;
+    model->fast_browse.target_page = model->reader_session.current_page;
+    model->fast_browse.visible_page = model->reader_session.current_page;
+    model->fast_browse.has_visible_page = true;
+    (void)ink_app_persist_state(&model->app_state);
+    ink_reader_session_prefetch_next(&model->reader_session, NULL, NULL);
     ESP_LOGI(
         TAG,
-        "fast browse target page=%u held=%ums step=%u interval=%ums",
-        (unsigned)(next_page + 1U),
+        "reader hold turn page=%u held=%ums step=%u interval=%ums",
+        (unsigned)(model->reader_session.current_page + 1U),
         (unsigned)held_ms,
-        (unsigned)step,
+        (unsigned)fast_browse_step_size_from_hold_ms(held_ms),
         (unsigned)step_interval_ms);
     return true;
 }
 
-static bool fast_browse_apply_step(ink_ui_model_t *model, const ink_button_snapshot_t *snapshot, uint32_t now_ms)
+static bool fast_browse_cancel(ink_ui_model_t *model)
 {
-    uint32_t held_ms;
-
-    if (model == NULL || snapshot == NULL || !model->fast_browse.active || model->fast_browse.total_pages == 0U) {
-        return false;
-    }
-
-    held_ms = model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD
-        ? ink_button_snapshot_get_held_ms(snapshot, INK_LOGICAL_BUTTON_NAV_NEXT)
-        : ink_button_snapshot_get_held_ms(snapshot, INK_LOGICAL_BUTTON_NAV_PREVIOUS);
-    return fast_browse_apply_step_with_hold_ms(model, held_ms, now_ms);
-}
-
-static bool fast_browse_finish_pending(ink_ui_model_t *model)
-{
-    bool dirty = false;
-
     if (model == NULL || !model->fast_browse.active) {
         return false;
-    }
-
-    if (model->fast_browse.cancel_pending) {
-        ESP_LOGI(TAG, "fast browse cancel origin=%u", (unsigned)(model->fast_browse.origin_page + 1U));
-        ink_app_clear_fast_browse(model);
-        return true;
-    }
-
-    if (!model->fast_browse.commit_pending) {
-        return false;
-    }
-
-    if (model->fast_browse.target_page != model->fast_browse.origin_page) {
-        const size_t commit_page = model->fast_browse.target_page;
-        model->reader_fast_full_commit_pending = true;
-        if (ink_reader_session_is_xtc_active(&model->reader_session)) {
-            dirty = ink_reader_session_jump_to_page(
-                &model->reader_session,
-                commit_page,
-                &model->app_state);
-            if (dirty) {
-                (void)ink_app_persist_state(&model->app_state);
-            }
-        } else {
-            dirty = false;
-        }
-        model->fast_browse.target_page = commit_page;
-    } else {
-        dirty = true;
     }
 
     ESP_LOGI(
         TAG,
-        "fast browse commit target=%u visible=%u has_visible=%d ret=%d",
-        (unsigned)(model->fast_browse.target_page + 1U),
-        (unsigned)(model->fast_browse.visible_page + 1U),
-        model->fast_browse.has_visible_page ? 1 : 0,
-        dirty ? 1 : 0);
+        "reader hold stop page=%u origin=%u",
+        (unsigned)(model->reader_session.current_page + 1U),
+        (unsigned)(model->fast_browse.origin_page + 1U));
     ink_app_clear_fast_browse(model);
-    return dirty;
+    return true;
 }
 
 void ink_app_fast_browse_note_preview_landed(ink_ui_model_t *model)
 {
-    if (model == NULL || !model->fast_browse.active) {
+    if (model == NULL || !model->fast_browse.active || !model->fast_browse.overlay_mode) {
         return;
     }
 
@@ -259,45 +213,47 @@ bool ink_app_process_reader_xtc_buttons(
     uint32_t event_ms,
     ink_runtime_shell_command_t *command_out)
 {
-    ink_ui_model_t *model = &app->model;
-    bool dirty = false;
+    if (app == NULL) {
+        return false;
+    }
 
+    return ink_app_process_reader_xtc_buttons_for_model(
+        &app->model,
+        snapshot,
+        event_ms,
+        command_out);
+}
+
+bool ink_app_process_reader_xtc_buttons_for_model(
+    ink_ui_model_t *model,
+    const ink_button_snapshot_t *snapshot,
+    uint32_t event_ms,
+    ink_runtime_shell_command_t *command_out)
+{
     if (command_out != NULL) {
         *command_out = INK_RUNTIME_SHELL_COMMAND_NONE;
+    }
+    if (model == NULL) {
+        return false;
     }
 
     if (model->fast_browse.active) {
         const ink_logical_button_t dir_button = model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD
             ? INK_LOGICAL_BUTTON_NAV_NEXT
             : INK_LOGICAL_BUTTON_NAV_PREVIOUS;
-        const bool dir_down = ink_button_snapshot_is_pressed(snapshot, dir_button);
         if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_BACK)) {
-            model->fast_browse.cancel_pending = true;
-        } else if (dir_down) {
-            model->fast_browse.release_armed = true;
-            dirty |= fast_browse_apply_step(model, snapshot, event_ms);
-        } else if (model->fast_browse.release_armed
-            && ink_button_snapshot_was_released(snapshot, dir_button)) {
-            model->fast_browse.commit_pending = true;
-            model->fast_browse.release_armed = false;
+            return fast_browse_cancel(model);
+        } else if (ink_button_snapshot_was_released(snapshot, dir_button)) {
+            return fast_browse_cancel(model);
         }
-        dirty |= fast_browse_finish_pending(model);
-        return dirty;
+        return false;
     }
 
     if (model->reader_nav_pending) {
         const ink_logical_button_t pending_button = model->reader_nav_pending_dir == INK_FAST_BROWSE_DIR_FORWARD
             ? INK_LOGICAL_BUTTON_NAV_NEXT
             : INK_LOGICAL_BUTTON_NAV_PREVIOUS;
-        const uint32_t held_ms = ink_button_snapshot_get_held_ms(snapshot, pending_button);
-        if (ink_button_snapshot_is_pressed(snapshot, pending_button) && held_ms >= INK_FAST_BROWSE_ENTER_MS) {
-            model->reader_nav_pending = false;
-            model->reader_nav_pending_start_ms = 0U;
-            dirty |= fast_browse_begin(model, model->reader_nav_pending_dir, event_ms);
-            dirty |= fast_browse_apply_step(model, snapshot, event_ms);
-            return dirty;
-        }
-        if (ink_button_snapshot_was_released(snapshot, pending_button)) {
+        if (snapshot != NULL && ink_button_snapshot_was_released(snapshot, pending_button)) {
             model->reader_nav_pending = false;
             model->reader_nav_pending_start_ms = 0U;
             if (command_out != NULL) {
@@ -310,29 +266,51 @@ bool ink_app_process_reader_xtc_buttons(
         return false;
     }
 
-    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_NAV_PREVIOUS)) {
+    if (model->reader_confirm_pending) {
+        const uint32_t held_ms = snapshot != NULL
+            ? ink_button_snapshot_get_held_ms(snapshot, INK_LOGICAL_BUTTON_CONFIRM)
+            : 0U;
+        if (snapshot != NULL
+            && ink_button_snapshot_is_pressed(snapshot, INK_LOGICAL_BUTTON_CONFIRM)
+            && held_ms >= INK_READER_CONFIRM_LONG_PRESS_MS) {
+            model->reader_confirm_pending = false;
+            model->reader_confirm_pending_start_ms = 0U;
+            return ink_tuning_lab_request_reader_white_refresh(&model->lab);
+        }
+        if (snapshot != NULL
+            && ink_button_snapshot_was_released(snapshot, INK_LOGICAL_BUTTON_CONFIRM)) {
+            model->reader_confirm_pending = false;
+            model->reader_confirm_pending_start_ms = 0U;
+            if (command_out != NULL) {
+                *command_out = INK_RUNTIME_SHELL_COMMAND_CONFIRM;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    if (snapshot != NULL && ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_NAV_PREVIOUS)) {
         model->reader_nav_pending = true;
         model->reader_nav_pending_dir = INK_FAST_BROWSE_DIR_BACKWARD;
         model->reader_nav_pending_start_ms = event_ms;
         return false;
     }
-    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_NAV_NEXT)) {
+    if (snapshot != NULL && ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_NAV_NEXT)) {
         model->reader_nav_pending = true;
         model->reader_nav_pending_dir = INK_FAST_BROWSE_DIR_FORWARD;
         model->reader_nav_pending_start_ms = event_ms;
         return false;
     }
-    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_BACK)) {
+    if (snapshot != NULL && ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_BACK)) {
         if (command_out != NULL) {
             *command_out = INK_RUNTIME_SHELL_COMMAND_BACK;
         }
         return true;
     }
-    if (ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_CONFIRM)) {
-        if (command_out != NULL) {
-            *command_out = INK_RUNTIME_SHELL_COMMAND_CONFIRM;
-        }
-        return true;
+    if (snapshot != NULL && ink_button_snapshot_was_pressed(snapshot, INK_LOGICAL_BUTTON_CONFIRM)) {
+        model->reader_confirm_pending = true;
+        model->reader_confirm_pending_start_ms = event_ms;
+        return false;
     }
     return false;
 }
@@ -342,56 +320,101 @@ bool ink_app_fast_browse_handle_idle(
     uint32_t now_ms,
     ink_runtime_shell_command_t *command_out)
 {
-    ink_ui_model_t *model;
-
-    if (command_out != NULL) {
-        *command_out = INK_RUNTIME_SHELL_COMMAND_NONE;
-    }
     if (app == NULL) {
         return false;
     }
 
-    model = &app->model;
+    return ink_app_fast_browse_handle_idle_for_model(
+        &app->model,
+        &app->model.buttons,
+        now_ms,
+        command_out);
+}
+
+bool ink_app_fast_browse_handle_idle_for_model(
+    ink_ui_model_t *model,
+    const ink_runtime_shell_button_state_t *buttons,
+    uint32_t now_ms,
+    ink_runtime_shell_command_t *command_out)
+{
+    if (command_out != NULL) {
+        *command_out = INK_RUNTIME_SHELL_COMMAND_NONE;
+    }
+    if (model == NULL) {
+        return false;
+    }
+
     if (model->shell.page != INK_RUNTIME_SHELL_PAGE_READER
         || !ink_reader_session_is_xtc_active(&model->reader_session)) {
         return false;
     }
 
-    if (model->fast_browse.active) {
-        const ink_logical_button_t dir_button = model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD
-            ? INK_LOGICAL_BUTTON_NAV_NEXT
-            : INK_LOGICAL_BUTTON_NAV_PREVIOUS;
-        const bool dir_down = button_state_is_down(&model->buttons, dir_button);
-        bool dirty = false;
-
-        if (dir_down) {
-            const uint32_t held_ms = (uint32_t)(now_ms - model->fast_browse.hold_start_ms);
-            dirty |= fast_browse_apply_step_with_hold_ms(model, held_ms, now_ms);
-        } else if (model->fast_browse.release_armed) {
-            model->fast_browse.commit_pending = true;
-            model->fast_browse.release_armed = false;
-        }
-        dirty |= fast_browse_finish_pending(model);
-        return dirty;
-    }
-
-    if (model->reader_nav_pending
-        && model->reader_nav_pending_start_ms != 0U
-        && button_state_is_down(
-            &model->buttons,
-            model->reader_nav_pending_dir == INK_FAST_BROWSE_DIR_FORWARD
-                ? INK_LOGICAL_BUTTON_NAV_NEXT
-                : INK_LOGICAL_BUTTON_NAV_PREVIOUS)
-        && (uint32_t)(now_ms - model->reader_nav_pending_start_ms) >= INK_FAST_BROWSE_ENTER_MS) {
-        bool dirty;
-        model->reader_nav_pending = false;
-        model->reader_nav_pending_start_ms = 0U;
-        dirty = fast_browse_begin(model, model->reader_nav_pending_dir, now_ms);
-        dirty |= fast_browse_apply_step_with_hold_ms(model, 0U, now_ms);
-        return dirty;
+    if (model->reader_confirm_pending
+        && model->reader_confirm_pending_start_ms != 0U
+        && button_state_is_down(buttons, INK_LOGICAL_BUTTON_CONFIRM)
+        && (uint32_t)(now_ms - model->reader_confirm_pending_start_ms) >= INK_READER_CONFIRM_LONG_PRESS_MS) {
+        model->reader_confirm_pending = false;
+        model->reader_confirm_pending_start_ms = 0U;
+        return ink_tuning_lab_request_reader_white_refresh(&model->lab);
     }
 
     return false;
+}
+
+bool ink_app_drive_reader_nav_hold_for_model(
+    ink_ui_model_t *model,
+    const ink_runtime_shell_button_state_t *buttons,
+    bool display_idle,
+    uint32_t now_ms)
+{
+    ink_logical_button_t dir_button;
+
+    if (model == NULL
+        || buttons == NULL
+        || model->shell.page != INK_RUNTIME_SHELL_PAGE_READER
+        || !ink_reader_session_is_xtc_active(&model->reader_session)) {
+        return false;
+    }
+
+    if (model->fast_browse.active) {
+        dir_button = model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD
+            ? INK_LOGICAL_BUTTON_NAV_NEXT
+            : INK_LOGICAL_BUTTON_NAV_PREVIOUS;
+        if (!button_state_is_down(buttons, dir_button)) {
+            return fast_browse_cancel(model);
+        }
+        if (!display_idle) {
+            return false;
+        }
+        return fast_browse_apply_step_with_hold_ms(
+            model,
+            (uint32_t)(now_ms - model->fast_browse.hold_start_ms),
+            now_ms);
+    }
+
+    if (!model->reader_nav_pending || model->reader_nav_pending_start_ms == 0U) {
+        return false;
+    }
+
+    dir_button = model->reader_nav_pending_dir == INK_FAST_BROWSE_DIR_FORWARD
+        ? INK_LOGICAL_BUTTON_NAV_NEXT
+        : INK_LOGICAL_BUTTON_NAV_PREVIOUS;
+    if (!button_state_is_down(buttons, dir_button)) {
+        return false;
+    }
+    if ((uint32_t)(now_ms - model->reader_nav_pending_start_ms) < INK_FAST_BROWSE_ENTER_MS) {
+        return false;
+    }
+    if (!display_idle) {
+        return false;
+    }
+
+    model->reader_nav_pending = false;
+    model->reader_nav_pending_start_ms = 0U;
+    if (!fast_browse_begin(model, model->reader_nav_pending_dir, now_ms)) {
+        return false;
+    }
+    return fast_browse_apply_step_with_hold_ms(model, 0U, now_ms);
 }
 
 bool ink_app_fast_browse_self_test(void)
@@ -414,10 +437,10 @@ static bool app_fast_browse_state_self_test(void)
     if (!model.fast_browse.active || model.fast_browse.origin_page != 99U || model.fast_browse.target_page != 99U) {
         return false;
     }
-    if (fast_browse_step_size_from_hold_ms(200U) != 1U
+    if (fast_browse_step_size_from_hold_ms(200U) != 5U
         || fast_browse_step_size_from_hold_ms(7000U) != 5U
-        || fast_browse_step_size_from_hold_ms(15000U) != 10U
-        || fast_browse_step_size_from_hold_ms(25000U) != 20U) {
+        || fast_browse_step_size_from_hold_ms(15000U) != 5U
+        || fast_browse_step_size_from_hold_ms(25000U) != 5U) {
         return false;
     }
     if (fast_browse_step_interval_ms(200U) != 220U
@@ -426,32 +449,28 @@ static bool app_fast_browse_state_self_test(void)
         || fast_browse_step_interval_ms(25000U) != 110U) {
         return false;
     }
-    if (!fast_browse_apply_step_with_hold_ms(&model, 0U, 1200U) || model.fast_browse.target_page != 100U) {
+    if (!fast_browse_apply_step_with_hold_ms(&model, 0U, 1200U)
+        || model.fast_browse.target_page != 104U
+        || model.reader_session.current_page != 104U) {
         return false;
     }
     if (fast_browse_apply_step_with_hold_ms(&model, 100U, 1260U)) {
         return false;
     }
-    if (!fast_browse_apply_step_with_hold_ms(&model, 6000U, 1400U) || model.fast_browse.target_page != 105U) {
+    if (!fast_browse_apply_step_with_hold_ms(&model, 6000U, 1400U)
+        || model.fast_browse.target_page != 109U
+        || model.reader_session.current_page != 109U) {
         return false;
     }
-    model.fast_browse.release_armed = true;
-    ink_app_fast_browse_note_preview_landed(&model);
-    model.fast_browse.commit_pending = true;
-    if (!fast_browse_finish_pending(&model)
-        || model.reader_session.current_page != 105U
-        || !model.reader_fast_full_commit_pending) {
+    if (!fast_browse_cancel(&model) || model.fast_browse.active) {
         return false;
     }
     if (!fast_browse_begin(&model, INK_FAST_BROWSE_DIR_FORWARD, 2000U)) {
         return false;
     }
-    model.fast_browse.target_page = 132U;
-    model.fast_browse.visible_page = 130U;
-    model.fast_browse.has_visible_page = true;
-    model.fast_browse.commit_pending = true;
-    if (!fast_browse_finish_pending(&model)
-        || model.reader_session.current_page != 132U) {
+    model.buttons.is_down[INK_RUNTIME_SHELL_BUTTON_RIGHT] = true;
+    if (!ink_app_fast_browse_handle_idle_for_model(&model, &model.buttons, 2225U, NULL)
+        || model.reader_session.current_page != 114U) {
         return false;
     }
     ink_app_clear_fast_browse(&model);

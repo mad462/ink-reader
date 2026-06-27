@@ -49,8 +49,6 @@ typedef struct {
 
 typedef struct {
     ink_runtime_shell_page_t page;
-    bool can_resume_book;
-    bool resume_selected;
     bool full_refresh_requested;
     char last_event[INK_RUNTIME_SHELL_TEXT_LENGTH + 1];
     ink_runtime_shell_button_state_t buttons;
@@ -58,8 +56,6 @@ typedef struct {
 } ink_runtime_shell_t;
 
 void ink_runtime_shell_init(ink_runtime_shell_t *shell);
-bool ink_runtime_shell_set_resume_available(ink_runtime_shell_t *shell, bool available);
-bool ink_runtime_shell_is_resume_selected(const ink_runtime_shell_t *shell);
 bool ink_runtime_shell_handle_command(ink_runtime_shell_t *shell, ink_runtime_shell_command_t command);
 bool ink_runtime_shell_note_buttons(
     ink_runtime_shell_t *shell,

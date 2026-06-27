@@ -3,6 +3,7 @@
 #include <string.h>
 
 enum {
+    INK_XTC_HEADER_SIZE_LEGACY = 48,
     INK_XTC_HEADER_SIZE = 56,
     INK_XTC_METADATA_SIZE = 256,
     INK_XTC_CHAPTER_ENTRY_SIZE = 96,
@@ -10,6 +11,7 @@ enum {
     INK_XTC_MAGIC = 0x00435458UL,
     INK_XTCH_MAGIC = 0x48435458UL,
     INK_XTC_VERSION_SUPPORTED = 1,
+    INK_XTC_VERSION_SUPPORTED_LEGACY = 256,
 };
 
 static uint16_t read_le16(const uint8_t *p)
@@ -78,6 +80,8 @@ bool ink_xtc_parse_header_bytes(
     size_t length,
     ink_xtc_file_header_t *out)
 {
+    uint64_t header_size = INK_XTC_HEADER_SIZE;
+
     if (raw == NULL || out == NULL || length < INK_XTC_HEADER_SIZE) {
         return false;
     }
@@ -94,20 +98,35 @@ bool ink_xtc_parse_header_bytes(
     out->metadata_offset = read_le64(raw + 16);
     out->page_index_offset = read_le64(raw + 24);
     out->data_offset = read_le64(raw + 32);
-    out->thumbnail_offset = read_le64(raw + 40);
-    out->chapter_offset = read_le64(raw + 48);
-    out->is_hq_container = out->magic == INK_XTCH_MAGIC;
-
     if (out->magic != INK_XTC_MAGIC && out->magic != INK_XTCH_MAGIC) {
         return false;
     }
-    if (out->version != INK_XTC_VERSION_SUPPORTED) {
+    if (out->version != INK_XTC_VERSION_SUPPORTED
+        && out->version != INK_XTC_VERSION_SUPPORTED_LEGACY) {
         return false;
     }
+    out->is_hq_container = out->magic == INK_XTCH_MAGIC;
+
+    if (out->version == INK_XTC_VERSION_SUPPORTED_LEGACY) {
+        header_size = INK_XTC_HEADER_SIZE_LEGACY;
+        out->thumbnail_offset = read_le64(raw + 40);
+        out->chapter_offset = 0U;
+        if (out->has_chapters) {
+            if (out->has_metadata) {
+                out->chapter_offset = out->metadata_offset + INK_XTC_METADATA_SIZE;
+            } else {
+                out->chapter_offset = INK_XTC_HEADER_SIZE_LEGACY;
+            }
+        }
+    } else {
+        out->thumbnail_offset = read_le64(raw + 40);
+        out->chapter_offset = read_le64(raw + 48);
+    }
+
     if (out->page_count == 0U) {
         return false;
     }
-    if (out->page_index_offset < INK_XTC_HEADER_SIZE || out->data_offset <= out->page_index_offset) {
+    if (out->page_index_offset < header_size || out->data_offset <= out->page_index_offset) {
         return false;
     }
     {
@@ -120,7 +139,7 @@ bool ink_xtc_parse_header_bytes(
             return false;
         }
         if (out->has_metadata) {
-            if (out->metadata_offset < INK_XTC_HEADER_SIZE
+            if (out->metadata_offset < header_size
                 || !range_has_valid_end_u64(out->metadata_offset, INK_XTC_METADATA_SIZE, &metadata_end)
                 || metadata_end > out->page_index_offset) {
                 return false;
@@ -129,11 +148,14 @@ bool ink_xtc_parse_header_bytes(
             return false;
         }
         if (out->has_chapters) {
-            if (out->chapter_offset < INK_XTC_HEADER_SIZE
+            if (out->chapter_offset < header_size
                 || out->chapter_offset >= out->page_index_offset) {
                 return false;
             }
             if (out->has_metadata && out->chapter_offset < metadata_end) {
+                return false;
+            }
+            if (((out->page_index_offset - out->chapter_offset) % INK_XTC_CHAPTER_ENTRY_SIZE) != 0U) {
                 return false;
             }
             if (!range_has_valid_end_u64(out->chapter_offset, 0U, &chapter_end)) {
@@ -310,6 +332,18 @@ bool ink_xtc_reader_self_test(void)
         0, 0, 0, 0, 0, 0, 0, 0,
         0x38, 0x01, 0, 0, 0, 0, 0, 0
     };
+    static const uint8_t kGoodLegacyHeader[INK_XTC_HEADER_SIZE] = {
+        'X', 'T', 'C', 0,
+        0, 1,
+        3, 0,
+        0, 1, 0, 1,
+        1, 0, 0, 0,
+        0x30, 0, 0, 0, 0, 0, 0, 0,
+        0x98, 0x01, 0, 0, 0, 0, 0, 0,
+        0xC8, 0x01, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        'B', 'o', 'o', 'k', ' ', 'T', 'i', 't'
+    };
     static const uint8_t kGoodPageIndex[3 * INK_XTC_PAGE_INDEX_ENTRY_SIZE] = {
         0xC8, 0x01, 0, 0, 0, 0, 0, 0,
         0x76, 0xBB, 0, 0,
@@ -372,6 +406,16 @@ bool ink_xtc_reader_self_test(void)
         return false;
     }
     if (!header.is_hq_container || header.magic != INK_XTCH_MAGIC) {
+        return false;
+    }
+    if (!ink_xtc_parse_header_bytes(kGoodLegacyHeader, sizeof(kGoodLegacyHeader), &header)) {
+        return false;
+    }
+    if (header.version != INK_XTC_VERSION_SUPPORTED_LEGACY
+        || header.metadata_offset != 48U
+        || header.chapter_offset != 304U
+        || header.page_index_offset != 408U
+        || header.data_offset != 456U) {
         return false;
     }
     if (!ink_xtc_parse_metadata_bytes(kMetadata, sizeof(kMetadata), &metadata)) {

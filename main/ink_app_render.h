@@ -29,7 +29,19 @@ esp_err_t ink_app_render_display_request(
     const ink_display_request_t *request,
     epd_gdey0426t82_phase_t *phase_out
 );
+bool ink_app_render_reader_subsystem_model_fill_request(
+    const ink_ui_model_t *model,
+    uint32_t input_ms,
+    uint32_t command_latency_ms,
+    ink_display_request_t *request);
 bool ink_app_render_model_fill_request(
     const ink_app_render_model_t *model,
     ink_display_request_t *request);
+esp_err_t ink_app_render_gray_planes_request(
+    ink_app_context_t *app,
+    const uint8_t *lsb_plane,
+    size_t lsb_length,
+    const uint8_t *msb_plane,
+    size_t msb_length,
+    epd_gdey0426t82_phase_t *phase_out);
 bool ink_app_render_self_test(void);

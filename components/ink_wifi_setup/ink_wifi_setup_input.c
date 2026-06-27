@@ -43,6 +43,10 @@ enum {
     INK_WIFI_SETUP_DIRECTION_DOWN_RIGHT,
 };
 
+static bool test_keyboard_activation_updates_text_and_layer(void);
+static bool test_normalize_selection_wraps_and_clamps(void);
+static bool test_prepare_requests_from_selected_ap(void);
+
 static bool keyboard_direction_delta(int direction, int *dx, int *dy)
 {
     if (dx == NULL || dy == NULL) {
@@ -243,4 +247,84 @@ bool ink_wifi_setup_prepare_selected_saved_request(
     request->type = type;
     snprintf(request->ssid, sizeof(request->ssid), "%s", ap->ssid);
     return true;
+}
+
+static bool test_keyboard_activation_updates_text_and_layer(void)
+{
+    ink_wifi_setup_keyboard_text_t text = {0};
+    ink_wifi_setup_keyboard_layer_t layer = INK_WIFI_SETUP_KEYBOARD_LAYER_LOWER;
+
+    if (!ink_wifi_setup_keyboard_activate_label(&text, &layer, "a")
+        || strcmp(text.text, "a") != 0) {
+        return false;
+    }
+    if (!ink_wifi_setup_keyboard_activate_label(&text, &layer, "sp")
+        || strcmp(text.text, "a ") != 0) {
+        return false;
+    }
+    if (!ink_wifi_setup_keyboard_activate_label(&text, &layer, "ABC")
+        || layer != INK_WIFI_SETUP_KEYBOARD_LAYER_UPPER
+        || strcmp(text.text, "a ") != 0) {
+        return false;
+    }
+    if (!ink_wifi_setup_keyboard_activate_label(&text, &layer, "del")
+        || strcmp(text.text, "a") != 0) {
+        return false;
+    }
+    return ink_wifi_setup_keyboard_activate_label(&text, &layer, "clr")
+        && strcmp(text.text, "") == 0;
+}
+
+static bool test_normalize_selection_wraps_and_clamps(void)
+{
+    int column = 11;
+    int row = 2;
+
+    ink_wifi_setup_normalize_selection(&column, &row, INK_WIFI_SETUP_DIRECTION_RIGHT, 2);
+    if (column != 10 || row != 2) {
+        return false;
+    }
+
+    column = 3;
+    row = -1;
+    ink_wifi_setup_normalize_selection(&column, &row, INK_WIFI_SETUP_DIRECTION_UP, 0);
+    return row == INK_WIFI_SETUP_KEYBOARD_ROWS - 1
+        && column == 2;
+}
+
+static bool test_prepare_requests_from_selected_ap(void)
+{
+    wifi_setup_state_t state = {
+        .selected_index = 0,
+        .scan = {
+            .count = 1,
+            .results = {
+                {.ssid = "saved-ap", .saved = true},
+            },
+        },
+    };
+    ink_wifi_setup_keyboard_text_t text = {
+        .text = "secret",
+        .len = 6,
+    };
+    ink_wifi_setup_request_t request = {0};
+
+    if (!ink_wifi_setup_prepare_selected_connect_request(&text, &state, &request)
+        || request.type != INK_WIFI_SETUP_REQUEST_CONNECT_PASSWORD
+        || strcmp(request.ssid, "saved-ap") != 0
+        || strcmp(request.password, "secret") != 0) {
+        return false;
+    }
+
+    return ink_wifi_setup_prepare_selected_saved_request(
+               &state, INK_WIFI_SETUP_REQUEST_DELETE_SAVED, &request)
+        && request.type == INK_WIFI_SETUP_REQUEST_DELETE_SAVED
+        && strcmp(request.ssid, "saved-ap") == 0;
+}
+
+bool ink_wifi_setup_input_self_test(void)
+{
+    return test_keyboard_activation_updates_text_and_layer()
+        && test_normalize_selection_wraps_and_clamps()
+        && test_prepare_requests_from_selected_ap();
 }

@@ -2,24 +2,25 @@ idf_component_register(
     SRCS
         "app_main.c"
         "apps/ink_launcher_app.c"
+        "apps/ink_gray_cal_app.c"
+        "apps/ink_photo_album_app.c"
         "apps/ink_reader_app.c"
+        "apps/ink_usb_msc_app.c"
+        "apps/ink_wifi_setup_app.c"
         "ink_app_boot.c"
         "ink_app_display_request.c"
         "ink_app_fast_browse.c"
+        "ink_photo_bmp_parser.c"
+        "ink_photo_catalog.c"
         "ink_app_render.c"
         "ink_app_startup.c"
         "ink_system_services.c"
         "ink_system_runtime.c"
+        "ink_usb_msc_service.c"
         "ink_tuning_lab.c"
         "ink_app_ui.c"
-        "wifi_setup/ink_wifi_setup_state.c"
-        "wifi_setup/ink_wifi_setup_input.c"
-        "wifi_setup/ink_wifi_setup_render.c"
-        "test/test_ink_wifi_setup_state.c"
-        "test/test_ink_wifi_setup_render.c"
     INCLUDE_DIRS
         "."
-        "wifi_setup"
     REQUIRES
         esp_driver_sdmmc
         esp_timer
@@ -28,6 +29,7 @@ idf_component_register(
         ink_book_xtc
         ink_hw
         ink_net
-        unity
+        ink_wifi_setup
+        esp_tinyusb
         vfs
 )

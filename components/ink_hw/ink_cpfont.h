@@ -78,4 +78,21 @@ esp_err_t ink_cpfont_draw_text_bw_scaled(
     uint8_t scale_divisor,
     int *out_width_px
 );
+esp_err_t ink_cpfont_draw_text_bw_inverted(
+    ink_cpfont_t *font,
+    uint8_t *buffer,
+    int x,
+    int top_y,
+    const char *text,
+    int *out_width_px
+);
+esp_err_t ink_cpfont_draw_text_bw_scaled_inverted(
+    ink_cpfont_t *font,
+    uint8_t *buffer,
+    int x,
+    int top_y,
+    const char *text,
+    uint8_t scale_divisor,
+    int *out_width_px
+);
 bool ink_cpfont_self_test(void);

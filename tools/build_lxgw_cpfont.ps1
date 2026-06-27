@@ -1,5 +1,6 @@
 param(
     [string]$OutputDir = ".cache\fonts\LXGWWenKai",
+    [int]$Size = 18,
     [string]$SdDrive = ""
 )
 
@@ -28,7 +29,7 @@ try {
     & $python ".\fontconvert_sdcard.py" `
         $ttfPath `
         --intervals "ascii,cjk" `
-        --size 18 `
+        --size $Size `
         --style regular `
         --name LXGWWenKai `
         --output-dir $outDir
@@ -36,13 +37,13 @@ try {
     Pop-Location
 }
 
-$fontFile = Join-Path $outDir "LXGWWenKai_18.cpfont"
+$fontFile = Join-Path $outDir ("LXGWWenKai_{0}.cpfont" -f $Size)
 if ($SdDrive -ne "") {
     $sdRoot = $SdDrive.TrimEnd('\') + "\"
     if (Test-Path $sdRoot) {
         $targetDir = Join-Path $sdRoot "fonts"
         New-Item -ItemType Directory -Force $targetDir | Out-Null
-        Copy-Item -LiteralPath $fontFile -Destination (Join-Path $targetDir "LXGWWenKai_18.cpfont") -Force
+        Copy-Item -LiteralPath $fontFile -Destination (Join-Path $targetDir (Split-Path -Leaf $fontFile)) -Force
     } else {
         Write-Warning "SD drive not found: $sdRoot"
     }

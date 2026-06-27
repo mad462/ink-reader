@@ -28,10 +28,25 @@ bool ink_app_process_reader_xtc_buttons(
     const ink_button_snapshot_t *snapshot,
     uint32_t event_ms,
     ink_runtime_shell_command_t *command_out);
+bool ink_app_process_reader_xtc_buttons_for_model(
+    ink_ui_model_t *model,
+    const ink_button_snapshot_t *snapshot,
+    uint32_t event_ms,
+    ink_runtime_shell_command_t *command_out);
 bool ink_app_fast_browse_handle_idle(
     ink_app_context_t *app,
     uint32_t now_ms,
     ink_runtime_shell_command_t *command_out);
+bool ink_app_fast_browse_handle_idle_for_model(
+    ink_ui_model_t *model,
+    const ink_runtime_shell_button_state_t *buttons,
+    uint32_t now_ms,
+    ink_runtime_shell_command_t *command_out);
+bool ink_app_drive_reader_nav_hold_for_model(
+    ink_ui_model_t *model,
+    const ink_runtime_shell_button_state_t *buttons,
+    bool display_idle,
+    uint32_t now_ms);
 void ink_app_fast_browse_note_preview_landed(ink_ui_model_t *model);
 bool ink_app_advance_reader_auto_flip_stress(ink_ui_model_t *model);
 bool ink_app_should_auto_advance_grid_compare(const ink_ui_model_t *model, esp_err_t result);

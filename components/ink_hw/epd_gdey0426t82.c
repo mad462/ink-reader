@@ -7,6 +7,7 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_memory_utils.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,6 +26,7 @@ static spi_device_handle_t s_spi;
 static bool s_initialized;
 static uint8_t *s_shadow_framebuffer;
 static uint8_t *s_transfer_framebuffer;
+static uint8_t *s_spi_dma_bounce_buffer;
 
 typedef struct {
     bool active;
@@ -44,22 +46,22 @@ static epd_refresh_timing_t s_timing;
 static epd_gdey0426t82_refresh_control_t *s_active_control;
 
 static const uint8_t s_grayscale_lut[] = {
+    0x80, 0x48, 0x4A, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x0A, 0x48, 0x68, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x88, 0x48, 0x60, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xA8, 0x48, 0x45, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x54, 0x54, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0xAA, 0xA0, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0xA2, 0x22, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x01, 0x01, 0x01, 0x01, 0x00,
-    0x01, 0x01, 0x01, 0x01, 0x00,
-    0x01, 0x01, 0x01, 0x01, 0x00,
+    0x07, 0x1E, 0x1C, 0x02, 0x00,
+    0x05, 0x01, 0x05, 0x01, 0x02,
+    0x08, 0x01, 0x01, 0x04, 0x04,
+    0x00, 0x02, 0x01, 0x02, 0x02,
     0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00,
-    0x8F, 0x8F, 0x8F, 0x8F, 0x8F,
+    0x00, 0x00, 0x00, 0x00, 0x01,
+    0x22, 0x22, 0x22, 0x22, 0x22,
     0x17, 0x41, 0xA8, 0x32, 0x30,
     0x00, 0x00
 };
@@ -135,6 +137,7 @@ static esp_err_t epd_write_data(const uint8_t *data, size_t length);
 static esp_err_t epd_write_native_area(const uint8_t *native_buffer, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 static esp_err_t epd_wait_ready(const char *label);
 static esp_err_t epd_ensure_framebuffers(void);
+static esp_err_t epd_ensure_spi_dma_bounce_buffer(void);
 static void epd_reset(void);
 static void epd_convert_portrait_to_native_impl(const uint8_t *portrait, uint8_t *native);
 static void epd_convert_portrait_area_to_native(
@@ -166,10 +169,12 @@ static esp_err_t epd_align_portrait_area_to_native(
 );
 static esp_err_t epd_set_native_window(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 static esp_err_t epd_full_init_sequence(void);
+static esp_err_t epd_gray_init_sequence(void);
 static esp_err_t epd_partial_frame_prepare(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 static esp_err_t epd_load_custom_lut(const uint8_t *lut, size_t length);
 static esp_err_t epd_update_full(void);
 static esp_err_t epd_update_partial(void);
+static esp_err_t epd_update_gray4(void);
 static esp_err_t epd_update_fast_custom_lut(bool turn_off, const char *wait_label);
 static esp_err_t epd_update_partial_with_custom_lut(
     const uint8_t *lut,
@@ -340,6 +345,11 @@ static esp_err_t epd_write_data(const uint8_t *data, size_t length)
     }
 
     gpio_set_level(s_cfg.gpio_dc, 1);
+    ESP_RETURN_ON_ERROR(
+        epd_ensure_spi_dma_bounce_buffer(),
+        TAG,
+        "failed to allocate spi dma bounce buffer"
+    );
 
     for (size_t offset = 0; offset < length; offset += EPD_SPI_CHUNK_SIZE) {
         ESP_RETURN_ON_ERROR(
@@ -348,9 +358,16 @@ static esp_err_t epd_write_data(const uint8_t *data, size_t length)
             "refresh aborted before tx chunk"
         );
         const size_t chunk = ((length - offset) > EPD_SPI_CHUNK_SIZE) ? EPD_SPI_CHUNK_SIZE : (length - offset);
+        const uint8_t *tx_buffer = data + offset;
+
+        if (!esp_ptr_dma_capable(tx_buffer) || (((uintptr_t)tx_buffer & 0x03U) != 0U)) {
+            memcpy(s_spi_dma_bounce_buffer, tx_buffer, chunk);
+            tx_buffer = s_spi_dma_bounce_buffer;
+        }
+
         spi_transaction_t transaction = {
             .length = chunk * 8,
-            .tx_buffer = data + offset,
+            .tx_buffer = tx_buffer,
         };
         const int64_t start_us = esp_timer_get_time();
         esp_err_t ret = spi_device_polling_transmit(s_spi, &transaction);
@@ -450,6 +467,20 @@ static esp_err_t epd_ensure_framebuffers(void)
             return ESP_ERR_NO_MEM;
         }
         memset(s_transfer_framebuffer, 0xFF, EPD_NATIVE_BUFFER_SIZE);
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t epd_ensure_spi_dma_bounce_buffer(void)
+{
+    if (s_spi_dma_bounce_buffer == NULL) {
+        s_spi_dma_bounce_buffer = heap_caps_malloc(
+            EPD_SPI_CHUNK_SIZE,
+            MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (s_spi_dma_bounce_buffer == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
     }
 
     return ESP_OK;
@@ -636,6 +667,42 @@ static esp_err_t epd_full_init_sequence(void)
     return epd_wait_ready("init_done");
 }
 
+static esp_err_t epd_gray_init_sequence(void)
+{
+    epd_reset();
+
+    ESP_RETURN_ON_ERROR(epd_wait_ready("reset"), TAG, "panel not ready after reset");
+    ESP_RETURN_ON_ERROR(epd_write_command(0x12), TAG, "sw reset command failed");
+    ESP_RETURN_ON_ERROR(epd_wait_ready("sw_reset"), TAG, "panel not ready after sw reset");
+
+    ESP_RETURN_ON_ERROR(epd_write_command(0x0C), TAG, "cmd 0x0C failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0xAE), TAG, "data 0xAE failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0xC7), TAG, "data 0xC7 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0xC3), TAG, "data 0xC3 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0xC0), TAG, "data 0xC0 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0x80), TAG, "data 0x80 failed");
+
+    ESP_RETURN_ON_ERROR(epd_write_command(0x01), TAG, "cmd 0x01 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte((EPD_NATIVE_HEIGHT - 1) % 256), TAG, "data gate low failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte((EPD_NATIVE_HEIGHT - 1) / 256), TAG, "data gate high failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0x02), TAG, "data scan mode failed");
+
+    ESP_RETURN_ON_ERROR(epd_write_command(0x3C), TAG, "cmd 0x3C failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0x00), TAG, "gray border failed");
+
+    ESP_RETURN_ON_ERROR(epd_write_command(0x18), TAG, "cmd 0x18 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0x80), TAG, "data 0x18 failed");
+
+    ESP_RETURN_ON_ERROR(
+        epd_set_native_window(0, 0, EPD_NATIVE_WIDTH, EPD_NATIVE_HEIGHT),
+        TAG,
+        "failed to set full window"
+    );
+
+    ESP_RETURN_ON_ERROR(epd_load_custom_lut(s_grayscale_lut, sizeof(s_grayscale_lut)), TAG, "gray lut load failed");
+    return epd_wait_ready("gray_init_done");
+}
+
 static esp_err_t epd_partial_frame_prepare(uint16_t x, uint16_t y, uint16_t width, uint16_t height)
 {
     const bool reuse_partial_init =
@@ -672,6 +739,17 @@ static esp_err_t epd_update_partial(void)
     ESP_RETURN_ON_ERROR(epd_write_data_byte(0xFF), TAG, "partial update control failed");
     ESP_RETURN_ON_ERROR(epd_write_command(0x20), TAG, "partial cmd 0x20 failed");
     return epd_wait_ready("partial_update");
+}
+
+static esp_err_t epd_update_gray4(void)
+{
+    ESP_RETURN_ON_ERROR(epd_write_command(0x21), TAG, "gray cmd 0x21 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0x00), TAG, "gray ctrl1 byte0 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0x00), TAG, "gray ctrl1 byte1 failed");
+    ESP_RETURN_ON_ERROR(epd_write_command(0x22), TAG, "gray cmd 0x22 failed");
+    ESP_RETURN_ON_ERROR(epd_write_data_byte(0xC7), TAG, "gray update control failed");
+    ESP_RETURN_ON_ERROR(epd_write_command(0x20), TAG, "gray cmd 0x20 failed");
+    return epd_wait_ready("gray_update");
 }
 
 static esp_err_t epd_load_custom_lut(const uint8_t *lut, size_t length)
@@ -1029,19 +1107,10 @@ esp_err_t epd_gdey0426t82_gray_refresh(
     }
 
     phase_us = esp_timer_get_time();
-    ret = epd_full_init_sequence();
+    ret = epd_gray_init_sequence();
     s_timing.prepare_us += epd_elapsed_us_since(phase_us);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "gray init sequence failed");
-        goto done;
-    }
-
-    phase_us = esp_timer_get_time();
-    epd_convert_portrait_to_native_impl(lsb_buffer, s_transfer_framebuffer);
-    s_timing.convert_us += epd_elapsed_us_since(phase_us);
-    ret = epd_write_native_full(s_transfer_framebuffer, 0x24);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "gray lsb write failed");
         goto done;
     }
 
@@ -1050,18 +1119,21 @@ esp_err_t epd_gdey0426t82_gray_refresh(
     s_timing.convert_us += epd_elapsed_us_since(phase_us);
     ret = epd_write_native_full(s_transfer_framebuffer, 0x26);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "gray msb write failed");
-        goto done;
-    }
-
-    ret = epd_load_custom_lut(s_grayscale_lut, sizeof(s_grayscale_lut));
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "gray lut load failed");
+        ESP_LOGE(TAG, "gray previous-plane write failed");
         goto done;
     }
 
     phase_us = esp_timer_get_time();
-    ret = epd_update_fast_custom_lut(true, "gray_update");
+    epd_convert_portrait_to_native_impl(lsb_buffer, s_transfer_framebuffer);
+    s_timing.convert_us += epd_elapsed_us_since(phase_us);
+    ret = epd_write_native_full(s_transfer_framebuffer, 0x24);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "gray current-plane write failed");
+        goto done;
+    }
+
+    phase_us = esp_timer_get_time();
+    ret = epd_update_gray4();
     s_timing.update_us += epd_elapsed_us_since(phase_us);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "gray update failed");
