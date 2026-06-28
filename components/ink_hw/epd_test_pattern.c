@@ -143,7 +143,19 @@ static void epd_draw_text_maybe_font_scaled_inverted(
     int fallback_scale,
     uint8_t font_scale_divisor
 );
-static size_t epd_min_size(size_t a, size_t b);
+static void epd_draw_text_clipped_maybe_font_scaled(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int max_width_px,
+    int fallback_scale,
+    uint8_t font_scale_divisor,
+    bool inverted
+);
+static size_t epd_utf8_prefix_bytes_for_codepoints(const char *src, size_t codepoints);
+static size_t epd_utf8_tail_start_for_codepoints(const char *src, size_t codepoints);
 
 static uint32_t epd_hash_text(const char *text)
 {
@@ -192,6 +204,7 @@ void epd_test_pattern_truncate_text_middle(
     size_t max_chars)
 {
     size_t src_len = src != NULL ? strlen(src) : 0U;
+    size_t codepoint_count = 0U;
 
     if (dst == NULL || dst_size == 0U) {
         return;
@@ -200,13 +213,34 @@ void epd_test_pattern_truncate_text_middle(
         dst[0] = '\0';
         return;
     }
-    if (src_len <= max_chars) {
+
+    {
+        const char *cursor = src;
+
+        while (*cursor != '\0') {
+            size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
+            size_t actual_len = 0U;
+
+            while (actual_len < cp_len && cursor[actual_len] != '\0') {
+                ++actual_len;
+            }
+            if (actual_len == 0U) {
+                break;
+            }
+
+            ++codepoint_count;
+            cursor += actual_len;
+        }
+    }
+
+    if (codepoint_count <= max_chars) {
         snprintf(dst, dst_size, "%s", src);
         return;
     }
 
     if (max_chars <= 3U) {
-        snprintf(dst, dst_size, "%.*s", (int)epd_min_size(src_len, max_chars), src);
+        const size_t prefix_bytes = epd_utf8_prefix_bytes_for_codepoints(src, max_chars);
+        snprintf(dst, dst_size, "%.*s", (int)prefix_bytes, src);
         return;
     }
 
@@ -214,9 +248,10 @@ void epd_test_pattern_truncate_text_middle(
         const size_t visible_chars = max_chars - 3U;
         const size_t head = visible_chars / 2U + (visible_chars % 2U);
         const size_t tail = visible_chars / 2U;
-        const size_t tail_start = src_len > tail ? src_len - tail : 0U;
+        const size_t head_bytes = epd_utf8_prefix_bytes_for_codepoints(src, head);
+        const size_t tail_start = epd_utf8_tail_start_for_codepoints(src, tail);
 
-        snprintf(dst, dst_size, "%.*s...%s", (int)head, src, src + tail_start);
+        snprintf(dst, dst_size, "%.*s...%s", (int)head_bytes, src, src + tail_start);
     }
 }
 
@@ -278,6 +313,7 @@ void epd_test_pattern_draw_crosspoint_list_row(
     const char *line1 = row != NULL && row->line1 != NULL ? row->line1 : "";
     const char *line2 = row != NULL && row->line2 != NULL ? row->line2 : "";
     const int inner_x = resolved_layout->list_x + 12;
+    const int text_max_width = resolved_layout->row_w - 24;
 
     if (buffer == NULL) {
         return;
@@ -303,22 +339,76 @@ void epd_test_pattern_draw_crosspoint_list_row(
     }
 
     if (selected) {
-        epd_draw_text_maybe_font_scaled_inverted(buffer, title_font, inner_x, row_y + 10, title, 2, 1U);
+        epd_draw_text_clipped_maybe_font_scaled(
+            buffer,
+            title_font,
+            inner_x,
+            row_y + 10,
+            title,
+            text_max_width,
+            2,
+            1U,
+            true);
         if (line1[0] != '\0') {
-            epd_draw_text_maybe_font_scaled_inverted(buffer, meta_font, inner_x, row_y + 24, line1, 1, 1U);
+            epd_draw_text_clipped_maybe_font_scaled(
+                buffer,
+                meta_font,
+                inner_x,
+                row_y + 24,
+                line1,
+                text_max_width,
+                1,
+                1U,
+                true);
         }
         if (line2[0] != '\0') {
-            epd_draw_text_maybe_font_scaled_inverted(buffer, meta_font, inner_x, row_y + 36, line2, 1, 1U);
+            epd_draw_text_clipped_maybe_font_scaled(
+                buffer,
+                meta_font,
+                inner_x,
+                row_y + 36,
+                line2,
+                text_max_width,
+                1,
+                1U,
+                true);
         }
         return;
     }
 
-    epd_draw_text_maybe_font_scaled(buffer, title_font, inner_x, row_y + 10, title, 2, 1U);
+    epd_draw_text_clipped_maybe_font_scaled(
+        buffer,
+        title_font,
+        inner_x,
+        row_y + 10,
+        title,
+        text_max_width,
+        2,
+        1U,
+        false);
     if (line1[0] != '\0') {
-        epd_draw_text_maybe_font_scaled(buffer, meta_font, inner_x, row_y + 24, line1, 1, 1U);
+        epd_draw_text_clipped_maybe_font_scaled(
+            buffer,
+            meta_font,
+            inner_x,
+            row_y + 24,
+            line1,
+            text_max_width,
+            1,
+            1U,
+            false);
     }
     if (line2[0] != '\0') {
-        epd_draw_text_maybe_font_scaled(buffer, meta_font, inner_x, row_y + 36, line2, 1, 1U);
+        epd_draw_text_clipped_maybe_font_scaled(
+            buffer,
+            meta_font,
+            inner_x,
+            row_y + 36,
+            line2,
+            text_max_width,
+            1,
+            1U,
+            false);
     }
 }
 
@@ -535,9 +625,85 @@ static void draw_ui_text(
         font_scale_divisor);
 }
 
-static size_t epd_min_size(size_t a, size_t b)
+static size_t epd_utf8_prefix_bytes_for_codepoints(const char *src, size_t codepoints)
 {
-    return a < b ? a : b;
+    const char *cursor = src;
+    size_t count = 0U;
+
+    if (src == NULL) {
+        return 0U;
+    }
+
+    while (*cursor != '\0' && count < codepoints) {
+        const size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
+        size_t actual_len = 0U;
+
+        while (actual_len < cp_len && cursor[actual_len] != '\0') {
+            ++actual_len;
+        }
+        if (actual_len == 0U) {
+            break;
+        }
+
+        cursor += actual_len;
+        ++count;
+    }
+
+    return (size_t)(cursor - src);
+}
+
+static size_t epd_utf8_tail_start_for_codepoints(const char *src, size_t codepoints)
+{
+    const char *cursor = src;
+    const char *tail = src;
+    size_t total = 0U;
+    size_t keep_from = 0U;
+
+    if (src == NULL || codepoints == 0U) {
+        return src != NULL ? strlen(src) : 0U;
+    }
+
+    while (*cursor != '\0') {
+        const size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
+        size_t actual_len = 0U;
+
+        while (actual_len < cp_len && cursor[actual_len] != '\0') {
+            ++actual_len;
+        }
+        if (actual_len == 0U) {
+            break;
+        }
+
+        cursor += actual_len;
+        ++total;
+    }
+
+    keep_from = total > codepoints ? total - codepoints : 0U;
+    cursor = src;
+    total = 0U;
+
+    while (*cursor != '\0') {
+        const size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
+        size_t actual_len = 0U;
+
+        while (actual_len < cp_len && cursor[actual_len] != '\0') {
+            ++actual_len;
+        }
+        if (actual_len == 0U) {
+            break;
+        }
+
+        if (total == keep_from) {
+            tail = cursor;
+            break;
+        }
+
+        cursor += actual_len;
+        ++total;
+        tail = cursor;
+    }
+
+    return (size_t)(tail - src);
 }
 
 static int epd_measure_text_width_ascii(const char *text, int scale)

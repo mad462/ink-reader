@@ -53,10 +53,43 @@ void test_epd_ui_truncate_preserves_tail_text(void)
     TEST_ASSERT_NOT_EQUAL(0, strcmp(out, "crop_480x800_Ein...") != 0);
 }
 
+void test_epd_ui_truncate_utf8_keeps_codepoints_intact(void)
+{
+    char out[32];
+
+    epd_test_pattern_truncate_text_middle(
+        "图书馆书架上的相册封面预览页面",
+        out,
+        sizeof(out),
+        8);
+
+    TEST_ASSERT_NOT_NULL(strstr(out, "..."));
+    TEST_ASSERT_EQUAL(0, memcmp(out, "\xE5\x9B\xBE", 3));
+    TEST_ASSERT_EQUAL(0, strcmp(out + strlen(out) - 3, "\xE9\x9D\xA2"));
+    TEST_ASSERT_NULL(strstr(out, "\x80..."));
+}
+
 void test_epd_ui_list_geometry_has_dense_rows(void)
 {
     epd_test_pattern_list_layout_t layout = epd_test_pattern_crosspoint_list_layout();
 
     TEST_ASSERT_GREATER_THAN_INT(6, layout.visible_rows);
     TEST_ASSERT_LESS_THAN_INT(64, layout.row_h);
+}
+
+void test_epd_ui_list_row_helper_accepts_default_layout(void)
+{
+    epd_test_pattern_list_row_t row = {
+        .title = "Very long row title that should be clipped by the helper itself",
+        .line1 = "Metadata line one that also needs clipping",
+        .line2 = "Metadata line two that also needs clipping",
+        .selected = true,
+        .emphasized = true,
+    };
+
+    TEST_ASSERT_NOT_NULL(row.title);
+    TEST_ASSERT_NOT_NULL(row.line1);
+    TEST_ASSERT_NOT_NULL(row.line2);
+    TEST_ASSERT_TRUE(row.selected);
+    TEST_ASSERT_TRUE(row.emphasized);
 }
