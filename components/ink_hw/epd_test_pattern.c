@@ -154,8 +154,15 @@ static void epd_draw_text_clipped_maybe_font_scaled(
     uint8_t font_scale_divisor,
     bool inverted
 );
-static size_t epd_utf8_prefix_bytes_for_codepoints(const char *src, size_t codepoints);
 static size_t epd_utf8_tail_start_for_codepoints(const char *src, size_t codepoints);
+static size_t epd_utf8_append_codepoints(
+    char *dst,
+    size_t dst_size,
+    size_t offset,
+    const char *src,
+    size_t max_codepoints
+);
+static size_t epd_append_ascii_literal(char *dst, size_t dst_size, size_t offset, const char *text);
 
 static uint32_t epd_hash_text(const char *text)
 {
@@ -203,13 +210,12 @@ void epd_test_pattern_truncate_text_middle(
     size_t dst_size,
     size_t max_chars)
 {
-    size_t src_len = src != NULL ? strlen(src) : 0U;
     size_t codepoint_count = 0U;
 
     if (dst == NULL || dst_size == 0U) {
         return;
     }
-    if (src == NULL || src_len == 0U || max_chars == 0U) {
+    if (src == NULL || src[0] == '\0' || max_chars == 0U) {
         dst[0] = '\0';
         return;
     }
@@ -234,13 +240,12 @@ void epd_test_pattern_truncate_text_middle(
     }
 
     if (codepoint_count <= max_chars) {
-        snprintf(dst, dst_size, "%s", src);
+        epd_utf8_append_codepoints(dst, dst_size, 0U, src, codepoint_count);
         return;
     }
 
     if (max_chars <= 3U) {
-        const size_t prefix_bytes = epd_utf8_prefix_bytes_for_codepoints(src, max_chars);
-        snprintf(dst, dst_size, "%.*s", (int)prefix_bytes, src);
+        epd_utf8_append_codepoints(dst, dst_size, 0U, src, max_chars);
         return;
     }
 
@@ -248,10 +253,12 @@ void epd_test_pattern_truncate_text_middle(
         const size_t visible_chars = max_chars - 3U;
         const size_t head = visible_chars / 2U + (visible_chars % 2U);
         const size_t tail = visible_chars / 2U;
-        const size_t head_bytes = epd_utf8_prefix_bytes_for_codepoints(src, head);
         const size_t tail_start = epd_utf8_tail_start_for_codepoints(src, tail);
+        size_t offset = 0U;
 
-        snprintf(dst, dst_size, "%.*s...%s", (int)head_bytes, src, src + tail_start);
+        offset = epd_utf8_append_codepoints(dst, dst_size, offset, src, head);
+        offset = epd_append_ascii_literal(dst, dst_size, offset, "...");
+        epd_utf8_append_codepoints(dst, dst_size, offset, src + tail_start, tail);
     }
 }
 
@@ -625,33 +632,6 @@ static void draw_ui_text(
         font_scale_divisor);
 }
 
-static size_t epd_utf8_prefix_bytes_for_codepoints(const char *src, size_t codepoints)
-{
-    const char *cursor = src;
-    size_t count = 0U;
-
-    if (src == NULL) {
-        return 0U;
-    }
-
-    while (*cursor != '\0' && count < codepoints) {
-        const size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
-        size_t actual_len = 0U;
-
-        while (actual_len < cp_len && cursor[actual_len] != '\0') {
-            ++actual_len;
-        }
-        if (actual_len == 0U) {
-            break;
-        }
-
-        cursor += actual_len;
-        ++count;
-    }
-
-    return (size_t)(cursor - src);
-}
-
 static size_t epd_utf8_tail_start_for_codepoints(const char *src, size_t codepoints)
 {
     const char *cursor = src;
@@ -704,6 +684,58 @@ static size_t epd_utf8_tail_start_for_codepoints(const char *src, size_t codepoi
     }
 
     return (size_t)(tail - src);
+}
+
+static size_t epd_utf8_append_codepoints(
+    char *dst,
+    size_t dst_size,
+    size_t offset,
+    const char *src,
+    size_t max_codepoints)
+{
+    size_t appended = 0U;
+    const char *cursor = src;
+
+    if (dst == NULL || dst_size == 0U || offset >= dst_size || src == NULL) {
+        return offset;
+    }
+
+    while (*cursor != '\0' && appended < max_codepoints) {
+        const size_t cp_len = epd_utf8_codepoint_length((unsigned char)*cursor);
+        size_t actual_len = 0U;
+
+        while (actual_len < cp_len && cursor[actual_len] != '\0') {
+            ++actual_len;
+        }
+        if (actual_len == 0U || offset + actual_len >= dst_size) {
+            break;
+        }
+
+        memcpy(dst + offset, cursor, actual_len);
+        offset += actual_len;
+        dst[offset] = '\0';
+        cursor += actual_len;
+        ++appended;
+    }
+
+    return offset;
+}
+
+static size_t epd_append_ascii_literal(char *dst, size_t dst_size, size_t offset, const char *text)
+{
+    size_t literal_len = text != NULL ? strlen(text) : 0U;
+
+    if (dst == NULL || dst_size == 0U || text == NULL) {
+        return offset;
+    }
+    if (offset + literal_len >= dst_size) {
+        return offset;
+    }
+
+    memcpy(dst + offset, text, literal_len);
+    offset += literal_len;
+    dst[offset] = '\0';
+    return offset;
 }
 
 static int epd_measure_text_width_ascii(const char *text, int scale)
