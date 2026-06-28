@@ -38,6 +38,21 @@ void test_epd_ui_truncate_adds_ellipsis_for_long_text(void)
     TEST_ASSERT_NOT_EQUAL(0, strstr(out, "...") != NULL);
 }
 
+void test_epd_ui_truncate_preserves_tail_text(void)
+{
+    char out[24];
+
+    epd_test_pattern_truncate_text_middle(
+        "crop_480x800_Eink-4Gray_atkinson_serpentine_indexed4_1782481618665",
+        out,
+        sizeof(out),
+        18);
+
+    TEST_ASSERT_NOT_NULL(strstr(out, "..."));
+    TEST_ASSERT_EQUAL_CHAR('5', out[strlen(out) - 1]);
+    TEST_ASSERT_NOT_EQUAL(0, strcmp(out, "crop_480x800_Ein...") != 0);
+}
+
 void test_epd_ui_list_geometry_has_dense_rows(void)
 {
     epd_test_pattern_list_layout_t layout = epd_test_pattern_crosspoint_list_layout();

@@ -125,6 +125,25 @@ static void epd_draw_text_right_aligned_maybe_font_scaled(
     int fallback_scale,
     uint8_t font_scale_divisor
 );
+static void epd_draw_text_maybe_font_scaled(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor
+);
+static void epd_draw_text_maybe_font_scaled_inverted(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor
+);
+static size_t epd_min_size(size_t a, size_t b);
 
 static uint32_t epd_hash_text(const char *text)
 {
@@ -186,9 +205,18 @@ void epd_test_pattern_truncate_text_middle(
         return;
     }
 
+    if (max_chars <= 3U) {
+        snprintf(dst, dst_size, "%.*s", (int)epd_min_size(src_len, max_chars), src);
+        return;
+    }
+
     {
-        const size_t head = max_chars > 3U ? max_chars - 3U : max_chars;
-        snprintf(dst, dst_size, "%.*s...", (int)head, src);
+        const size_t visible_chars = max_chars - 3U;
+        const size_t head = visible_chars / 2U + (visible_chars % 2U);
+        const size_t tail = visible_chars / 2U;
+        const size_t tail_start = src_len > tail ? src_len - tail : 0U;
+
+        snprintf(dst, dst_size, "%.*s...%s", (int)head, src, src + tail_start);
     }
 }
 
@@ -231,6 +259,67 @@ void epd_test_pattern_draw_crosspoint_header(
         EPD_GDEY0426T82_WIDTH - layout.gutter_x * 2,
         1,
         true);
+}
+
+void epd_test_pattern_draw_crosspoint_list_row(
+    uint8_t *buffer,
+    const epd_test_pattern_list_layout_t *layout,
+    size_t row_index,
+    const epd_test_pattern_list_row_t *row,
+    const ink_cpfont_t *title_font,
+    const ink_cpfont_t *meta_font)
+{
+    epd_test_pattern_list_layout_t fallback_layout = epd_test_pattern_crosspoint_list_layout();
+    const epd_test_pattern_list_layout_t *resolved_layout = layout != NULL ? layout : &fallback_layout;
+    const int row_y = resolved_layout->list_y + (int)row_index * (resolved_layout->row_h + resolved_layout->row_gap);
+    const bool selected = row != NULL && row->selected;
+    const bool emphasized = row != NULL && row->emphasized;
+    const char *title = row != NULL && row->title != NULL ? row->title : "";
+    const char *line1 = row != NULL && row->line1 != NULL ? row->line1 : "";
+    const char *line2 = row != NULL && row->line2 != NULL ? row->line2 : "";
+    const int inner_x = resolved_layout->list_x + 12;
+
+    if (buffer == NULL) {
+        return;
+    }
+
+    if (selected) {
+        fill_rect(
+            buffer,
+            resolved_layout->list_x,
+            row_y,
+            resolved_layout->row_w,
+            resolved_layout->row_h,
+            true);
+    } else if (emphasized) {
+        fill_rect(buffer, resolved_layout->list_x, row_y, resolved_layout->row_w, 1, true);
+        fill_rect(
+            buffer,
+            resolved_layout->list_x,
+            row_y + resolved_layout->row_h - 1,
+            resolved_layout->row_w,
+            1,
+            true);
+    }
+
+    if (selected) {
+        epd_draw_text_maybe_font_scaled_inverted(buffer, title_font, inner_x, row_y + 10, title, 2, 1U);
+        if (line1[0] != '\0') {
+            epd_draw_text_maybe_font_scaled_inverted(buffer, meta_font, inner_x, row_y + 24, line1, 1, 1U);
+        }
+        if (line2[0] != '\0') {
+            epd_draw_text_maybe_font_scaled_inverted(buffer, meta_font, inner_x, row_y + 36, line2, 1, 1U);
+        }
+        return;
+    }
+
+    epd_draw_text_maybe_font_scaled(buffer, title_font, inner_x, row_y + 10, title, 2, 1U);
+    if (line1[0] != '\0') {
+        epd_draw_text_maybe_font_scaled(buffer, meta_font, inner_x, row_y + 24, line1, 1, 1U);
+    }
+    if (line2[0] != '\0') {
+        epd_draw_text_maybe_font_scaled(buffer, meta_font, inner_x, row_y + 36, line2, 1, 1U);
+    }
 }
 
 static char epd_normalize_glyph_char(char c)
@@ -444,6 +533,11 @@ static void draw_ui_text(
         text != NULL ? text : "",
         fallback_scale,
         font_scale_divisor);
+}
+
+static size_t epd_min_size(size_t a, size_t b)
+{
+    return a < b ? a : b;
 }
 
 static int epd_measure_text_width_ascii(const char *text, int scale)

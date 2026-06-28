@@ -102,6 +102,14 @@ void epd_test_pattern_draw_crosspoint_header(
     uint8_t *buffer,
     const epd_test_pattern_header_spec_t *spec
 );
+void epd_test_pattern_draw_crosspoint_list_row(
+    uint8_t *buffer,
+    const epd_test_pattern_list_layout_t *layout,
+    size_t row_index,
+    const epd_test_pattern_list_row_t *row,
+    const ink_cpfont_t *title_font,
+    const ink_cpfont_t *meta_font
+);
 
 void epd_test_pattern_fill_stripes(uint8_t *buffer, size_t length);
 void epd_test_pattern_fill_layout(uint8_t *buffer, size_t length);
