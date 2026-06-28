@@ -1,6 +1,7 @@
 #include "epd_test_pattern.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -104,6 +105,26 @@ static const int s_reader_line_y[READER_SUBLINE_COUNT] = {
 };
 
 static size_t epd_utf8_codepoint_length(unsigned char lead);
+static void draw_ui_text(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor,
+    bool right_aligned
+);
+static void fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool black);
+static void epd_draw_text_right_aligned_maybe_font_scaled(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int right_edge_x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor
+);
 
 static uint32_t epd_hash_text(const char *text)
 {
@@ -116,6 +137,100 @@ static uint32_t epd_hash_text(const char *text)
         hash = ((hash << 5) + hash) ^ (uint32_t)(*p);
     }
     return hash;
+}
+
+epd_test_pattern_header_layout_t epd_test_pattern_crosspoint_header_layout(void)
+{
+    epd_test_pattern_header_layout_t layout = {
+        .header_h = 68,
+        .gutter_x = 24,
+        .title_y = 24,
+        .meta_y = 28,
+        .divider_y = 66,
+    };
+
+    return layout;
+}
+
+epd_test_pattern_list_layout_t epd_test_pattern_crosspoint_list_layout(void)
+{
+    epd_test_pattern_list_layout_t layout = {
+        .list_x = 24,
+        .list_y = 84,
+        .row_w = EPD_GDEY0426T82_WIDTH - 48,
+        .row_h = 48,
+        .row_gap = 6,
+        .visible_rows = 10,
+    };
+
+    return layout;
+}
+
+void epd_test_pattern_truncate_text_middle(
+    const char *src,
+    char *dst,
+    size_t dst_size,
+    size_t max_chars)
+{
+    size_t src_len = src != NULL ? strlen(src) : 0U;
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+    if (src == NULL || src_len == 0U || max_chars == 0U) {
+        dst[0] = '\0';
+        return;
+    }
+    if (src_len <= max_chars) {
+        snprintf(dst, dst_size, "%s", src);
+        return;
+    }
+
+    {
+        const size_t head = max_chars > 3U ? max_chars - 3U : max_chars;
+        snprintf(dst, dst_size, "%.*s...", (int)head, src);
+    }
+}
+
+void epd_test_pattern_draw_crosspoint_header(
+    uint8_t *buffer,
+    const epd_test_pattern_header_spec_t *spec)
+{
+    const char *title = "";
+    const char *meta = "";
+    const ink_cpfont_t *title_font = NULL;
+    const ink_cpfont_t *meta_font = NULL;
+    epd_test_pattern_header_layout_t layout = epd_test_pattern_crosspoint_header_layout();
+
+    if (buffer == NULL) {
+        return;
+    }
+    if (spec != NULL) {
+        title = spec->title != NULL ? spec->title : "";
+        meta = spec->meta != NULL ? spec->meta : "";
+        title_font = spec->title_font;
+        meta_font = spec->meta_font;
+    }
+
+    draw_ui_text(buffer, title_font, layout.gutter_x, layout.title_y, title, 2, 1U, false);
+    if (meta[0] != '\0') {
+        draw_ui_text(
+            buffer,
+            meta_font,
+            EPD_GDEY0426T82_WIDTH - 96,
+            layout.meta_y,
+            meta,
+            2,
+            1U,
+            true);
+    }
+    fill_rect(
+        buffer,
+        layout.gutter_x,
+        layout.divider_y,
+        EPD_GDEY0426T82_WIDTH - layout.gutter_x * 2,
+        1,
+        true);
 }
 
 static char epd_normalize_glyph_char(char c)
@@ -178,6 +293,11 @@ static void epd_fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool blac
             epd_set_pixel(buffer, xx, yy, black);
         }
     }
+}
+
+static void fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool black)
+{
+    epd_fill_rect(buffer, x, y, w, h, black);
 }
 
 static void epd_draw_glyph(uint8_t *buffer, int x, int y, char c, int scale)
@@ -292,6 +412,38 @@ static void epd_draw_text_maybe_font_scaled_inverted(
     }
 
     epd_draw_text(buffer, x, y, text, fallback_scale);
+}
+
+static void draw_ui_text(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    int fallback_scale,
+    uint8_t font_scale_divisor,
+    bool right_aligned)
+{
+    if (right_aligned) {
+        epd_draw_text_right_aligned_maybe_font_scaled(
+            buffer,
+            font,
+            x,
+            y,
+            text != NULL ? text : "",
+            fallback_scale,
+            font_scale_divisor);
+        return;
+    }
+
+    epd_draw_text_maybe_font_scaled(
+        buffer,
+        font,
+        x,
+        y,
+        text != NULL ? text : "",
+        fallback_scale,
+        font_scale_divisor);
 }
 
 static int epd_measure_text_width_ascii(const char *text, int scale)

@@ -13,6 +13,45 @@
 
 typedef bool (*epd_test_pattern_should_abort_fn)(void *ctx);
 
+typedef struct {
+    int x;
+    int y;
+    int w;
+    int h;
+} epd_test_pattern_rect_t;
+
+typedef struct {
+    int header_h;
+    int gutter_x;
+    int title_y;
+    int meta_y;
+    int divider_y;
+} epd_test_pattern_header_layout_t;
+
+typedef struct {
+    int list_x;
+    int list_y;
+    int row_w;
+    int row_h;
+    int row_gap;
+    int visible_rows;
+} epd_test_pattern_list_layout_t;
+
+typedef struct {
+    const char *title;
+    const char *meta;
+    const ink_cpfont_t *title_font;
+    const ink_cpfont_t *meta_font;
+} epd_test_pattern_header_spec_t;
+
+typedef struct {
+    const char *title;
+    const char *line1;
+    const char *line2;
+    bool selected;
+    bool emphasized;
+} epd_test_pattern_list_row_t;
+
 #define EPD_TEST_PATTERN_MENU_TAB_CAPACITY 3
 #define EPD_TEST_PATTERN_MENU_CARD_CAPACITY 8
 #define EPD_TEST_PATTERN_MENU_ACTION_CAPACITY 3
@@ -50,6 +89,19 @@ typedef struct {
     size_t action_count;
     epd_test_pattern_menu_action_t actions[EPD_TEST_PATTERN_MENU_ACTION_CAPACITY];
 } epd_test_pattern_reader_menu_overlay_t;
+
+epd_test_pattern_header_layout_t epd_test_pattern_crosspoint_header_layout(void);
+epd_test_pattern_list_layout_t epd_test_pattern_crosspoint_list_layout(void);
+void epd_test_pattern_truncate_text_middle(
+    const char *src,
+    char *dst,
+    size_t dst_size,
+    size_t max_chars
+);
+void epd_test_pattern_draw_crosspoint_header(
+    uint8_t *buffer,
+    const epd_test_pattern_header_spec_t *spec
+);
 
 void epd_test_pattern_fill_stripes(uint8_t *buffer, size_t length);
 void epd_test_pattern_fill_layout(uint8_t *buffer, size_t length);
