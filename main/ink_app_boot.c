@@ -44,11 +44,6 @@ static const char *kMenuFontPaths[] = {
     "/sdcard/.fonts/SmallSimSun/SmallSimSunEmbedded_16.cpfont",
 };
 static const char *kFooterFontPaths[] = {
-    "/sdcard/.fonts/LXGWWenKai/LXGWWenKai_18.cpfont",
-    "/sdcard/fonts/LXGWWenKai_18.cpfont",
-    "/sdcard/FONTS/LXGWWENKAI_18.CPFONT",
-    "/sdcard/fonts/NotoSansSC_18.cpfont",
-    "/sdcard/.fonts/NotoSansSC/NotoSansSC_18.cpfont",
     "/sdcard/fonts/SmallSimSunEmbedded_16.cpfont",
     "/sdcard/.fonts/SmallSimSun/SmallSimSunEmbedded_16.cpfont",
     "/sdcard/FONTS/SMALLSIMSUNEMBEDDED_16.CPFONT",
@@ -61,6 +56,11 @@ static const char *kFooterFontPaths[] = {
     "/sdcard/FONTS/LXGWWENKAI_16.CPFONT",
     "/sdcard/fonts/NotoSansSC_16.cpfont",
     "/sdcard/.fonts/NotoSansSC/NotoSansSC_16.cpfont",
+    "/sdcard/.fonts/LXGWWenKai/LXGWWenKai_18.cpfont",
+    "/sdcard/fonts/LXGWWenKai_18.cpfont",
+    "/sdcard/FONTS/LXGWWENKAI_18.CPFONT",
+    "/sdcard/fonts/NotoSansSC_18.cpfont",
+    "/sdcard/.fonts/NotoSansSC/NotoSansSC_18.cpfont",
 };
 static const char *kReaderFontDirs[] = {
     "/sdcard/fonts",

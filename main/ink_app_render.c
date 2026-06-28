@@ -173,6 +173,7 @@ static bool app_render_request_photo_album_interrupt_self_test(void);
 static const ink_cpfont_t *select_page_font(const ink_system_services_t *services);
 static const ink_cpfont_t *select_footer_font(const ink_system_services_t *services);
 static const ink_cpfont_t *select_menu_font(const ink_system_services_t *services);
+static const ink_cpfont_t *select_small_text_font(const ink_system_services_t *services);
 
 static const ink_cpfont_t *select_page_font(const ink_system_services_t *services)
 {
@@ -221,6 +222,23 @@ static const ink_cpfont_t *select_menu_font(const ink_system_services_t *service
     }
     if (ink_cpfont_is_loaded(&services->footer_font)) {
         return &services->footer_font;
+    }
+    return NULL;
+}
+
+static const ink_cpfont_t *select_small_text_font(const ink_system_services_t *services)
+{
+    if (services == NULL) {
+        return NULL;
+    }
+    if (ink_cpfont_is_loaded(&services->footer_font)) {
+        return &services->footer_font;
+    }
+    if (ink_cpfont_is_loaded(&services->reader_font)) {
+        return &services->reader_font;
+    }
+    if (ink_cpfont_is_loaded(&services->menu_font)) {
+        return &services->menu_font;
     }
     return NULL;
 }
@@ -652,12 +670,12 @@ static void fill_photo_album_page(
     size_t length,
     const ink_photo_album_render_state_t *render_state)
 {
-    const ink_photo_album_app_state_t *state = render_state != NULL ? render_state->state : NULL;
-    const ink_cpfont_t *footer_font = render_state != NULL
-        ? (const ink_cpfont_t *)render_state->footer_font
-        : NULL;
-    const ink_cpfont_t *menu_font = render_state != NULL
+    const ink_cpfont_t *page_font = render_state != NULL
         ? (const ink_cpfont_t *)render_state->menu_font
+        : NULL;
+    const ink_photo_album_app_state_t *state = render_state != NULL ? render_state->state : NULL;
+    const ink_cpfont_t *small_text_font = render_state != NULL
+        ? (const ink_cpfont_t *)render_state->footer_font
         : NULL;
 
     if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
@@ -671,14 +689,14 @@ static void fill_photo_album_page(
     }
 
     if (state->view_mode == INK_PHOTO_ALBUM_VIEW_LIST) {
-        draw_photo_album_list_page(buffer, length, render_state, menu_font, footer_font);
+        draw_photo_album_list_page(buffer, length, render_state, page_font, small_text_font);
         return;
     }
 
     epd_test_pattern_fill_text_page_with_font(
         buffer,
         length,
-        menu_font,
+        page_font,
         NULL,
         NULL,
         "Photos",
@@ -690,7 +708,7 @@ static void fill_photo_album_page(
     epd_test_pattern_draw_footer_overlay(
         buffer,
         length,
-        footer_font,
+        small_text_font,
         state->current_name,
         state->total_count > 0U ? "PREVIEW" : "");
 }
@@ -2789,6 +2807,9 @@ static bool app_overlay_menu_font_selection_self_test(void)
     if (select_page_font(&services) != &services.reader_font) {
         return false;
     }
+    if (select_small_text_font(&services) != &services.footer_font) {
+        return false;
+    }
     if (select_footer_font(&services) != &services.footer_font) {
         return false;
     }
@@ -2797,11 +2818,20 @@ static bool app_overlay_menu_font_selection_self_test(void)
     if (select_menu_font(&services) != &services.reader_font) {
         return false;
     }
+    if (select_small_text_font(&services) != &services.footer_font) {
+        return false;
+    }
+
+    services.footer_font.loaded = false;
+    if (select_small_text_font(&services) != &services.reader_font) {
+        return false;
+    }
 
     services.reader_font.loaded = false;
-    return select_menu_font(&services) == &services.footer_font
-        && select_page_font(&services) == &services.footer_font
-        && select_footer_font(&services) == &services.footer_font;
+    return select_menu_font(&services) == &services.menu_font
+        && select_page_font(&services) == &services.menu_font
+        && select_footer_font(&services) == &services.menu_font
+        && select_small_text_font(&services) == &services.menu_font;
 }
 
 static bool app_render_model_wifi_setup_self_test(void)
@@ -2850,6 +2880,7 @@ static bool app_render_model_photo_album_self_test(void)
     snprintf(state.status_text, sizeof(state.status_text), "%s", "3/24");
     render_state.state = &state;
     model.mode = INK_APP_RENDER_MODE_PHOTO_ALBUM;
+    model.refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL;
     model.state = &render_state;
 
     ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
@@ -2959,6 +2990,7 @@ static bool app_render_request_self_test(void)
 
     memset(&model, 0, sizeof(model));
     model.mode = INK_APP_RENDER_MODE_LAUNCHER;
+    model.refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST;
     model.request_full_refresh = true;
     model.request_partial_refresh = false;
     model.state = (void *)0x1234U;
@@ -2969,6 +3001,7 @@ static bool app_render_request_self_test(void)
 
     return request.use_app_render_model
         && request.full_refresh
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST
         && request.refresh_profile == INK_TUNING_REFRESH_FULL
         && !request.app_request_partial_refresh
         && request.app_render_mode == (uint8_t)INK_APP_RENDER_MODE_LAUNCHER
@@ -2983,6 +3016,7 @@ static bool app_render_request_photo_album_interrupt_self_test(void)
     memset(&model, 0, sizeof(model));
     memset(&request, 0, sizeof(request));
     model.mode = INK_APP_RENDER_MODE_PHOTO_ALBUM;
+    model.refresh_strategy = INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE;
     model.request_aggressive_interrupt = true;
     model.state = (void *)0x5678U;
 
@@ -2991,6 +3025,7 @@ static bool app_render_request_photo_album_interrupt_self_test(void)
     }
 
     return request.use_app_render_model
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE
         && request.use_aggressive_interrupt
         && !request.use_reader_hold_navigation
         && !request.full_refresh
