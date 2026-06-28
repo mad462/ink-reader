@@ -87,6 +87,24 @@ void test_epd_ui_truncate_utf8_stays_valid_in_tight_buffer(void)
     TEST_ASSERT_NULL(strstr(out, "\xA6..."));
 }
 
+void test_epd_ui_truncate_returns_empty_string_for_one_byte_buffer(void)
+{
+    char out[1] = {'X'};
+
+    epd_test_pattern_truncate_text_middle("图书馆书架上的相册封面预览页面", out, sizeof(out), 8);
+
+    TEST_ASSERT_EQUAL_CHAR('\0', out[0]);
+}
+
+void test_epd_ui_truncate_tiny_ascii_buffer_stays_terminated(void)
+{
+    char out[3] = {'X', 'Y', 'Z'};
+
+    epd_test_pattern_truncate_text_middle("Photos", out, sizeof(out), 2);
+
+    TEST_ASSERT_EQUAL_CHAR('\0', out[2]);
+}
+
 void test_epd_ui_list_geometry_has_dense_rows(void)
 {
     epd_test_pattern_list_layout_t layout = epd_test_pattern_crosspoint_list_layout();

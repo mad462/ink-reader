@@ -215,8 +215,8 @@ void epd_test_pattern_truncate_text_middle(
     if (dst == NULL || dst_size == 0U) {
         return;
     }
+    dst[0] = '\0';
     if (src == NULL || src[0] == '\0' || max_chars == 0U) {
-        dst[0] = '\0';
         return;
     }
 
@@ -697,6 +697,9 @@ static size_t epd_utf8_append_codepoints(
     const char *cursor = src;
 
     if (dst == NULL || dst_size == 0U || offset >= dst_size || src == NULL) {
+        if (dst != NULL && dst_size > 0U) {
+            dst[dst_size - 1U] = '\0';
+        }
         return offset;
     }
 
@@ -708,6 +711,7 @@ static size_t epd_utf8_append_codepoints(
             ++actual_len;
         }
         if (actual_len == 0U || offset + actual_len >= dst_size) {
+            dst[offset] = '\0';
             break;
         }
 
@@ -726,9 +730,13 @@ static size_t epd_append_ascii_literal(char *dst, size_t dst_size, size_t offset
     size_t literal_len = text != NULL ? strlen(text) : 0U;
 
     if (dst == NULL || dst_size == 0U || text == NULL) {
+        if (dst != NULL && dst_size > 0U) {
+            dst[dst_size - 1U] = '\0';
+        }
         return offset;
     }
     if (offset + literal_len >= dst_size) {
+        dst[offset < dst_size ? offset : (dst_size - 1U)] = '\0';
         return offset;
     }
 
