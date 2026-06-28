@@ -16,6 +16,7 @@ static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t 
 static bool fast_browse_cancel(ink_ui_model_t *model);
 static bool button_state_is_down(const ink_runtime_shell_button_state_t *buttons, ink_logical_button_t button);
 static bool app_fast_browse_state_self_test(void);
+static bool app_fast_browse_step_uses_single_jump_self_test(void);
 
 size_t ink_app_reader_total_pages(const ink_ui_model_t *model)
 {
@@ -55,15 +56,15 @@ static uint32_t fast_browse_step_size_from_hold_ms(uint32_t held_ms)
 static uint32_t fast_browse_step_interval_ms(uint32_t held_ms)
 {
     if (held_ms < 5000U) {
-        return 220U;
+        return 360U;
     }
     if (held_ms < 10000U) {
-        return 180U;
+        return 300U;
     }
     if (held_ms < 20000U) {
-        return 140U;
+        return 240U;
     }
-    return 110U;
+    return 200U;
 }
 
 static bool fast_browse_begin(ink_ui_model_t *model, ink_fast_browse_dir_t direction, uint32_t now_ms)
@@ -74,22 +75,22 @@ static bool fast_browse_begin(ink_ui_model_t *model, ink_fast_browse_dir_t direc
     }
 
     model->fast_browse.active = true;
-    model->fast_browse.overlay_mode = false;
-    model->fast_browse.dirty = false;
+    model->fast_browse.overlay_mode = true;
+    model->fast_browse.dirty = true;
     model->fast_browse.origin_page = ink_app_reader_current_page(model);
     model->fast_browse.target_page = model->fast_browse.origin_page;
     model->fast_browse.visible_page = model->fast_browse.origin_page;
-    model->fast_browse.has_visible_page = false;
+    model->fast_browse.has_visible_page = true;
     model->fast_browse.commit_fast_full_pending = false;
     model->fast_browse.release_armed = false;
     model->fast_browse.total_pages = total_pages;
     model->fast_browse.direction = direction;
     model->fast_browse.hold_start_ms = now_ms;
     model->fast_browse.last_step_ms = now_ms;
-    model->reader_hold_navigation_active = true;
+    model->reader_hold_navigation_active = false;
     ESP_LOGI(
         TAG,
-        "fast browse begin page=%u total=%u dir=%s",
+        "fast browse begin page=%u total=%u dir=%s mode=overlay",
         (unsigned)(model->fast_browse.origin_page + 1U),
         (unsigned)total_pages,
         direction == INK_FAST_BROWSE_DIR_FORWARD ? "forward" : "backward");
@@ -101,6 +102,7 @@ static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t 
     const bool first_step = model != NULL
         && model->fast_browse.active
         && model->fast_browse.last_step_ms == model->fast_browse.hold_start_ms;
+    const uint32_t step_size = fast_browse_step_size_from_hold_ms(held_ms);
     uint32_t step_interval_ms;
     bool dirty = false;
 
@@ -115,28 +117,19 @@ static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t 
 
     model->fast_browse.last_step_ms = now_ms;
     model->lab.auto_flip_stress_enabled = false;
-    for (uint32_t step = fast_browse_step_size_from_hold_ms(held_ms); step > 0U; --step) {
-        bool step_dirty;
-
-        if (model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD) {
-            step_dirty = ink_reader_session_next_page(&model->reader_session, &model->app_state);
-        } else {
-            step_dirty = ink_reader_session_previous_page(&model->reader_session, &model->app_state);
-        }
-
-        if (!step_dirty) {
-            break;
-        }
-        dirty = true;
-    }
+    dirty = ink_reader_session_skip_pages(
+        &model->reader_session,
+        model->fast_browse.direction == INK_FAST_BROWSE_DIR_FORWARD
+            ? (int32_t)step_size
+            : -(int32_t)step_size,
+        &model->app_state);
 
     if (!dirty) {
         return false;
     }
 
     model->fast_browse.target_page = model->reader_session.current_page;
-    model->fast_browse.visible_page = model->reader_session.current_page;
-    model->fast_browse.has_visible_page = true;
+    model->fast_browse.dirty = true;
     (void)ink_app_persist_state(&model->app_state);
     ink_reader_session_prefetch_next(&model->reader_session, NULL, NULL);
     ESP_LOGI(
@@ -144,7 +137,7 @@ static bool fast_browse_apply_step_with_hold_ms(ink_ui_model_t *model, uint32_t 
         "reader hold turn page=%u held=%ums step=%u interval=%ums",
         (unsigned)(model->reader_session.current_page + 1U),
         (unsigned)held_ms,
-        (unsigned)fast_browse_step_size_from_hold_ms(held_ms),
+        (unsigned)step_size,
         (unsigned)step_interval_ms);
     return true;
 }
@@ -160,6 +153,9 @@ static bool fast_browse_cancel(ink_ui_model_t *model)
         "reader hold stop page=%u origin=%u",
         (unsigned)(model->reader_session.current_page + 1U),
         (unsigned)(model->fast_browse.origin_page + 1U));
+    model->reader_nav_pending = false;
+    model->reader_nav_pending_start_ms = 0U;
+    model->reader_fast_full_commit_pending = true;
     ink_app_clear_fast_browse(model);
     return true;
 }
@@ -383,29 +379,44 @@ bool ink_app_drive_reader_nav_hold_for_model(
         if (!button_state_is_down(buttons, dir_button)) {
             return fast_browse_cancel(model);
         }
-        if (!display_idle) {
-            return false;
-        }
         return fast_browse_apply_step_with_hold_ms(
             model,
             (uint32_t)(now_ms - model->fast_browse.hold_start_ms),
             now_ms);
     }
 
-    if (!model->reader_nav_pending || model->reader_nav_pending_start_ms == 0U) {
+    (void)display_idle;
+    return false;
+}
+
+bool ink_app_maybe_start_reader_nav_hold_from_snapshot_for_model(
+    ink_ui_model_t *model,
+    const ink_button_snapshot_t *snapshot,
+    bool display_idle,
+    uint32_t now_ms)
+{
+    ink_logical_button_t dir_button;
+    uint32_t held_ms;
+
+    if (model == NULL
+        || snapshot == NULL
+        || model->shell.page != INK_RUNTIME_SHELL_PAGE_READER
+        || !ink_reader_session_is_xtc_active(&model->reader_session)
+        || model->fast_browse.active
+        || !model->reader_nav_pending
+        || model->reader_nav_pending_start_ms == 0U
+        || !display_idle) {
         return false;
     }
 
     dir_button = model->reader_nav_pending_dir == INK_FAST_BROWSE_DIR_FORWARD
         ? INK_LOGICAL_BUTTON_NAV_NEXT
         : INK_LOGICAL_BUTTON_NAV_PREVIOUS;
-    if (!button_state_is_down(buttons, dir_button)) {
+    if (!ink_button_snapshot_is_pressed(snapshot, dir_button)) {
         return false;
     }
-    if ((uint32_t)(now_ms - model->reader_nav_pending_start_ms) < INK_FAST_BROWSE_ENTER_MS) {
-        return false;
-    }
-    if (!display_idle) {
+    held_ms = ink_button_snapshot_get_held_ms(snapshot, dir_button);
+    if (held_ms < INK_FAST_BROWSE_ENTER_MS) {
         return false;
     }
 
@@ -414,12 +425,13 @@ bool ink_app_drive_reader_nav_hold_for_model(
     if (!fast_browse_begin(model, model->reader_nav_pending_dir, now_ms)) {
         return false;
     }
-    return fast_browse_apply_step_with_hold_ms(model, 0U, now_ms);
+    return fast_browse_apply_step_with_hold_ms(model, held_ms, now_ms);
 }
 
 bool ink_app_fast_browse_self_test(void)
 {
-    return app_fast_browse_state_self_test();
+    return app_fast_browse_state_self_test()
+        && app_fast_browse_step_uses_single_jump_self_test();
 }
 
 static bool app_fast_browse_state_self_test(void)
@@ -443,15 +455,22 @@ static bool app_fast_browse_state_self_test(void)
         || fast_browse_step_size_from_hold_ms(25000U) != 5U) {
         return false;
     }
-    if (fast_browse_step_interval_ms(200U) != 220U
-        || fast_browse_step_interval_ms(7000U) != 180U
-        || fast_browse_step_interval_ms(15000U) != 140U
-        || fast_browse_step_interval_ms(25000U) != 110U) {
+    if (fast_browse_step_interval_ms(200U) != 360U
+        || fast_browse_step_interval_ms(7000U) != 300U
+        || fast_browse_step_interval_ms(15000U) != 240U
+        || fast_browse_step_interval_ms(25000U) != 200U) {
         return false;
     }
     if (!fast_browse_apply_step_with_hold_ms(&model, 0U, 1200U)
         || model.fast_browse.target_page != 104U
         || model.reader_session.current_page != 104U) {
+        return false;
+    }
+    if (!model.fast_browse.overlay_mode
+        || !model.fast_browse.dirty
+        || !model.fast_browse.has_visible_page
+        || model.fast_browse.visible_page != 99U
+        || model.reader_hold_navigation_active) {
         return false;
     }
     if (fast_browse_apply_step_with_hold_ms(&model, 100U, 1260U)) {
@@ -462,17 +481,50 @@ static bool app_fast_browse_state_self_test(void)
         || model.reader_session.current_page != 109U) {
         return false;
     }
+    if (!model.fast_browse.dirty
+        || model.fast_browse.visible_page != 99U
+        || !model.fast_browse.has_visible_page) {
+        return false;
+    }
     if (!fast_browse_cancel(&model) || model.fast_browse.active) {
+        return false;
+    }
+    if (!model.reader_fast_full_commit_pending) {
         return false;
     }
     if (!fast_browse_begin(&model, INK_FAST_BROWSE_DIR_FORWARD, 2000U)) {
         return false;
     }
     model.buttons.is_down[INK_RUNTIME_SHELL_BUTTON_RIGHT] = true;
-    if (!ink_app_fast_browse_handle_idle_for_model(&model, &model.buttons, 2225U, NULL)
+    if (!ink_app_drive_reader_nav_hold_for_model(&model, &model.buttons, false, 2225U)
         || model.reader_session.current_page != 114U) {
         return false;
     }
     ink_app_clear_fast_browse(&model);
     return !model.fast_browse.active;
+}
+
+static bool app_fast_browse_step_uses_single_jump_self_test(void)
+{
+    ink_ui_model_t model;
+
+    memset(&model, 0, sizeof(model));
+    model.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    model.reader_session.active = true;
+    model.reader_session.xtc_active = true;
+    model.reader_session.current_page = 10U;
+    model.reader_session.total_pages = 1000U;
+    model.reader_session.xtc_book.opened = true;
+    model.reader_session.xtc_book.current_page = 10U;
+    model.reader_session.xtc_book.page_entry_count = 1000U;
+
+    if (!fast_browse_begin(&model, INK_FAST_BROWSE_DIR_FORWARD, 1200U)) {
+        return false;
+    }
+    if (!fast_browse_apply_step_with_hold_ms(&model, 0U, 1200U)) {
+        return false;
+    }
+
+    return model.reader_session.current_page == 15U
+        && model.fast_browse.target_page == 15U;
 }

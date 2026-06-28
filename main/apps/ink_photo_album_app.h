@@ -13,15 +13,27 @@ typedef enum {
 } ink_photo_album_view_mode_t;
 
 typedef struct {
+    bool allocated;
+    bool valid;
+    bool load_failed;
+    size_t index;
+    char path[256];
+    uint8_t *lsb_plane;
+    uint8_t *msb_plane;
+} ink_photo_album_cache_slot_t;
+
+typedef struct {
     bool initialized;
     bool catalog_ready;
     bool image_loaded;
     bool load_failed;
     bool tf_unavailable;
     bool partial_refresh_pending;
+    bool preview_interrupt_refresh_pending;
     size_t current_index;
     size_t list_selected_index;
     size_t total_count;
+    size_t current_slot;
     int partial_x;
     int partial_y;
     int partial_w;
@@ -33,6 +45,7 @@ typedef struct {
     uint8_t *lsb_plane;
     uint8_t *msb_plane;
     size_t plane_size;
+    ink_photo_album_cache_slot_t cache_slots[3];
 } ink_photo_album_app_state_t;
 
 typedef struct {

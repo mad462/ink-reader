@@ -22,6 +22,7 @@ void ink_system_services_reset(ink_system_services_t *services)
     }
 
     memset(services, 0, sizeof(*services));
+    services->latest_buttons_lock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
     ink_photo_catalog_init(&services->photo_catalog);
     ink_usb_msc_service_reset(&services->usb_msc);
 }
@@ -114,6 +115,82 @@ esp_err_t ink_system_services_init(ink_system_services_t *services)
     return ESP_OK;
 }
 
+void ink_system_services_set_latest_buttons(
+    ink_system_services_t *services,
+    const ink_runtime_shell_button_state_t *buttons,
+    const ink_button_snapshot_t *snapshot,
+    uint32_t buttons_ms)
+{
+    static const ink_raw_button_t kRawMap[INK_RUNTIME_SHELL_BUTTON_COUNT] = {
+        [INK_RUNTIME_SHELL_BUTTON_BACK] = INK_RAW_BUTTON_BACK,
+        [INK_RUNTIME_SHELL_BUTTON_CONFIRM] = INK_RAW_BUTTON_CONFIRM,
+        [INK_RUNTIME_SHELL_BUTTON_LEFT] = INK_RAW_BUTTON_LEFT,
+        [INK_RUNTIME_SHELL_BUTTON_RIGHT] = INK_RAW_BUTTON_RIGHT,
+        [INK_RUNTIME_SHELL_BUTTON_POWER] = INK_RAW_BUTTON_POWER,
+    };
+
+    if (services == NULL || buttons == NULL) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&services->latest_buttons_lock);
+    services->latest_buttons = *buttons;
+    services->latest_buttons_ms = buttons_ms;
+    if (snapshot != NULL) {
+        for (int i = 0; i < INK_RUNTIME_SHELL_BUTTON_COUNT; ++i) {
+            const uint32_t raw_mask = ink_button_input_mask_for_raw(kRawMap[i]);
+            if ((snapshot->pressed_mask & raw_mask) != 0U) {
+                services->latest_button_pressed_ms[i] = buttons_ms;
+            }
+            if ((snapshot->released_mask & raw_mask) != 0U) {
+                services->latest_button_released_ms[i] = buttons_ms;
+            }
+        }
+    }
+    taskEXIT_CRITICAL(&services->latest_buttons_lock);
+}
+
+bool ink_system_services_get_latest_buttons(
+    const ink_system_services_t *services,
+    ink_runtime_shell_button_state_t *buttons_out,
+    uint32_t *buttons_ms_out)
+{
+    if (services == NULL || buttons_out == NULL) {
+        return false;
+    }
+
+    taskENTER_CRITICAL((portMUX_TYPE *)&services->latest_buttons_lock);
+    *buttons_out = services->latest_buttons;
+    if (buttons_ms_out != NULL) {
+        *buttons_ms_out = services->latest_buttons_ms;
+    }
+    taskEXIT_CRITICAL((portMUX_TYPE *)&services->latest_buttons_lock);
+    return true;
+}
+
+bool ink_system_services_get_latest_button_edge_ms(
+    const ink_system_services_t *services,
+    ink_runtime_shell_button_t button,
+    uint32_t *pressed_ms_out,
+    uint32_t *released_ms_out)
+{
+    if (services == NULL
+        || button < 0
+        || button >= INK_RUNTIME_SHELL_BUTTON_COUNT) {
+        return false;
+    }
+
+    taskENTER_CRITICAL((portMUX_TYPE *)&services->latest_buttons_lock);
+    if (pressed_ms_out != NULL) {
+        *pressed_ms_out = services->latest_button_pressed_ms[button];
+    }
+    if (released_ms_out != NULL) {
+        *released_ms_out = services->latest_button_released_ms[button];
+    }
+    taskEXIT_CRITICAL((portMUX_TYPE *)&services->latest_buttons_lock);
+    return true;
+}
+
 bool ink_system_services_self_test(void)
 {
     ink_system_services_t services;
@@ -136,6 +213,42 @@ bool ink_system_services_self_test(void)
     services.native_snapshot_b = (uint8_t *)0x44;
     if (ink_system_services_init_mailbox_only(&services) != ESP_OK) {
         return false;
+    }
+
+    {
+        ink_runtime_shell_button_state_t buttons = {0};
+        uint32_t buttons_ms = 0U;
+        ink_button_snapshot_t snapshot = {0};
+        uint32_t pressed_ms = 0U;
+        uint32_t released_ms = 0U;
+
+        snapshot.pressed_mask = ink_button_input_mask_for_raw(INK_RAW_BUTTON_RIGHT);
+        snapshot.released_mask = ink_button_input_mask_for_raw(INK_RAW_BUTTON_LEFT);
+        ink_system_services_set_latest_buttons(&services, &buttons, &snapshot, 77U);
+        if (!ink_system_services_get_latest_buttons(&services, &buttons, &buttons_ms)) {
+            return false;
+        }
+        if (buttons_ms != 77U) {
+            return false;
+        }
+        if (!ink_system_services_get_latest_button_edge_ms(
+                &services,
+                INK_RUNTIME_SHELL_BUTTON_RIGHT,
+                &pressed_ms,
+                &released_ms)
+            || pressed_ms != 77U
+            || released_ms != 0U) {
+            return false;
+        }
+        if (!ink_system_services_get_latest_button_edge_ms(
+                &services,
+                INK_RUNTIME_SHELL_BUTTON_LEFT,
+                &pressed_ms,
+                &released_ms)
+            || pressed_ms != 0U
+            || released_ms != 77U) {
+            return false;
+        }
     }
 
     return services.mailbox.bitmap_snapshot_buffers[0] == services.bitmap_snapshot_a

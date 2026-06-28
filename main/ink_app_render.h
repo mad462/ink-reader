@@ -39,6 +39,7 @@ bool ink_app_render_model_fill_request(
     ink_display_request_t *request);
 esp_err_t ink_app_render_gray_planes_request(
     ink_app_context_t *app,
+    const ink_display_request_t *request,
     const uint8_t *lsb_plane,
     size_t lsb_length,
     const uint8_t *msb_plane,

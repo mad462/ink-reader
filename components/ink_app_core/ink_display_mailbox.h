@@ -30,6 +30,7 @@ typedef struct {
     bool use_reader_hold_navigation;
     bool use_library_overlay;
     bool use_reader_menu_overlay;
+    bool use_aggressive_interrupt;
     bool force_fixed_footer_partial;
     bool force_white_page;
     bool force_fast_full_commit;

@@ -36,6 +36,7 @@ static ink_display_request_t s_epd_request;
 
 static void run_boot_self_tests(void);
 static void input_task(void *arg);
+static bool queue_button_event_with_priority(ink_app_context_t *app, const ink_ui_event_t *event);
 static bool submit_display_request(
     ink_app_context_t *app,
     ink_runtime_shell_command_t command,
@@ -57,6 +58,7 @@ static esp_err_t perform_boot_white_clear(ink_app_context_t *app);
 static void ui_task(void *arg);
 static void epd_task(void *arg);
 static bool epd_task_stack_budget_self_test(void);
+static bool runtime_app_fast_full_commit_consumed_once_self_test(void);
 
 static void run_boot_self_tests(void)
 {
@@ -105,12 +107,117 @@ static void run_boot_self_tests(void)
     ESP_ERROR_CHECK(ink_usb_msc_app_self_test() ? ESP_OK : ESP_FAIL);
     esp_rom_printf("OK usb_msc\n");
     ESP_ERROR_CHECK(epd_task_stack_budget_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(runtime_app_fast_full_commit_consumed_once_self_test() ? ESP_OK : ESP_FAIL);
 }
 
 static bool epd_task_stack_budget_self_test(void)
 {
     return sizeof(s_epd_request) <= 4096U
         && INK_EPD_TASK_STACK_BYTES >= 5120U;
+}
+
+static bool runtime_app_fast_full_commit_consumed_once_self_test(void)
+{
+    ink_app_context_t app;
+    ink_app_render_model_t model;
+    ink_display_request_t request;
+    const ink_app_descriptor_t *reader = ink_reader_app_descriptor();
+    ink_reader_app_state_t *state = NULL;
+    uint8_t *page = NULL;
+
+    ink_app_initialize_context(&app);
+    ink_system_runtime_init(&app.runtime);
+    ink_system_runtime_bind_services(&app.runtime, &app.services);
+    ink_display_mailbox_init(&app.services.mailbox, NULL, NULL, NULL, NULL, NULL);
+    if (!ink_system_runtime_register_app(&app.runtime, reader)
+        || !ink_system_runtime_set_active_app(&app.runtime, reader)) {
+        return false;
+    }
+
+    state = (ink_reader_app_state_t *)reader->state;
+    page = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    if (state == NULL || page == NULL) {
+        free(page);
+        return false;
+    }
+
+    memset(state, 0, sizeof(*state));
+    memset(page, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_tuning_lab_init(&state->ui.lab);
+    ink_runtime_shell_init(&state->ui.shell);
+    ink_reader_session_init(&state->ui.reader_session);
+    state->ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    state->ui.reader_session.active = true;
+    state->ui.reader_session.xtc_active = true;
+    state->ui.reader_session.current_page = 41U;
+    state->ui.reader_session.total_pages = 100U;
+    state->ui.reader_fast_full_commit_pending = true;
+    if (!ink_reader_session_set_prepared_page(
+            &state->ui.reader_session,
+            page,
+            EPD_GDEY0426T82_BUFFER_SIZE)) {
+        free(page);
+        return false;
+    }
+
+    if (!reader->render(&app.runtime, reader, &model)
+        || !ink_app_render_model_fill_request(&model, &request)
+        || !request.force_fast_full_commit
+        || !state->ui.reader_fast_full_commit_pending) {
+        free(page);
+        return false;
+    }
+
+    if (request.force_fast_full_commit && request.owner_ui_model != NULL) {
+        ((ink_ui_model_t *)request.owner_ui_model)->reader_fast_full_commit_pending = false;
+    }
+    if (state->ui.reader_fast_full_commit_pending) {
+        free(page);
+        return false;
+    }
+
+    memset(&model, 0, sizeof(model));
+    memset(&request, 0, sizeof(request));
+    if (!reader->render(&app.runtime, reader, &model)
+        || !ink_app_render_model_fill_request(&model, &request)
+        || request.force_fast_full_commit) {
+        free(page);
+        return false;
+    }
+
+    free(page);
+    return true;
+}
+
+static bool queue_button_event_with_priority(ink_app_context_t *app, const ink_ui_event_t *event)
+{
+    ink_ui_event_t dropped_event;
+    BaseType_t send_ret;
+
+    if (app == NULL || event == NULL || app->services.ui_queue == NULL) {
+        return false;
+    }
+
+    send_ret = xQueueSend(app->services.ui_queue, event, 0);
+    if (send_ret == pdTRUE) {
+        return true;
+    }
+
+    if (xQueuePeek(app->services.ui_queue, &dropped_event, 0) == pdTRUE
+        && dropped_event.kind == INK_UI_EVENT_DISPLAY_DONE) {
+        (void)xQueueReceive(app->services.ui_queue, &dropped_event, 0);
+        ESP_LOGW(
+            TAG,
+            "ui queue evict display_done seq=%u for button depth=%u",
+            (unsigned)dropped_event.data.display_done.seq,
+            (unsigned)uxQueueMessagesWaiting(app->services.ui_queue));
+        send_ret = xQueueSend(app->services.ui_queue, event, 0);
+        if (send_ret == pdTRUE) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static esp_err_t perform_boot_white_clear(ink_app_context_t *app)
@@ -147,18 +254,19 @@ static void input_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(INK_INPUT_TASK_PERIOD_MS));
             continue;
         }
-        ink_app_button_state_from_snapshot(&snapshot, &app->services.latest_buttons);
-        app->services.latest_buttons_ms = now_ms;
+        {
+            ink_runtime_shell_button_state_t latest_buttons;
+            ink_app_button_state_from_snapshot(&snapshot, &latest_buttons);
+            ink_system_services_set_latest_buttons(&app->services, &latest_buttons, &snapshot, now_ms);
+        }
         if (ink_app_should_dispatch_button_event(&snapshot, now_ms, &last_hold_event_ms)) {
             ink_ui_event_t event = {
                 .kind = INK_UI_EVENT_BUTTON,
                 .event_ms = now_ms,
             };
-            BaseType_t send_ret;
             event.data.snapshot = snapshot;
             ink_app_log_button_snapshot(now_ms, &snapshot);
-            send_ret = xQueueSend(app->services.ui_queue, &event, 0);
-            if (send_ret != pdTRUE) {
+            if (!queue_button_event_with_priority(app, &event)) {
                 ESP_LOGW(
                     TAG,
                     "ui queue drop kind=button t=%ums depth=%u stable=0x%02x pressed=0x%02x released=0x%02x",
@@ -198,12 +306,13 @@ static bool submit_display_request(
     seq = ink_display_mailbox_submit(&app->services.mailbox, &request);
     ESP_LOGI(
         TAG,
-        "ui submit seq=%u page=%s cmd=%s full=%d preview=%d fast_full_commit=%d input_to_ui=%ums build=%ums footer='%s' '%s'",
+        "ui submit seq=%u page=%s cmd=%s full=%d preview=%d hold=%d fast_full_commit=%d input_to_ui=%ums build=%ums footer='%s' '%s'",
         (unsigned)seq,
         ink_app_shell_page_name(request.page),
         ink_app_shell_command_name(command),
         request.full_refresh ? 1 : 0,
         request.use_fast_browse_overlay ? 1 : 0,
+        request.use_reader_hold_navigation ? 1 : 0,
         request.force_fast_full_commit ? 1 : 0,
         0U,
         0U,
@@ -229,6 +338,9 @@ static bool submit_active_app_display_request(ink_app_context_t *app, uint32_t e
     }
     if (!ink_app_render_model_fill_request(&model, &request)) {
         return false;
+    }
+    if (request.force_fast_full_commit && request.owner_ui_model != NULL) {
+        ((ink_ui_model_t *)request.owner_ui_model)->reader_fast_full_commit_pending = false;
     }
     request.input_ms = event_ms;
     request.submitted_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
@@ -537,10 +649,11 @@ static void epd_task(void *arg)
 
             ESP_LOGI(
                 TAG,
-                "epd claim seq=%u page=%s full=%d submitted=%ums age=%ums",
+                "epd claim seq=%u page=%s full=%d hold=%d submitted=%ums age=%ums",
                 (unsigned)s_epd_request.seq,
                 ink_app_shell_page_name(s_epd_request.page),
                 s_epd_request.full_refresh ? 1 : 0,
+                s_epd_request.use_reader_hold_navigation ? 1 : 0,
                 (unsigned)s_epd_request.submitted_ms,
                 (unsigned)((uint32_t)pdTICKS_TO_MS(xTaskGetTickCount()) - s_epd_request.submitted_ms));
 
@@ -591,6 +704,7 @@ void app_main(void)
     TaskHandle_t input_handle = NULL;
 
     ink_app_initialize_context(&app);
+    app.aggressive_interrupt_mode = true;
     ink_system_runtime_init(&app.runtime);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_launcher_app_descriptor()) ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_reader_app_descriptor()) ? ESP_OK : ESP_FAIL);

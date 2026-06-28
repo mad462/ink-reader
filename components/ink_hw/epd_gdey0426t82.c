@@ -416,7 +416,9 @@ static esp_err_t epd_wait_ready(const char *label)
             && s_active_control != NULL
             && s_active_control->aggressive_interrupt_mode) {
             s_active_control->phase = EPD_GDEY0426T82_PHASE_ABORTED;
-            ESP_LOGW(TAG, "epd busy_wait saw newer request; aggressive interrupt disabled by default");
+            ESP_LOGW(TAG, "epd busy_wait aborted by newer request phase=%s", epd_phase_name(EPD_GDEY0426T82_PHASE_BUSY_WAIT));
+            ret = EPD_GDEY0426T82_ERR_ABORTED;
+            break;
         }
         if ((int32_t)(deadline - xTaskGetTickCount()) <= 0) {
             ESP_LOGE(TAG, "busy wait timed out");
@@ -1085,7 +1087,8 @@ esp_err_t epd_gdey0426t82_gray_refresh(
     const uint8_t *lsb_buffer,
     size_t lsb_length,
     const uint8_t *msb_buffer,
-    size_t msb_length)
+    size_t msb_length,
+    epd_gdey0426t82_refresh_control_t *control)
 {
     esp_err_t ret = ESP_OK;
     int64_t phase_us;
@@ -1099,6 +1102,10 @@ esp_err_t epd_gdey0426t82_gray_refresh(
     }
 
     epd_timing_begin("gray4");
+    s_active_control = control;
+    if (s_active_control != NULL) {
+        s_active_control->phase = EPD_GDEY0426T82_PHASE_IDLE;
+    }
 
     ret = epd_ensure_framebuffers();
     if (ret != ESP_OK) {

@@ -74,7 +74,8 @@ esp_err_t epd_gdey0426t82_gray_refresh(
     const uint8_t *lsb_buffer,
     size_t lsb_length,
     const uint8_t *msb_buffer,
-    size_t msb_length
+    size_t msb_length,
+    epd_gdey0426t82_refresh_control_t *control
 );
 esp_err_t epd_gdey0426t82_partial_refresh_area(
     const uint8_t *buffer,

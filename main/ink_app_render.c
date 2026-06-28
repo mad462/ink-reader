@@ -161,11 +161,15 @@ static bool app_library_overlay_render_self_test(void);
 static bool app_reader_menu_request_self_test(void);
 static bool app_reader_menu_overlay_render_self_test(void);
 static bool app_reader_menu_partial_window_policy_self_test(void);
+static bool app_reader_loading_overlay_request_self_test(void);
+static bool app_reader_chapter_menu_request_layout_self_test(void);
+static bool app_reader_loading_overlay_masks_background_self_test(void);
 static bool app_render_model_wifi_setup_self_test(void);
 static bool app_render_model_photo_album_self_test(void);
 static bool photo_album_list_layout_self_test(void);
 static bool gray_calibration_planes_self_test(void);
 static bool app_overlay_menu_font_selection_self_test(void);
+static bool app_render_request_photo_album_interrupt_self_test(void);
 static const ink_cpfont_t *select_page_font(const ink_system_services_t *services);
 static const ink_cpfont_t *select_footer_font(const ink_system_services_t *services);
 static const ink_cpfont_t *select_menu_font(const ink_system_services_t *services);
@@ -447,6 +451,14 @@ static bool request_pins_during_transmitting(const ink_display_request_t *reques
 
     if (request->use_fast_browse_overlay && request->force_fixed_footer_partial) {
         return true;
+    }
+
+    if (request->use_reader_hold_navigation) {
+        return false;
+    }
+
+    if (request->use_aggressive_interrupt) {
+        return false;
     }
 
     return request->page == INK_RUNTIME_SHELL_PAGE_READER
@@ -1109,6 +1121,7 @@ bool ink_app_render_model_fill_request(
         : INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
     request->use_app_render_model = true;
     request->app_request_partial_refresh = model->request_partial_refresh;
+    request->use_aggressive_interrupt = model->request_aggressive_interrupt;
     request->app_render_mode = (uint8_t)model->mode;
     request->app_partial_x = model->partial_x;
     request->app_partial_y = model->partial_y;
@@ -1168,7 +1181,9 @@ esp_err_t ink_app_render_display_request(
         .pin_during_transmitting = request_pins_during_transmitting(request),
     };
     epd_gdey0426t82_refresh_control_t control = {
-        .aggressive_interrupt_mode = app->aggressive_interrupt_mode,
+        .aggressive_interrupt_mode = app->aggressive_interrupt_mode
+            && request != NULL
+            && (request->use_reader_hold_navigation || request->use_aggressive_interrupt),
         .use_custom_lut_a = request != NULL
             && !request->use_grid_compare_variant
             && request->refresh_profile == INK_TUNING_REFRESH_CUSTOM_LUT_A,
@@ -1221,6 +1236,7 @@ esp_err_t ink_app_render_display_request(
         }
         return ink_app_render_gray_planes_request(
             app,
+            request,
             app->services.bitmap_snapshot_a,
             EPD_GDEY0426T82_BUFFER_SIZE,
             app->services.bitmap_snapshot_b,
@@ -1242,6 +1258,7 @@ esp_err_t ink_app_render_display_request(
             && album_state->msb_plane != NULL) {
             ret = ink_app_render_gray_planes_request(
                 app,
+                request,
                 album_state->lsb_plane,
                 album_state->plane_size,
                 album_state->msb_plane,
@@ -1595,12 +1612,27 @@ esp_err_t ink_app_render_display_request(
 
 esp_err_t ink_app_render_gray_planes_request(
     ink_app_context_t *app,
+    const ink_display_request_t *request,
     const uint8_t *lsb_plane,
     size_t lsb_length,
     const uint8_t *msb_plane,
     size_t msb_length,
     epd_gdey0426t82_phase_t *phase_out)
 {
+    ink_epd_cancel_ctx_t cancel_ctx = {
+        .app = app,
+        .seq = request != NULL ? request->seq : 0U,
+        .pin_during_transmitting = request_pins_during_transmitting(request),
+    };
+    epd_gdey0426t82_refresh_control_t control = {
+        .aggressive_interrupt_mode = app != NULL
+            && app->aggressive_interrupt_mode
+            && request != NULL
+            && (request->use_reader_hold_navigation || request->use_aggressive_interrupt),
+        .should_cancel = epd_request_is_stale,
+        .should_cancel_ctx = &cancel_ctx,
+        .phase = EPD_GDEY0426T82_PHASE_IDLE,
+    };
     esp_err_t ret;
 
     if (app == NULL || lsb_plane == NULL || msb_plane == NULL) {
@@ -1611,14 +1643,13 @@ esp_err_t ink_app_render_gray_planes_request(
         lsb_plane,
         lsb_length,
         msb_plane,
-        msb_length);
+        msb_length,
+        &control);
     if (ret == ESP_OK) {
         memcpy(app->services.previous_framebuffer, msb_plane, EPD_GDEY0426T82_BUFFER_SIZE);
     }
     if (phase_out != NULL) {
-        *phase_out = ret == ESP_OK
-            ? EPD_GDEY0426T82_PHASE_DONE
-            : EPD_GDEY0426T82_PHASE_ABORTED;
+        *phase_out = control.phase;
     }
     return ret;
 }
@@ -1994,11 +2025,12 @@ static bool app_reader_fast_browse_request_self_test(void)
         return false;
     }
     model.fast_browse.active = true;
-    model.fast_browse.overlay_mode = false;
-    model.reader_hold_navigation_active = true;
+    model.fast_browse.overlay_mode = true;
+    model.fast_browse.dirty = true;
+    model.reader_hold_navigation_active = false;
     model.fast_browse.origin_page = 64U;
     model.fast_browse.target_page = 99U;
-    model.fast_browse.visible_page = 99U;
+    model.fast_browse.visible_page = 64U;
     model.fast_browse.has_visible_page = true;
     model.fast_browse.total_pages = 321U;
 
@@ -2007,10 +2039,10 @@ static bool app_reader_fast_browse_request_self_test(void)
         return false;
     }
 
-    ok = !request.use_fast_browse_overlay
-        && request.use_reader_hold_navigation
-        && !request.force_fixed_footer_partial
-        && request.use_bitmap_page
+    ok = request.use_fast_browse_overlay
+        && !request.use_reader_hold_navigation
+        && request.force_fixed_footer_partial
+        && !request.use_bitmap_page
         && strcmp(request.overlay_left, "二 赞成与反对") == 0
         && strcmp(request.overlay_right, "31% 100/321") == 0;
     free(page);
@@ -2400,6 +2432,11 @@ static bool app_reader_cancel_policy_self_test(void)
         return false;
     }
 
+    reader_request.use_reader_hold_navigation = true;
+    if (request_pins_during_transmitting(&reader_request)) {
+        return false;
+    }
+
     library_request.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
     library_request.use_bitmap_page = true;
     if (request_pins_during_transmitting(&library_request)) {
@@ -2634,6 +2671,102 @@ static bool app_reader_menu_partial_window_policy_self_test(void)
     return !should_promote_reader_partial_to_full_window(&request, 458U, 757U);
 }
 
+static bool app_reader_loading_overlay_request_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ui.reader_opening = true;
+    snprintf(ui.reader_loading_title, sizeof(ui.reader_loading_title), "%s", "正在加载...");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    return request.use_reader_menu_overlay
+        && request.menu_overlay.frameless_panel
+        && !request.menu_overlay.compact_cards
+        && request.menu_overlay.card_count == 0U
+        && request.menu_overlay.action_popup_open
+        && request.menu_overlay.action_count == 0U
+        && strcmp(request.menu_overlay.action_popup_title, "正在加载...") == 0;
+}
+
+static bool app_reader_chapter_menu_request_layout_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ui.reader_session.active = true;
+    ui.reader_session.xtc_active = true;
+    ui.reader_menu.open = true;
+    ui.reader_menu.active_tab = INK_READER_MENU_TAB_CHAPTERS;
+    ui.reader_menu.level = INK_READER_MENU_LEVEL_ITEMS;
+    ui.reader_session.xtc_book.chapter_entry_count = 3U;
+    snprintf(ui.reader_session.xtc_book.chapter_entries[0].name, sizeof(ui.reader_session.xtc_book.chapter_entries[0].name), "%s", "第一章");
+    snprintf(ui.reader_session.xtc_book.chapter_entries[1].name, sizeof(ui.reader_session.xtc_book.chapter_entries[1].name), "%s", "第二章");
+    snprintf(ui.reader_session.xtc_book.chapter_entries[2].name, sizeof(ui.reader_session.xtc_book.chapter_entries[2].name), "%s", "第三章");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    return request.use_reader_menu_overlay
+        && request.menu_overlay.compact_cards
+        && !request.menu_overlay.bookmark_cards_tall
+        && !request.menu_overlay.frameless_panel
+        && request.menu_overlay.card_count == 3U
+        && strcmp(request.menu_overlay.cards[0].title, "第一章") == 0;
+}
+
+static bool app_reader_loading_overlay_masks_background_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+    uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    memset(buffer, 0x00, EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ui.reader_opening = true;
+    snprintf(ui.reader_loading_title, sizeof(ui.reader_loading_title), "%s", "正在加载...");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        free(buffer);
+        return false;
+    }
+
+    ok = render_library_overlay_to_buffer(
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            NULL,
+            NULL,
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            &request)
+        && buffer[(EPD_GDEY0426T82_WIDTH / 8) * 360 + 30] != 0x00;
+    free(buffer);
+    return ok;
+}
+
 static bool app_overlay_menu_font_selection_self_test(void)
 {
     ink_system_services_t services;
@@ -2842,6 +2975,30 @@ static bool app_render_request_self_test(void)
         && request.app_render_state == (void *)0x1234U;
 }
 
+static bool app_render_request_photo_album_interrupt_self_test(void)
+{
+    ink_app_render_model_t model;
+    ink_display_request_t request;
+
+    memset(&model, 0, sizeof(model));
+    memset(&request, 0, sizeof(request));
+    model.mode = INK_APP_RENDER_MODE_PHOTO_ALBUM;
+    model.request_aggressive_interrupt = true;
+    model.state = (void *)0x5678U;
+
+    if (!ink_app_render_model_fill_request(&model, &request)) {
+        return false;
+    }
+
+    return request.use_app_render_model
+        && request.use_aggressive_interrupt
+        && !request.use_reader_hold_navigation
+        && !request.full_refresh
+        && request.app_render_mode == (uint8_t)INK_APP_RENDER_MODE_PHOTO_ALBUM
+        && request.app_render_state == (void *)0x5678U
+        && !request_pins_during_transmitting(&request);
+}
+
 bool ink_app_render_self_test(void)
 {
     if (!ink_launcher_app_self_test()) {
@@ -2960,6 +3117,18 @@ bool ink_app_render_self_test(void)
         printf("FAIL render reader_menu_partial_window_policy\n");
         return false;
     }
+    if (!app_reader_loading_overlay_request_self_test()) {
+        printf("FAIL render reader_loading_overlay_request\n");
+        return false;
+    }
+    if (!app_reader_chapter_menu_request_layout_self_test()) {
+        printf("FAIL render reader_chapter_menu_request_layout\n");
+        return false;
+    }
+    if (!app_reader_loading_overlay_masks_background_self_test()) {
+        printf("FAIL render reader_loading_overlay_masks_background\n");
+        return false;
+    }
     if (!app_overlay_menu_font_selection_self_test()) {
         printf("FAIL render overlay_menu_font_selection\n");
         return false;
@@ -2982,6 +3151,10 @@ bool ink_app_render_self_test(void)
     }
     if (!app_render_request_self_test()) {
         printf("FAIL render app_render_request\n");
+        return false;
+    }
+    if (!app_render_request_photo_album_interrupt_self_test()) {
+        printf("FAIL render app_render_request_photo_album_interrupt\n");
         return false;
     }
     return true;

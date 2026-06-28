@@ -39,6 +39,7 @@ typedef struct {
     ink_app_render_mode_t mode;
     bool request_full_refresh;
     bool request_partial_refresh;
+    bool request_aggressive_interrupt;
     int partial_x;
     int partial_y;
     int partial_w;

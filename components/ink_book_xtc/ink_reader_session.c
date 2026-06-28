@@ -696,6 +696,37 @@ bool ink_reader_session_previous_page(
     return ink_reader_session_jump_to_page(session, session->xtc_book.current_page, state);
 }
 
+bool ink_reader_session_skip_pages(
+    ink_reader_session_t *session,
+    int32_t delta_pages,
+    ink_app_state_t *state)
+{
+    size_t target_page;
+    int64_t raw_target;
+
+    if (!ink_reader_session_is_xtc_active(session) || delta_pages == 0) {
+        return false;
+    }
+
+    raw_target = (int64_t)session->xtc_book.current_page + (int64_t)delta_pages;
+    if (raw_target < 0) {
+        raw_target = 0;
+    }
+    if (session->xtc_book.page_entry_count == 0U) {
+        return false;
+    }
+    if ((uint64_t)raw_target >= (uint64_t)session->xtc_book.page_entry_count) {
+        raw_target = (int64_t)session->xtc_book.page_entry_count - 1;
+    }
+
+    target_page = (size_t)raw_target;
+    if (target_page == session->xtc_book.current_page) {
+        return false;
+    }
+
+    return ink_reader_session_jump_to_page(session, target_page, state);
+}
+
 void ink_reader_session_prefetch_next(
     ink_reader_session_t *session,
     ink_reader_session_should_abort_fn should_abort,

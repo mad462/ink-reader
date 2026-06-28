@@ -616,26 +616,19 @@ static void fill_reader_loading_overlay(
     }
 
     memset(overlay, 0, sizeof(*overlay));
-    overlay->frameless_panel = false;
-    overlay->compact_cards = true;
+    overlay->frameless_panel = true;
+    overlay->compact_cards = false;
     overlay->bookmark_cards_tall = false;
-    overlay->card_count = 1U;
+    overlay->card_count = 0U;
+    overlay->action_popup_open = true;
+    overlay->action_count = 0U;
     snprintf(
-        overlay->cards[0].title,
-        sizeof(overlay->cards[0].title),
+        overlay->action_popup_title,
+        sizeof(overlay->action_popup_title),
         "%s",
         title != NULL ? title : "正在加载");
-    snprintf(
-        overlay->cards[0].line1,
-        sizeof(overlay->cards[0].line1),
-        "%s",
-        line1 != NULL ? line1 : "");
-    snprintf(
-        overlay->cards[0].line2,
-        sizeof(overlay->cards[0].line2),
-        "%s",
-        line2 != NULL ? line2 : "");
-    overlay->cards[0].selected = false;
+    (void)line1;
+    (void)line2;
 }
 
 static void fill_reader_menu_overlay(

@@ -1278,10 +1278,10 @@ void epd_test_pattern_draw_reader_menu_overlay(
     const int cards_y0 = frameless_panel ? (panel_y + 62) : (panel_y + 82);
     const bool bookmark_cards_tall = overlay != NULL && overlay->bookmark_cards_tall;
     const int card_h = overlay != NULL && overlay->compact_cards
-        ? (frameless_panel ? 44 : 34)
+        ? (frameless_panel ? 44 : 48)
         : (bookmark_cards_tall ? 58 : (frameless_panel ? 78 : 82));
     const int card_gap = overlay != NULL && overlay->compact_cards
-        ? (frameless_panel ? 6 : 4)
+        ? (frameless_panel ? 6 : 8)
         : (bookmark_cards_tall ? 8 : (frameless_panel ? 8 : 10));
     const int card_x = panel_x + (frameless_panel ? 4 : 24);
     const int card_w = panel_w - (frameless_panel ? 8 : 48);
@@ -1325,6 +1325,9 @@ void epd_test_pattern_draw_reader_menu_overlay(
         if (card->selected) {
             epd_fill_rect(buffer, card_x, y, card_w, card_h, true);
         } else {
+            if (frameless_panel) {
+                epd_fill_rect(buffer, card_x, y, card_w, card_h, false);
+            }
             epd_draw_rect_outline(buffer, card_x, y, card_w, card_h, 1);
         }
 
@@ -1333,11 +1336,11 @@ void epd_test_pattern_draw_reader_menu_overlay(
                 buffer,
                 menu_font,
                 card_x + 12,
-                y + (frameless_panel ? 10 : 8),
+                y + (frameless_panel ? 10 : 14),
                 card->title,
                 card_w - 24,
                 2,
-                ink_cpfont_is_loaded(menu_font) && menu_font->advance_y > 22U ? 2U : 1U,
+                ink_cpfont_is_loaded(menu_font) && menu_font->advance_y > 24U ? 2U : 1U,
                 card->selected);
             if (card->line1[0] != '\0') {
                 if (card->selected) {
@@ -1345,7 +1348,7 @@ void epd_test_pattern_draw_reader_menu_overlay(
                         buffer,
                         footer_font,
                         card_x + 12,
-                        y + (frameless_panel ? 24 : 20),
+                        y + (frameless_panel ? 28 : 28),
                         card->line1,
                         card_w - 24,
                         2,
@@ -1356,7 +1359,7 @@ void epd_test_pattern_draw_reader_menu_overlay(
                         buffer,
                         footer_font,
                         card_x + 12,
-                        y + (frameless_panel ? 24 : 20),
+                        y + (frameless_panel ? 28 : 28),
                         card->line1,
                         card_w - 24,
                         2,

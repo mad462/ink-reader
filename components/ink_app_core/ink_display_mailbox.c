@@ -5,6 +5,7 @@
 
 static portMUX_TYPE s_mailbox_lock = portMUX_INITIALIZER_UNLOCKED;
 static bool mailbox_has_pending_request_locked(const ink_display_mailbox_t *mailbox);
+static bool mailbox_invalidate_active_request_self_test(void);
 
 void ink_display_mailbox_init(
     ink_display_mailbox_t *mailbox,
@@ -172,8 +173,12 @@ void ink_display_mailbox_invalidate_pending(ink_display_mailbox_t *mailbox)
     }
 
     taskENTER_CRITICAL(&s_mailbox_lock);
-    mailbox->latest_seq = mailbox->completed_seq;
-    mailbox->active_seq = 0U;
+    if (mailbox->active_seq != 0U) {
+        mailbox->latest_seq = mailbox->active_seq;
+    } else {
+        mailbox->latest_seq = mailbox->completed_seq;
+        mailbox->active_seq = 0U;
+    }
     taskEXIT_CRITICAL(&s_mailbox_lock);
 }
 
@@ -248,6 +253,29 @@ static bool mailbox_has_pending_request_locked(const ink_display_mailbox_t *mail
         && mailbox->latest_seq != mailbox->active_seq;
 }
 
+static bool mailbox_invalidate_active_request_self_test(void)
+{
+    ink_display_mailbox_t mailbox;
+    ink_display_request_t request = {
+        .page = INK_RUNTIME_SHELL_PAGE_LIBRARY,
+    };
+    ink_display_request_t claimed = {0};
+
+    ink_display_mailbox_init(&mailbox, NULL, NULL, NULL, NULL, NULL);
+    if (ink_display_mailbox_submit(&mailbox, &request) != 1U) {
+        return false;
+    }
+    if (!ink_display_mailbox_try_claim_latest(&mailbox, &claimed) || claimed.seq != 1U) {
+        return false;
+    }
+
+    ink_display_mailbox_invalidate_pending(&mailbox);
+    ink_display_mailbox_note_completed(&mailbox, claimed.seq);
+
+    return ink_display_mailbox_is_idle(&mailbox)
+        && !ink_display_mailbox_try_claim_latest(&mailbox, &claimed);
+}
+
 bool ink_display_mailbox_self_test(void)
 {
     static ink_display_mailbox_t mailbox;
@@ -270,6 +298,13 @@ bool ink_display_mailbox_self_test(void)
     }
 
     ink_display_mailbox_init(&mailbox, NULL, page_a, page_b, native_a, native_b);
+    if (!mailbox_invalidate_active_request_self_test()) {
+        free(page_a);
+        free(page_b);
+        free(native_a);
+        free(native_b);
+        return false;
+    }
     if (ink_display_mailbox_try_claim_latest(&mailbox, &claimed)) {
         free(page_a);
         free(page_b);

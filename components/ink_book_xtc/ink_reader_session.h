@@ -86,6 +86,11 @@ bool ink_reader_session_previous_page(
     ink_reader_session_t *session,
     ink_app_state_t *state
 );
+bool ink_reader_session_skip_pages(
+    ink_reader_session_t *session,
+    int32_t delta_pages,
+    ink_app_state_t *state
+);
 void ink_reader_session_prefetch_next(
     ink_reader_session_t *session,
     ink_reader_session_should_abort_fn should_abort,
