@@ -510,6 +510,10 @@ static void photo_album_enter(ink_system_runtime_t *runtime, const ink_app_descr
     s_photo_album_render_state.catalog = services != NULL ? &services->photo_catalog : NULL;
     s_photo_album_render_state.menu_font = services != NULL ? &services->menu_font : NULL;
     s_photo_album_render_state.footer_font = services != NULL ? &services->footer_font : NULL;
+    ink_system_services_get_time_badge(
+        services,
+        s_photo_album_render_state.header_meta,
+        sizeof(s_photo_album_render_state.header_meta));
 
     if (!album_sync_catalog(state, services)) {
         runtime->force_full_refresh_on_next_render = true;
@@ -626,12 +630,12 @@ static bool photo_album_input(
                 case INK_APP_EVENT_TILT_PREVIOUS:
                     state->list_selected_index =
                         (state->list_selected_index + state->total_count - 1U) % state->total_count;
-                    album_set_partial_refresh(state, 0, 88, EPD_GDEY0426T82_WIDTH, 690);
+                    album_set_partial_refresh(state, 0, 38, EPD_GDEY0426T82_WIDTH, EPD_GDEY0426T82_HEIGHT - 38);
                     return true;
                 case INK_APP_EVENT_NAV_NEXT:
                 case INK_APP_EVENT_TILT_NEXT:
                     state->list_selected_index = (state->list_selected_index + 1U) % state->total_count;
-                    album_set_partial_refresh(state, 0, 88, EPD_GDEY0426T82_WIDTH, 690);
+                    album_set_partial_refresh(state, 0, 38, EPD_GDEY0426T82_WIDTH, EPD_GDEY0426T82_HEIGHT - 38);
                     return true;
                 case INK_APP_EVENT_BUTTON_CONFIRM:
                     state->current_index = state->list_selected_index;
@@ -679,10 +683,23 @@ static bool photo_album_render(
         && state->preview_interrupt_refresh_pending
         && state->view_mode == INK_PHOTO_ALBUM_VIEW_PREVIEW
         && state->image_loaded;
+    if (out_model->request_full_refresh) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL;
+    } else if (state->view_mode == INK_PHOTO_ALBUM_VIEW_LIST) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL;
+    } else if (out_model->request_aggressive_interrupt) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE;
+    } else {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_GRAY_IMAGE_PREVIEW;
+    }
     out_model->partial_x = state->partial_x;
     out_model->partial_y = state->partial_y;
     out_model->partial_w = state->partial_w;
     out_model->partial_h = state->partial_h;
+    ink_system_services_get_time_badge(
+        runtime->services,
+        s_photo_album_render_state.header_meta,
+        sizeof(s_photo_album_render_state.header_meta));
     out_model->state = &s_photo_album_render_state;
     runtime->force_full_refresh_on_next_render = false;
     state->preview_interrupt_refresh_pending = false;
@@ -977,6 +994,7 @@ static bool photo_album_preview_nav_requests_interrupt_refresh_self_test(void)
     }
 
     return model.request_aggressive_interrupt
+        && model.refresh_strategy == INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE
         && !model.request_full_refresh
         && !state->preview_interrupt_refresh_pending;
 }
@@ -1000,7 +1018,8 @@ static bool photo_album_list_render_does_not_request_interrupt_refresh_self_test
         return false;
     }
 
-    return !model.request_aggressive_interrupt
+    return model.refresh_strategy == INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL
+        && !model.request_aggressive_interrupt
         && !state->preview_interrupt_refresh_pending;
 }
 

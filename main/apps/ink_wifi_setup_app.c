@@ -14,6 +14,7 @@
 #include "apps/ink_launcher_app.h"
 #include "ink_system_runtime.h"
 #include "ink_system_services.h"
+#include "ink_wifi_coordinator.h"
 #include "ink_wifi_manager.h"
 
 static const char *TAG = "wifi_setup_app";
@@ -88,8 +89,20 @@ static bool post_work_request(
     uint32_t token,
     const ink_wifi_setup_request_t *request);
 static bool queue_scan(ink_wifi_setup_app_state_t *state);
+static void fill_wifi_setup_scan_request(ink_wifi_coordinator_request_t *request);
+static void fill_wifi_setup_connect_request(
+    ink_wifi_coordinator_request_t *request,
+    ink_wifi_setup_request_type_t type,
+    const ink_wifi_setup_app_work_item_t *item);
 static void keyboard_reset_cursor(ink_wifi_setup_app_state_t *state);
-static void keyboard_step(ink_wifi_setup_app_state_t *state, int delta);
+static void keyboard_move(ink_wifi_setup_app_state_t *state, int direction);
+static void keyboard_cycle_layer(ink_wifi_setup_app_state_t *state, int delta);
+static bool keyboard_selection_region(
+    int old_column,
+    int old_row,
+    int new_column,
+    int new_row,
+    ink_wifi_setup_ui_region_t *out_region);
 static const char *current_keyboard_label(const ink_wifi_setup_app_state_t *state);
 static bool handle_list_mode(
     ink_system_runtime_t *runtime,
@@ -119,6 +132,9 @@ static bool wifi_setup_initial_refresh_self_test(void);
 static bool wifi_setup_back_returns_launcher_self_test(void);
 static bool wifi_setup_scan_completion_self_test(void);
 static bool wifi_setup_ignores_inactive_completion_self_test(void);
+static bool wifi_setup_password_tilt_moves_keyboard_selection_self_test(void);
+static bool wifi_setup_non_password_tilt_ignored_self_test(void);
+static bool wifi_setup_render_state_header_meta_self_test(void);
 
 static const ink_app_descriptor_t kWifiSetupApp = {
     .id = "wifi_setup",
@@ -134,6 +150,26 @@ static const ink_app_descriptor_t kWifiSetupApp = {
 const ink_app_descriptor_t *ink_wifi_setup_app_descriptor(void)
 {
     return &kWifiSetupApp;
+}
+
+bool ink_wifi_setup_app_should_accept_tilt(
+    const ink_system_runtime_t *runtime,
+    const ink_app_descriptor_t *app)
+{
+    const ink_wifi_setup_app_state_t *state = NULL;
+
+    if (runtime == NULL
+        || app == NULL
+        || runtime->active_app != app
+        || app != ink_wifi_setup_app_descriptor()
+        || app->state == NULL
+        || runtime->services == NULL) {
+        return false;
+    }
+
+    state = (const ink_wifi_setup_app_state_t *)app->state;
+    return state->view.wifi.mode == WIFI_SETUP_UI_PASSWORD
+        && ink_display_mailbox_is_idle(&runtime->services->mailbox);
 }
 
 static bool ensure_worker_ready(ink_wifi_setup_app_state_t *state)
@@ -253,6 +289,10 @@ static void init_render_state(
     state->render_state.view = &state->view;
     state->render_state.fonts.menu = services != NULL ? &services->menu_font : NULL;
     state->render_state.fonts.footer = services != NULL ? &services->footer_font : NULL;
+    ink_system_services_get_time_badge(
+        services,
+        state->render_state.header_meta,
+        sizeof(state->render_state.header_meta));
 }
 
 static bool post_work_request(
@@ -281,6 +321,38 @@ static bool queue_scan(ink_wifi_setup_app_state_t *state)
     }
     state->view.wifi.scan_in_progress = true;
     return post_work_request(state, state->active_token, &request);
+}
+
+static void fill_wifi_setup_scan_request(ink_wifi_coordinator_request_t *request)
+{
+    if (request == NULL) {
+        return;
+    }
+
+    memset(request, 0, sizeof(*request));
+    request->type = INK_WIFI_COORDINATOR_REQUEST_SCAN;
+    request->owner = INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP;
+    request->timeout_ms = 10000;
+}
+
+static void fill_wifi_setup_connect_request(
+    ink_wifi_coordinator_request_t *request,
+    ink_wifi_setup_request_type_t type,
+    const ink_wifi_setup_app_work_item_t *item)
+{
+    if (request == NULL || item == NULL) {
+        return;
+    }
+
+    memset(request, 0, sizeof(*request));
+    request->owner = INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP;
+    request->keep_alive = true;
+    request->timeout_ms = 10000;
+    snprintf(request->ssid, sizeof(request->ssid), "%s", item->request.ssid);
+    snprintf(request->password, sizeof(request->password), "%s", item->request.password);
+    request->type = type == INK_WIFI_SETUP_REQUEST_CONNECT_SAVED
+        ? INK_WIFI_COORDINATOR_REQUEST_CONNECT_SAVED
+        : INK_WIFI_COORDINATOR_REQUEST_CONNECT_PASSWORD;
 }
 
 static bool request_switch_to_launcher(ink_system_runtime_t *runtime)
@@ -345,46 +417,150 @@ static void wifi_setup_exit(ink_system_runtime_t *runtime, const ink_app_descrip
     }
 }
 
-static void keyboard_step(ink_wifi_setup_app_state_t *state, int delta)
+static void keyboard_move(ink_wifi_setup_app_state_t *state, int direction)
 {
-    int current_index = 0;
-    int row = 0;
-    int col = 0;
-    int total = 0;
+    int old_row = 0;
+
+    if (state == NULL) {
+        return;
+    }
+
+    old_row = state->view.keyboard_row;
+    switch (direction) {
+        case 1:
+            state->view.keyboard_column -= 1;
+            break;
+        case 2:
+            state->view.keyboard_column += 1;
+            break;
+        case 3:
+            state->view.keyboard_row -= 1;
+            break;
+        case 4:
+            state->view.keyboard_row += 1;
+            break;
+        case 5:
+            state->view.keyboard_column -= 1;
+            state->view.keyboard_row -= 1;
+            break;
+        case 6:
+            state->view.keyboard_column += 1;
+            state->view.keyboard_row -= 1;
+            break;
+        case 7:
+            state->view.keyboard_column -= 1;
+            state->view.keyboard_row += 1;
+            break;
+        case 8:
+            state->view.keyboard_column += 1;
+            state->view.keyboard_row += 1;
+            break;
+        default:
+            return;
+    }
+
+    ink_wifi_setup_normalize_selection(
+        &state->view.keyboard_column,
+        &state->view.keyboard_row,
+        direction,
+        old_row);
+}
+
+static void keyboard_cycle_layer(ink_wifi_setup_app_state_t *state, int delta)
+{
+    int layer = 0;
 
     if (state == NULL || delta == 0) {
         return;
     }
 
-    for (row = 0; row < INK_WIFI_SETUP_KEYBOARD_ROWS; ++row) {
-        total += ink_wifi_setup_keyboard_row_key_count(row);
-    }
-    if (total <= 0) {
-        return;
+    layer = ((int)state->view.keyboard_layer + delta + INK_WIFI_SETUP_KEYBOARD_LAYER_COUNT)
+        % INK_WIFI_SETUP_KEYBOARD_LAYER_COUNT;
+    state->view.keyboard_layer = (ink_wifi_setup_keyboard_layer_t)layer;
+    ink_wifi_setup_normalize_selection(
+        &state->view.keyboard_column,
+        &state->view.keyboard_row,
+        0,
+        state->view.keyboard_row);
+}
+
+static bool keyboard_selection_region(
+    int old_column,
+    int old_row,
+    int new_column,
+    int new_row,
+    ink_wifi_setup_ui_region_t *out_region)
+{
+    ink_wifi_setup_ui_region_t area = {0};
+    ink_wifi_setup_ui_region_t region = {0};
+    bool has_region = false;
+
+    if (out_region == NULL) {
+        return false;
     }
 
-    for (row = 0; row < state->view.keyboard_row; ++row) {
-        current_index += ink_wifi_setup_keyboard_row_key_count(row);
+    if (ink_wifi_setup_ui_keyboard_key_region(old_column, old_row, &region)) {
+        area = region;
+        has_region = true;
     }
-    current_index += state->view.keyboard_column;
-    current_index = (current_index + delta + total) % total;
-
-    row = 0;
-    while (row < INK_WIFI_SETUP_KEYBOARD_ROWS) {
-        const int row_count = ink_wifi_setup_keyboard_row_key_count(row);
-        if (current_index < row_count) {
-            col = current_index;
-            break;
+    if (ink_wifi_setup_ui_keyboard_key_region(new_column, new_row, &region)) {
+        if (has_region) {
+            ink_wifi_setup_ui_expand_region(&area, &region);
+        } else {
+            area = region;
+            has_region = true;
         }
-        current_index -= row_count;
-        row++;
     }
-    if (row >= INK_WIFI_SETUP_KEYBOARD_ROWS) {
-        row = INK_WIFI_SETUP_KEYBOARD_ROWS - 1;
-        col = ink_wifi_setup_keyboard_row_key_count(row) - 1;
+    if (!has_region) {
+        return false;
     }
-    state->view.keyboard_row = row;
-    state->view.keyboard_column = col;
+
+    ink_wifi_setup_ui_pad_align_region(&area, 6);
+    *out_region = area;
+    return true;
+}
+
+static bool keyboard_handle_tilt(
+    ink_wifi_setup_app_state_t *state,
+    ink_app_event_kind_t kind)
+{
+    int direction = 0;
+
+    if (state == NULL) {
+        return false;
+    }
+
+    switch (kind) {
+        case INK_APP_EVENT_TILT_PREVIOUS:
+            direction = 1;
+            break;
+        case INK_APP_EVENT_TILT_NEXT:
+            direction = 2;
+            break;
+        case INK_APP_EVENT_TILT_UP:
+            direction = 3;
+            break;
+        case INK_APP_EVENT_TILT_DOWN:
+            direction = 4;
+            break;
+        case INK_APP_EVENT_TILT_UP_LEFT:
+            direction = 5;
+            break;
+        case INK_APP_EVENT_TILT_UP_RIGHT:
+            direction = 6;
+            break;
+        case INK_APP_EVENT_TILT_DOWN_LEFT:
+            direction = 7;
+            break;
+        case INK_APP_EVENT_TILT_DOWN_RIGHT:
+            direction = 8;
+            break;
+        default:
+            return false;
+    }
+
+    keyboard_move(state, direction);
+    return true;
 }
 
 static const char *current_keyboard_label(const ink_wifi_setup_app_state_t *state)
@@ -415,13 +591,11 @@ static bool handle_list_mode(
         case INK_APP_EVENT_BUTTON_BACK:
             return request_switch_to_launcher(runtime);
         case INK_APP_EVENT_NAV_PREVIOUS:
-        case INK_APP_EVENT_TILT_PREVIOUS:
             ink_wifi_setup_cycle_selection(&state->view.wifi, -1);
             ink_wifi_setup_ui_list_body_region(&region);
             set_partial_refresh_region(state, &region, 4);
             return true;
         case INK_APP_EVENT_NAV_NEXT:
-        case INK_APP_EVENT_TILT_NEXT:
             ink_wifi_setup_cycle_selection(&state->view.wifi, 1);
             ink_wifi_setup_ui_list_body_region(&region);
             set_partial_refresh_region(state, &region, 4);
@@ -466,6 +640,8 @@ static bool handle_password_mode(
     ink_wifi_setup_request_t request;
     const char *label = NULL;
     ink_wifi_setup_ui_region_t region;
+    int old_column = 0;
+    int old_row = 0;
 
     (void)runtime;
     if (state == NULL || event == NULL) {
@@ -476,16 +652,41 @@ static bool handle_password_mode(
         case INK_APP_EVENT_BUTTON_BACK:
             return request_switch_to_launcher(runtime);
         case INK_APP_EVENT_NAV_PREVIOUS:
-        case INK_APP_EVENT_TILT_PREVIOUS:
-            keyboard_step(state, -1);
+            keyboard_cycle_layer(state, -1);
             ink_wifi_setup_ui_keyboard_footer_region(&region);
             set_partial_refresh_region(state, &region, 6);
             return true;
         case INK_APP_EVENT_NAV_NEXT:
-        case INK_APP_EVENT_TILT_NEXT:
-            keyboard_step(state, 1);
+            keyboard_cycle_layer(state, 1);
             ink_wifi_setup_ui_keyboard_footer_region(&region);
             set_partial_refresh_region(state, &region, 6);
+            return true;
+        case INK_APP_EVENT_TILT_PREVIOUS:
+        case INK_APP_EVENT_TILT_NEXT:
+        case INK_APP_EVENT_TILT_UP:
+        case INK_APP_EVENT_TILT_DOWN:
+        case INK_APP_EVENT_TILT_UP_LEFT:
+        case INK_APP_EVENT_TILT_UP_RIGHT:
+        case INK_APP_EVENT_TILT_DOWN_LEFT:
+        case INK_APP_EVENT_TILT_DOWN_RIGHT:
+            old_column = state->view.keyboard_column;
+            old_row = state->view.keyboard_row;
+            if (!keyboard_handle_tilt(state, event->kind)) {
+                return false;
+            }
+            if (old_column == state->view.keyboard_column
+                && old_row == state->view.keyboard_row) {
+                return false;
+            }
+            if (!keyboard_selection_region(
+                    old_column,
+                    old_row,
+                    state->view.keyboard_column,
+                    state->view.keyboard_row,
+                    &region)) {
+                return false;
+            }
+            set_partial_refresh_region(state, &region, 0);
             return true;
         case INK_APP_EVENT_BUTTON_CONFIRM:
             label = current_keyboard_label(state);
@@ -544,8 +745,6 @@ static bool handle_saved_menu_mode(
             return request_switch_to_launcher(runtime);
         case INK_APP_EVENT_NAV_PREVIOUS:
         case INK_APP_EVENT_NAV_NEXT:
-        case INK_APP_EVENT_TILT_PREVIOUS:
-        case INK_APP_EVENT_TILT_NEXT:
             state->view.wifi.menu_index = state->view.wifi.menu_index == 0 ? 1 : 0;
             ink_wifi_setup_ui_saved_menu_region(&region);
             set_partial_refresh_region(state, &region, 4);
@@ -757,6 +956,11 @@ static bool wifi_setup_render(
     out_model->request_full_refresh = runtime->force_full_refresh_on_next_render;
     out_model->request_partial_refresh = !out_model->request_full_refresh
         && state->partial_refresh_pending;
+    out_model->refresh_strategy = out_model->request_full_refresh
+        ? INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL
+        : (out_model->request_partial_refresh
+            ? INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL
+            : INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST);
     out_model->partial_x = state->partial_x;
     out_model->partial_y = state->partial_y;
     out_model->partial_w = state->partial_w;
@@ -790,15 +994,39 @@ static void wifi_setup_worker_task(void *arg)
 
         switch (item.request.type) {
             case INK_WIFI_SETUP_REQUEST_SCAN:
-                result.result = ink_wifi_manager_scan(&result.scan);
-                (void)ink_wifi_manager_status(&result.status);
+                {
+                    ink_wifi_coordinator_request_t request;
+                    ink_wifi_coordinator_result_t wifi_result;
+
+                    fill_wifi_setup_scan_request(&request);
+                    request.scan_out = &result.scan;
+                    request.status_out = &result.status;
+                    result.result = ink_wifi_coordinator_request(&request, &wifi_result);
+                    if (result.result == ESP_OK && wifi_result != INK_WIFI_COORDINATOR_RESULT_OK) {
+                        result.result = ESP_FAIL;
+                        result.status.last_error = ESP_FAIL;
+                    }
+                    (void)ink_wifi_coordinator_release_owner(
+                        INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP,
+                        3000);
+                }
                 break;
             case INK_WIFI_SETUP_REQUEST_CONNECT_PASSWORD:
-                result.result = ink_wifi_manager_connect_password(
-                    item.request.ssid,
-                    item.request.password,
-                    10000,
-                    &result.status);
+                {
+                    ink_wifi_coordinator_request_t request;
+                    ink_wifi_coordinator_result_t wifi_result;
+
+                    fill_wifi_setup_connect_request(
+                        &request,
+                        INK_WIFI_SETUP_REQUEST_CONNECT_PASSWORD,
+                        &item);
+                    request.status_out = &result.status;
+                    result.result = ink_wifi_coordinator_request(&request, &wifi_result);
+                    if (result.result == ESP_OK && wifi_result != INK_WIFI_COORDINATOR_RESULT_OK) {
+                        result.result = ESP_FAIL;
+                        result.status.last_error = ESP_FAIL;
+                    }
+                }
                 if (result.result == ESP_OK) {
                     result.result = ink_wifi_manager_save_credential(
                         item.request.ssid,
@@ -808,12 +1036,29 @@ static void wifi_setup_worker_task(void *arg)
                         result.status.last_error = result.result;
                     }
                 }
+                (void)ink_wifi_coordinator_release_owner(
+                    INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP,
+                    3000);
                 break;
             case INK_WIFI_SETUP_REQUEST_CONNECT_SAVED:
-                result.result = ink_wifi_manager_connect_saved(
-                    item.request.ssid,
-                    10000,
-                    &result.status);
+                {
+                    ink_wifi_coordinator_request_t request;
+                    ink_wifi_coordinator_result_t wifi_result;
+
+                    fill_wifi_setup_connect_request(
+                        &request,
+                        INK_WIFI_SETUP_REQUEST_CONNECT_SAVED,
+                        &item);
+                    request.status_out = &result.status;
+                    result.result = ink_wifi_coordinator_request(&request, &wifi_result);
+                    if (result.result == ESP_OK && wifi_result != INK_WIFI_COORDINATOR_RESULT_OK) {
+                        result.result = ESP_FAIL;
+                        result.status.last_error = ESP_FAIL;
+                    }
+                    (void)ink_wifi_coordinator_release_owner(
+                        INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP,
+                        3000);
+                }
                 break;
             case INK_WIFI_SETUP_REQUEST_DELETE_SAVED:
                 result.result = ink_wifi_manager_delete_credential(item.request.ssid);
@@ -975,6 +1220,91 @@ static bool wifi_setup_ignores_inactive_completion_self_test(void)
     return state.view.wifi.scan.count == 0;
 }
 
+static bool wifi_setup_password_tilt_moves_keyboard_selection_self_test(void)
+{
+    ink_system_runtime_t runtime;
+    ink_system_services_t services;
+    ink_app_event_t tilt_event = {
+        .kind = INK_APP_EVENT_TILT_NEXT,
+    };
+    ink_app_event_t layer_event = {
+        .kind = INK_APP_EVENT_NAV_NEXT,
+    };
+    const ink_app_descriptor_t *wifi = ink_wifi_setup_app_descriptor();
+    ink_wifi_setup_app_state_t *state = &s_wifi_setup_state;
+
+    ink_system_runtime_init(&runtime);
+    memset(&services, 0, sizeof(services));
+    ink_display_mailbox_init(&services.mailbox, NULL, NULL, NULL, NULL, NULL);
+    runtime.services = &services;
+    memset(state, 0, sizeof(*state));
+    state->view.wifi.mode = WIFI_SETUP_UI_PASSWORD;
+    state->view.keyboard_layer = INK_WIFI_SETUP_KEYBOARD_LAYER_LOWER;
+    state->view.keyboard_row = 0;
+    state->view.keyboard_column = 0;
+
+    if (!wifi->input(&runtime, wifi, &tilt_event)) {
+        return false;
+    }
+    if (state->view.keyboard_row != 0
+        || state->view.keyboard_column != 1
+        || !state->partial_refresh_pending) {
+        return false;
+    }
+    if (state->partial_w <= 0
+        || state->partial_h <= 0
+        || state->partial_w >= EPD_GDEY0426T82_WIDTH
+        || state->partial_h >= (EPD_GDEY0426T82_HEIGHT - 224)) {
+        return false;
+    }
+    if (!ink_wifi_setup_app_should_accept_tilt(&runtime, wifi)) {
+        return false;
+    }
+    if (!wifi->input(&runtime, wifi, &layer_event)) {
+        return false;
+    }
+    return state->view.keyboard_layer == INK_WIFI_SETUP_KEYBOARD_LAYER_UPPER;
+}
+
+static bool wifi_setup_non_password_tilt_ignored_self_test(void)
+{
+    ink_system_runtime_t runtime;
+    ink_system_services_t services;
+    ink_app_event_t tilt_event = {
+        .kind = INK_APP_EVENT_TILT_NEXT,
+    };
+    const ink_app_descriptor_t *wifi = ink_wifi_setup_app_descriptor();
+    ink_wifi_setup_app_state_t *state = &s_wifi_setup_state;
+
+    ink_system_runtime_init(&runtime);
+    memset(&services, 0, sizeof(services));
+    ink_display_mailbox_init(&services.mailbox, NULL, NULL, NULL, NULL, NULL);
+    runtime.services = &services;
+    runtime.active_app = wifi;
+    memset(state, 0, sizeof(*state));
+    state->view.wifi.mode = WIFI_SETUP_UI_LIST;
+
+    if (ink_wifi_setup_app_should_accept_tilt(&runtime, wifi)) {
+        return false;
+    }
+    if (wifi->input(&runtime, wifi, &tilt_event)) {
+        return false;
+    }
+    return !state->partial_refresh_pending;
+}
+
+static bool wifi_setup_render_state_header_meta_self_test(void)
+{
+    ink_wifi_setup_app_state_t state;
+    ink_system_services_t services;
+
+    memset(&state, 0, sizeof(state));
+    memset(&services, 0, sizeof(services));
+    snprintf(services.time_service.display_text, sizeof(services.time_service.display_text), "%s", "12:34");
+    init_render_state(&state, &services);
+    return strcmp(state.render_state.header_meta, "12:34") == 0;
+}
+
 bool ink_wifi_setup_app_self_test(void)
 {
     return wifi_setup_worker_stack_budget_self_test()
@@ -982,5 +1312,8 @@ bool ink_wifi_setup_app_self_test(void)
         && wifi_setup_initial_refresh_self_test()
         && wifi_setup_back_returns_launcher_self_test()
         && wifi_setup_scan_completion_self_test()
-        && wifi_setup_ignores_inactive_completion_self_test();
+        && wifi_setup_ignores_inactive_completion_self_test()
+        && wifi_setup_password_tilt_moves_keyboard_selection_self_test()
+        && wifi_setup_non_password_tilt_ignored_self_test()
+        && wifi_setup_render_state_header_meta_self_test();
 }

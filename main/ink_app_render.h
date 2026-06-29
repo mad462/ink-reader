@@ -10,6 +10,7 @@
 
 const char *ink_app_shell_page_name(ink_runtime_shell_page_t page);
 const char *ink_app_shell_command_name(ink_runtime_shell_command_t command);
+const char *ink_refresh_strategy_name(ink_refresh_strategy_t strategy);
 bool ink_app_page_shows_live_button_state(ink_runtime_shell_page_t page);
 void ink_app_log_button_snapshot(uint32_t now_ms, const ink_button_snapshot_t *snapshot);
 void ink_app_note_command(

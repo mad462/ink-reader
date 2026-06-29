@@ -24,9 +24,14 @@ idf_component_register(
         "voice_note/voice_note_service.c"
         "voice_note/voice_note_store.c"
         "voice_note/voice_note_model.c"
+        "voice_note/voice_note_asr.c"
+        "voice_note/voice_note_audio.c"
+        "voice_note/voice_note_capture_logic.c"
     INCLUDE_DIRS
         "."
     REQUIRES
+        esp_http_client
+        esp-tls
         esp_driver_sdmmc
         esp_timer
         fatfs
@@ -37,6 +42,7 @@ idf_component_register(
         ink_wifi_setup
         json
         lwip
+        mbedtls
         esp_tinyusb
         vfs
 )

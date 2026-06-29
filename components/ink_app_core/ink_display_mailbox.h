@@ -9,6 +9,7 @@
 
 #include "epd_gdey0426t82.h"
 #include "epd_test_pattern.h"
+#include "ink_refresh_strategy.h"
 #include "ink_runtime_shell.h"
 
 typedef struct {
@@ -19,6 +20,7 @@ typedef struct {
     uint32_t view_build_ms;
     ink_runtime_shell_command_t command;
     ink_runtime_shell_page_t page;
+    ink_refresh_strategy_t refresh_strategy;
     bool full_refresh;
     bool use_app_render_model;
     bool use_font;

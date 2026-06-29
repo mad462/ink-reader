@@ -17,6 +17,8 @@
 
 #include "epd_test_pattern.h"
 #include "ink_wifi_setup_ui.h"
+#include "voice_note/voice_note_audio.h"
+#include "voice_note/voice_note_model.h"
 
 static const char *TAG = "ink_reader";
 static const bool kFooterPartialReuseInit = true;
@@ -88,6 +90,38 @@ static void fill_voice_note_page(
     uint8_t *buffer,
     size_t length,
     const ink_voice_note_app_render_state_t *render_state);
+static void compose_voice_note_card_subtitle(
+    voice_note_tab_t tab,
+    const ink_voice_note_app_state_t *state,
+    const voice_note_note_t *note,
+    char *dst,
+    size_t dst_size);
+static void compose_voice_note_recording_subtitle(
+    const ink_voice_note_app_state_t *state,
+    char *dst,
+    size_t dst_size);
+static void draw_voice_note_full_text_view(
+    uint8_t *buffer,
+    size_t length,
+    const ink_voice_note_app_render_state_t *render_state,
+    epd_test_pattern_reader_menu_overlay_t *overlay);
+static size_t voice_note_render_visible_index_from_selection(
+    const ink_voice_note_app_state_t *state,
+    size_t selection_index);
+static void compose_voice_note_meta_line(
+    const voice_note_note_t *note,
+    char *dst,
+    size_t dst_size);
+static size_t utf8_codepoint_length_from_lead(unsigned char lead);
+static void utf8_copy_prefix_safe(char *dst, size_t dst_size, const char *src, size_t src_bytes);
+static int measure_text_width_scaled(const ink_cpfont_t *font, const char *text, uint8_t scale_divisor);
+static size_t compose_voice_note_wrapped_lines(
+    const ink_cpfont_t *font,
+    uint8_t scale_divisor,
+    const char *text,
+    int max_width_px,
+    char lines[][VOICE_NOTE_TEXT_LENGTH],
+    size_t max_lines);
 static void usb_msc_draw_pill(
     uint8_t *buffer,
     int x,
@@ -387,7 +421,7 @@ void ink_app_log_button_snapshot(uint32_t now_ms, const ink_button_snapshot_t *s
         return;
     }
 
-    ESP_LOGI(
+    ESP_LOGD(
         TAG,
         "button event t=%ums stable=0x%02x pressed=0x%02x released=0x%02x L=%u R=%u C=%u B=%u P=%u",
         (unsigned)now_ms,
@@ -410,7 +444,7 @@ void ink_app_note_command(
         return;
     }
 
-    ESP_LOGI(
+    ESP_LOGD(
         TAG,
         "command t=%ums page=%s cmd=%s",
         (unsigned)now_ms,
@@ -442,7 +476,7 @@ static void log_render_timing(
     uint32_t cache_evictions_delta)
 {
     const uint32_t since_command_ms = s_last_command_ms == 0U ? 0U : now_ms - s_last_command_ms;
-    ESP_LOGI(
+    ESP_LOGD(
         TAG,
         "render seq=%u t=%ums page=%s strategy=%s route=%s mode=%s gray=%d interrupt=%d pinned=%d cmd=%s since_cmd=%ums view=%ums draw=%ums diff=%ums epd=%ums total=%ums dirty=%u,%u %ux%u cache=+%u/-%u evict+%u ret=%s",
         (unsigned)s_render_sequence,
@@ -788,6 +822,140 @@ static void launcher_fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool
             launcher_set_pixel(buffer, xx, yy, black);
         }
     }
+}
+
+static size_t utf8_codepoint_length_from_lead(unsigned char lead)
+{
+    if ((lead & 0x80U) == 0U) {
+        return 1U;
+    }
+    if ((lead & 0xE0U) == 0xC0U) {
+        return 2U;
+    }
+    if ((lead & 0xF0U) == 0xE0U) {
+        return 3U;
+    }
+    if ((lead & 0xF8U) == 0xF0U) {
+        return 4U;
+    }
+    return 1U;
+}
+
+static void utf8_copy_prefix_safe(char *dst, size_t dst_size, const char *src, size_t src_bytes)
+{
+    size_t copied = 0U;
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+    dst[0] = '\0';
+    if (src == NULL) {
+        return;
+    }
+
+    while (copied < src_bytes && src[copied] != '\0' && copied + 1U < dst_size) {
+        dst[copied] = src[copied];
+        ++copied;
+    }
+    dst[copied] = '\0';
+}
+
+static int measure_text_width_scaled(const ink_cpfont_t *font, const char *text, uint8_t scale_divisor)
+{
+    int width_px = 0;
+
+    if (font != NULL && ink_cpfont_is_loaded(font)) {
+        if (scale_divisor <= 1U) {
+            if (ink_cpfont_draw_text_bw((ink_cpfont_t *)font, NULL, 0, 0, text, &width_px) == ESP_OK) {
+                return width_px;
+            }
+        } else if (ink_cpfont_draw_text_bw_scaled(
+                (ink_cpfont_t *)font,
+                NULL,
+                0,
+                0,
+                text,
+                scale_divisor,
+                &width_px) == ESP_OK) {
+            return width_px;
+        }
+    }
+
+    return (int)strlen(text) * 12;
+}
+
+static size_t compose_voice_note_wrapped_lines(
+    const ink_cpfont_t *font,
+    uint8_t scale_divisor,
+    const char *text,
+    int max_width_px,
+    char lines[][VOICE_NOTE_TEXT_LENGTH],
+    size_t max_lines)
+{
+    size_t line_count = 0U;
+    size_t start = 0U;
+
+    if (text == NULL || lines == NULL || max_lines == 0U) {
+        return 0U;
+    }
+
+    while (text[start] != '\0' && line_count < max_lines) {
+        size_t cursor = start;
+        size_t candidate_end = start;
+        size_t last_break = start;
+        bool saw_breakable = false;
+        char candidate[VOICE_NOTE_TEXT_LENGTH];
+
+        while (text[cursor] != '\0') {
+            const size_t cp_len = utf8_codepoint_length_from_lead((unsigned char)text[cursor]);
+            size_t actual_len = 0U;
+
+            while (actual_len < cp_len && text[cursor + actual_len] != '\0') {
+                ++actual_len;
+            }
+            if (actual_len == 0U) {
+                break;
+            }
+
+            candidate_end = cursor + actual_len;
+            utf8_copy_prefix_safe(candidate, sizeof(candidate), text + start, candidate_end - start);
+            if (measure_text_width_scaled(font, candidate, scale_divisor) > max_width_px) {
+                if (saw_breakable && last_break > start) {
+                    candidate_end = last_break;
+                } else if (candidate_end > start) {
+                    candidate_end = cursor;
+                }
+                break;
+            }
+
+            if (text[cursor] == ' ') {
+                saw_breakable = true;
+                last_break = cursor;
+            }
+            cursor += actual_len;
+        }
+
+        if (candidate_end <= start) {
+            candidate_end = cursor > start ? cursor : (start + 1U);
+        }
+
+        utf8_copy_prefix_safe(lines[line_count], VOICE_NOTE_TEXT_LENGTH, text + start, candidate_end - start);
+        while (lines[line_count][0] == ' ') {
+            memmove(lines[line_count], lines[line_count] + 1, strlen(lines[line_count]));
+        }
+        while (strlen(lines[line_count]) > 0U
+            && lines[line_count][strlen(lines[line_count]) - 1U] == ' ') {
+            lines[line_count][strlen(lines[line_count]) - 1U] = '\0';
+        }
+        ++line_count;
+
+        start = candidate_end;
+        while (text[start] == ' ') {
+            ++start;
+        }
+    }
+
+    return line_count;
 }
 
 static void launcher_fill_dither_rect(uint8_t *buffer, int x, int y, int w, int h, bool black)
@@ -1167,49 +1335,362 @@ static void fill_voice_note_page(
     const ink_voice_note_app_render_state_t *render_state)
 {
     const ink_voice_note_app_state_t *state = render_state != NULL ? render_state->state : NULL;
-    epd_test_pattern_list_row_t rows[2];
-    epd_test_pattern_rows_page_spec_t spec;
-    const char *status_text = "按住 Confirm 开始录音";
-    const char *active_note_id = "等待首条标签";
+    epd_test_pattern_reader_menu_overlay_t *overlay = state != NULL ? state->popup_overlay : NULL;
+    char popup_title[96];
+    char overlay_meta[24];
 
     if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
         return;
     }
 
     memset(buffer, 0xFF, length);
-    memset(rows, 0, sizeof(rows));
-    memset(&spec, 0, sizeof(spec));
-
-    if (state != NULL) {
-        if (state->snapshot.status_text[0] != '\0') {
-            status_text = state->snapshot.status_text;
-        }
-        if (state->snapshot.active_note_id[0] != '\0') {
-            active_note_id = state->snapshot.active_note_id;
-        }
+    if (state == NULL || overlay == NULL) {
+        epd_test_pattern_fill_text_page(buffer, length, "语音便签", "状态不可用", "", "", "", "");
+        return;
     }
 
-    rows[0].title = "新建语音标签";
-    rows[0].line1 = status_text;
-    rows[0].line2 = "";
-    rows[0].selected = true;
-    rows[0].emphasized = true;
+    memset(overlay, 0, sizeof(*overlay));
+    overlay->frameless_panel = true;
+    overlay->compact_cards = false;
+    overlay->bookmark_cards_tall = false;
+    snprintf(overlay->header_title, sizeof(overlay->header_title), "%s", "语音便签");
+    snprintf(
+        overlay->header_meta,
+        sizeof(overlay->header_meta),
+        "%s",
+        render_state != NULL ? render_state->header_meta : "");
+    overlay->tab_count = 3U;
+    snprintf(overlay->tabs[0].label, sizeof(overlay->tabs[0].label), "%s", "全部");
+    snprintf(overlay->tabs[1].label, sizeof(overlay->tabs[1].label), "%s", "未完成");
+    snprintf(overlay->tabs[2].label, sizeof(overlay->tabs[2].label), "%s", "已完成");
+    for (size_t i = 0U; i < overlay->tab_count; ++i) {
+        overlay->tabs[i].active = (size_t)state->active_tab == i;
+        overlay->tabs[i].focused = false;
+    }
 
-    rows[1].title = "最近一次任务";
-    rows[1].line1 = active_note_id;
-    rows[1].line2 = "";
-    rows[1].selected = false;
-    rows[1].emphasized = false;
+    {
+        const bool has_new_card =
+            state->active_tab == VOICE_NOTE_TAB_ALL || state->active_tab == VOICE_NOTE_TAB_PENDING;
+        size_t card_count = 0U;
 
-    spec.title = "语音便签";
-    spec.meta = render_state != NULL ? render_state->header_meta : "";
-    spec.rows = rows;
-    spec.row_count = 2U;
-    spec.title_font = render_state != NULL ? render_state->menu_font : NULL;
-    spec.meta_font = render_state != NULL ? render_state->footer_font : NULL;
-    spec.row_title_font = render_state != NULL ? render_state->reader_font : NULL;
-    spec.row_meta_font = render_state != NULL ? render_state->footer_font : NULL;
-    epd_test_pattern_fill_crosspoint_rows_page(buffer, length, &spec);
+        if (has_new_card) {
+            snprintf(overlay->cards[card_count].title, sizeof(overlay->cards[card_count].title), "%s", "新建语音标签");
+            compose_voice_note_recording_subtitle(
+                state,
+                overlay->cards[card_count].line1,
+                sizeof(overlay->cards[card_count].line1));
+            overlay->cards[card_count].line2[0] = '\0';
+            overlay->cards[card_count].selected = state->selected_index == card_count;
+            ++card_count;
+        }
+
+        for (size_t i = 0U; i < state->visible_note_count && card_count < EPD_TEST_PATTERN_MENU_CARD_CAPACITY; ++i) {
+            char note_meta[48];
+            const voice_note_note_t *note = &state->visible_notes[i];
+
+            compose_voice_note_card_subtitle(
+                state->active_tab,
+                state,
+                note,
+                note_meta,
+                sizeof(note_meta));
+            snprintf(
+                overlay->cards[card_count].title,
+                sizeof(overlay->cards[card_count].title),
+                "%s",
+                note->title[0] != '\0' ? note->title : "这是一条语音标签");
+            snprintf(
+                overlay->cards[card_count].line1,
+                sizeof(overlay->cards[card_count].line1),
+                "%s",
+                note_meta);
+            overlay->cards[card_count].line2[0] = '\0';
+            overlay->cards[card_count].selected = state->selected_index == card_count;
+            ++card_count;
+        }
+
+        overlay->card_count = card_count;
+    }
+
+    epd_test_pattern_draw_reader_menu_overlay(
+        buffer,
+        length,
+        render_state != NULL ? render_state->menu_font : NULL,
+        render_state != NULL ? render_state->footer_font : NULL,
+        overlay);
+
+    if (state != NULL && state->popup_open && overlay != NULL) {
+        epd_test_pattern_truncate_text_tail(
+            render_state != NULL ? render_state->header_meta : "",
+            overlay_meta,
+            sizeof(overlay_meta),
+            12U);
+        snprintf(overlay->header_meta, sizeof(overlay->header_meta), "%s", overlay_meta);
+        overlay->action_popup_open = true;
+        overlay->action_count = 3U;
+        snprintf(popup_title, sizeof(popup_title), "%s", "标签操作");
+        snprintf(overlay->action_popup_title, sizeof(overlay->action_popup_title), "%s", popup_title);
+        snprintf(overlay->actions[0].label, sizeof(overlay->actions[0].label), "%s", "查看全文");
+        snprintf(overlay->actions[1].label, sizeof(overlay->actions[1].label), "%s", "标记为完成");
+        snprintf(
+            overlay->actions[2].label,
+            sizeof(overlay->actions[2].label),
+            "%s",
+            "删除");
+        for (size_t i = 0U; i < overlay->action_count; ++i) {
+            overlay->actions[i].selected = i == state->popup_action_index;
+        }
+        epd_test_pattern_draw_reader_menu_overlay(
+            buffer,
+            length,
+            render_state != NULL ? render_state->menu_font : NULL,
+            render_state != NULL ? render_state->footer_font : NULL,
+            overlay);
+    } else if (state != NULL && state->popup_open) {
+        epd_test_pattern_fill_text_page(
+            buffer,
+            length,
+            "语音便签",
+            "标签操作不可用",
+            "请退出重试",
+            "",
+            "",
+            "");
+    } else if (state != NULL && state->full_text_open) {
+        draw_voice_note_full_text_view(buffer, length, render_state, overlay);
+    }
+}
+
+static size_t voice_note_render_visible_index_from_selection(
+    const ink_voice_note_app_state_t *state,
+    size_t selection_index)
+{
+    if (state == NULL) {
+        return VOICE_NOTE_MAX_NOTES;
+    }
+    if (state->active_tab == VOICE_NOTE_TAB_ALL || state->active_tab == VOICE_NOTE_TAB_PENDING) {
+        if (selection_index == 0U) {
+            return VOICE_NOTE_MAX_NOTES;
+        }
+        return selection_index - 1U;
+    }
+    return selection_index;
+}
+
+static void compose_voice_note_recording_subtitle(
+    const ink_voice_note_app_state_t *state,
+    char *dst,
+    size_t dst_size)
+{
+    char raw[80];
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+
+    dst[0] = '\0';
+    if (state == NULL) {
+        return;
+    }
+
+    if (state->snapshot.state == VOICE_NOTE_JOB_RECORDING) {
+        uint32_t remaining_ms = 0U;
+        uint32_t remaining_s = 0U;
+
+        remaining_ms = state->snapshot.capture_duration_ms >= VOICE_NOTE_MAX_CAPTURE_MS
+            ? 0U
+            : (VOICE_NOTE_MAX_CAPTURE_MS - state->snapshot.capture_duration_ms);
+        remaining_s = (remaining_ms + 999U) / 1000U;
+        snprintf(raw, sizeof(raw), "正在录音  倒计时 %lus", (unsigned long)remaining_s);
+    } else if (state->snapshot.busy && state->snapshot.active_note_id[0] == '\0') {
+        snprintf(
+            raw,
+            sizeof(raw),
+            "%s",
+            state->snapshot.status_text[0] != '\0' ? state->snapshot.status_text : "处理中");
+    } else {
+        snprintf(
+            raw,
+            sizeof(raw),
+            "%s",
+            state->snapshot.status_text[0] != '\0'
+                ? state->snapshot.status_text
+                : "按住 Confirm 开始录音");
+    }
+
+    epd_test_pattern_truncate_text_tail(raw, dst, dst_size, 22U);
+}
+
+static void compose_voice_note_card_subtitle(
+    voice_note_tab_t tab,
+    const ink_voice_note_app_state_t *state,
+    const voice_note_note_t *note,
+    char *dst,
+    size_t dst_size)
+{
+    char raw[80];
+    bool show_live_status = false;
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+    dst[0] = '\0';
+    if (note == NULL) {
+        return;
+    }
+
+    show_live_status = state != NULL
+        && state->snapshot.busy
+        && state->snapshot.active_note_id[0] != '\0'
+        && strcmp(state->snapshot.active_note_id, note->id) == 0;
+
+    if (show_live_status) {
+        snprintf(
+            raw,
+            sizeof(raw),
+            "%s",
+            state->snapshot.status_text[0] != '\0'
+                ? state->snapshot.status_text
+                : "处理中");
+        epd_test_pattern_truncate_text_tail(raw, dst, dst_size, 22U);
+        return;
+    }
+
+    (void)tab;
+    compose_voice_note_meta_line(note, raw, sizeof(raw));
+
+    if (note->last_error[0] != '\0') {
+        snprintf(
+            raw + strlen(raw),
+            sizeof(raw) - strlen(raw),
+            "  %s",
+            note->last_error);
+    }
+
+    epd_test_pattern_truncate_text_tail(raw, dst, dst_size, 22U);
+}
+
+static void compose_voice_note_meta_line(
+    const voice_note_note_t *note,
+    char *dst,
+    size_t dst_size)
+{
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+    dst[0] = '\0';
+    if (note == NULL) {
+        return;
+    }
+
+    (void)voice_note_model_compose_meta_line(
+        note->created_at_epoch_s,
+        note->duration_ms,
+        note->status,
+        dst,
+        dst_size);
+}
+
+static void draw_voice_note_full_text_view(
+    uint8_t *buffer,
+    size_t length,
+    const ink_voice_note_app_render_state_t *render_state,
+    epd_test_pattern_reader_menu_overlay_t *overlay)
+{
+    const ink_voice_note_app_state_t *state = render_state != NULL ? render_state->state : NULL;
+    const ink_cpfont_t *title_font = render_state != NULL ? render_state->menu_font : NULL;
+    const ink_cpfont_t *meta_font = render_state != NULL ? render_state->footer_font : NULL;
+    const ink_cpfont_t *body_font = render_state != NULL ? render_state->menu_font : NULL;
+    epd_test_pattern_header_spec_t header;
+    const voice_note_note_t *note = NULL;
+    size_t note_index = VOICE_NOTE_MAX_NOTES;
+    static char s_wrapped_text[VOICE_NOTE_TEXT_LENGTH];
+    static char s_lines[12][VOICE_NOTE_TEXT_LENGTH];
+    char overlay_meta[24];
+    char meta_line[64];
+    const char *text = "暂无识别文本";
+    size_t line_count = 0U;
+    const int text_x = 24;
+    const int meta_y = 104;
+    const int text_y0 = 154;
+    const int line_gap = 50;
+    const int max_width_px = EPD_GDEY0426T82_WIDTH - 48;
+    const uint8_t meta_scale_divisor = 1U;
+    const uint8_t body_scale_divisor = 1U;
+
+    if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE || state == NULL || overlay == NULL) {
+        return;
+    }
+
+    memset(buffer, 0xFF, length);
+    memset(s_wrapped_text, 0, sizeof(s_wrapped_text));
+    memset(s_lines, 0, sizeof(s_lines));
+
+    note_index = voice_note_render_visible_index_from_selection(state, state->selected_index);
+    if (note_index < state->visible_note_count) {
+        note = &state->visible_notes[note_index];
+    }
+
+    header.title = "语音便签";
+    header.meta = render_state != NULL ? render_state->header_meta : "";
+    header.title_font = title_font;
+    header.meta_font = meta_font;
+    epd_test_pattern_draw_crosspoint_header(buffer, &header);
+
+    overlay->frameless_panel = true;
+    overlay->compact_cards = false;
+    overlay->bookmark_cards_tall = false;
+    snprintf(overlay->header_title, sizeof(overlay->header_title), "%s", "语音便签");
+    epd_test_pattern_truncate_text_tail(
+        render_state != NULL ? render_state->header_meta : "",
+        overlay_meta,
+        sizeof(overlay_meta),
+        12U);
+    snprintf(overlay->header_meta, sizeof(overlay->header_meta), "%s", overlay_meta);
+    overlay->tab_count = 0U;
+    overlay->card_count = 0U;
+    overlay->action_popup_open = false;
+    epd_test_pattern_draw_reader_menu_overlay(buffer, length, title_font, meta_font, overlay);
+
+    launcher_fill_rect(buffer, 20, 98, EPD_GDEY0426T82_WIDTH - 40, 610, false);
+
+    if (note != NULL) {
+        if (note->text[0] != '\0') {
+            text = note->text;
+        } else if (note->last_error[0] != '\0') {
+            text = note->last_error;
+        }
+        compose_voice_note_meta_line(note, meta_line, sizeof(meta_line));
+    } else {
+        snprintf(meta_line, sizeof(meta_line), "%s", "时间未同步  0s  未完成");
+    }
+
+    launcher_draw_text(buffer, meta_font, text_x, meta_y, meta_line, meta_scale_divisor, false);
+
+    if (!voice_note_model_normalize_text(text, s_wrapped_text, sizeof(s_wrapped_text))) {
+        snprintf(s_wrapped_text, sizeof(s_wrapped_text), "%s", text);
+    }
+    line_count = compose_voice_note_wrapped_lines(
+        body_font,
+        body_scale_divisor,
+        s_wrapped_text,
+        max_width_px,
+        s_lines,
+        sizeof(s_lines) / sizeof(s_lines[0]));
+
+    for (size_t i = 0U; i < line_count; ++i) {
+        launcher_draw_text(
+            buffer,
+            body_font,
+            text_x,
+            text_y0 + (int)i * line_gap,
+            s_lines[i],
+            body_scale_divisor,
+            false);
+    }
+    if (line_count == 0U) {
+        launcher_draw_text(buffer, body_font, text_x, text_y0, s_wrapped_text, body_scale_divisor, false);
+    }
 }
 
 static void draw_photo_album_list_page(
@@ -3689,6 +4170,8 @@ static bool app_render_model_voice_note_self_test(void)
     ink_voice_note_app_state_t state;
     ink_voice_note_app_render_state_t render_state;
     bool ok = false;
+    epd_test_pattern_reader_menu_overlay_t overlay;
+    voice_note_note_t note;
 
     if (buffer == NULL) {
         return false;
@@ -3698,8 +4181,23 @@ static bool app_render_model_voice_note_self_test(void)
     memset(&model, 0, sizeof(model));
     memset(&state, 0, sizeof(state));
     memset(&render_state, 0, sizeof(render_state));
+    memset(&overlay, 0, sizeof(overlay));
+    memset(&note, 0, sizeof(note));
     snprintf(state.snapshot.status_text, sizeof(state.snapshot.status_text), "%s", "正在录音");
-    snprintf(state.snapshot.active_note_id, sizeof(state.snapshot.active_note_id), "%s", "note-001");
+    state.popup_overlay = &overlay;
+    state.visible_notes = &note;
+    state.visible_note_count = 1U;
+    snprintf(note.title, sizeof(note.title), "%s", "这是一条很长很长的语音标签标题用于测试页面渲染");
+    snprintf(
+        note.text,
+        sizeof(note.text),
+        "%s",
+        "这里是完整识别结果，\r\n用来覆盖全文展示路径。\n我们希望这里能按自己的断行规则显示，并且整页从上往下是更近的新标签。");
+    snprintf(note.last_error, sizeof(note.last_error), "%s", "网络异常");
+    snprintf(note.id, sizeof(note.id), "%s", "note-001");
+    note.created_at_epoch_s = 1735689600U;
+    note.status = VOICE_NOTE_STATUS_PENDING;
+    note.duration_ms = 3200U;
     snprintf(render_state.header_meta, sizeof(render_state.header_meta), "%s", "12:34");
     render_state.state = &state;
     model.mode = INK_APP_RENDER_MODE_VOICE_NOTE;
@@ -3710,6 +4208,58 @@ static bool app_render_model_voice_note_self_test(void)
         && render_pixel_is_black(buffer, 24, 8)
         && render_pixel_is_black(buffer, 408, 10)
         && render_pixel_is_black(buffer, 24, 66);
+    if (ok) {
+        memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+        state.popup_open = true;
+        state.selected_index = 1U;
+        ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+            && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+            && render_pixel_is_black(buffer, 56, 82)
+            && strcmp(overlay.actions[1].label, "标记为完成") == 0
+            && strcmp(overlay.actions[2].label, "删除") == 0;
+    }
+    if (ok) {
+        memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+        state.popup_open = false;
+        state.full_text_open = true;
+        ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+            && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+            && render_pixel_is_black(buffer, 24, 66)
+            && render_pixel_is_black(buffer, 24, 156)
+            && render_pixel_is_black(buffer, 24, 198);
+    }
+    if (ok) {
+        char subtitle[48];
+
+        snprintf(note.last_error, sizeof(note.last_error), "%s", "WiFi 连接失败");
+        compose_voice_note_card_subtitle(VOICE_NOTE_TAB_PENDING, &state, &note, subtitle, sizeof(subtitle));
+        ok = strstr(subtitle, "01-01 08:00") != NULL
+            && strstr(subtitle, "3s") != NULL
+            && strstr(subtitle, "未完成") != NULL
+            && strstr(subtitle, "WiFi") != NULL
+            && strstr(subtitle, "\n") == NULL;
+    }
+    if (ok) {
+        char subtitle[48];
+
+        state.snapshot.busy = true;
+        snprintf(state.snapshot.active_note_id, sizeof(state.snapshot.active_note_id), "%s", "note-001");
+        snprintf(state.snapshot.status_text, sizeof(state.snapshot.status_text), "%s", "上传识别中");
+        compose_voice_note_card_subtitle(VOICE_NOTE_TAB_PENDING, &state, &note, subtitle, sizeof(subtitle));
+        ok = strcmp(subtitle, "上传识别中") == 0;
+    }
+    if (ok) {
+        memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+        state.snapshot.busy = false;
+        note.status = VOICE_NOTE_STATUS_DONE;
+        note.created_at_epoch_s = 1735689600U;
+        state.full_text_open = true;
+        ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+            && render_pixel_is_black(buffer, 24, 104)
+            && render_pixel_is_black(buffer, 24, 120)
+            && !overlay.tabs[0].active
+            && overlay.tab_count == 0U;
+    }
     free(buffer);
     return ok;
 }

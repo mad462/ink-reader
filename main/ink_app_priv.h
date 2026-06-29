@@ -24,17 +24,19 @@ enum {
     INK_INPUT_TASK_PERIOD_MS = 5,
     INK_INPUT_HOLD_EVENT_MS = 125,
     INK_UI_IDLE_WAIT_MS = 250,
+    INK_RUNTIME_APP_IDLE_TICK_MS = 20,
     INK_FAST_BROWSE_IDLE_TICK_MS = 60,
     INK_UI_QUEUE_LENGTH = 24,
     INK_INPUT_TASK_STACK_BYTES = 3072,
     INK_UI_TASK_STACK_BYTES = 6144,
-    INK_EPD_TASK_STACK_BYTES = 5120,
+    INK_EPD_TASK_STACK_BYTES = 6144,
     INK_FAST_BROWSE_ENTER_MS = 1000,
     INK_READER_CONFIRM_LONG_PRESS_MS = 450,
 };
 
 typedef enum {
     INK_UI_EVENT_BUTTON = 0,
+    INK_UI_EVENT_TILT,
     INK_UI_EVENT_DISPLAY_DONE,
 } ink_ui_event_kind_t;
 
@@ -43,6 +45,7 @@ typedef struct {
     uint32_t event_ms;
     union {
         ink_button_snapshot_t snapshot;
+        int32_t tilt_direction;
         struct {
             uint32_t seq;
             esp_err_t result;

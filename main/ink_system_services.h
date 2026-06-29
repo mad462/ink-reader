@@ -34,10 +34,6 @@ typedef struct ink_system_services {
     ink_time_service_t time_service;
     ink_usb_msc_service_t usb_msc;
     bool tf_ready;
-    bool wifi_ready;
-    bool wifi_coordinator_ready;
-    bool wifi_auto_connect_started;
-    ink_wifi_coordinator_status_t wifi_coordinator_status;
     portMUX_TYPE latest_buttons_lock;
     ink_runtime_shell_button_state_t latest_buttons;
     uint32_t latest_buttons_ms;
@@ -71,5 +67,4 @@ void ink_system_services_get_time_badge(
     const ink_system_services_t *services,
     char *dst,
     size_t dst_size);
-esp_err_t ink_system_services_start_wifi_auto_connect(ink_system_services_t *services);
 bool ink_system_services_self_test(void);

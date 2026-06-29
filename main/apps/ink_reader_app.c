@@ -709,6 +709,19 @@ static bool reader_render(
     out_model->mode = INK_APP_RENDER_MODE_READER_SUBSYSTEM;
     out_model->request_full_refresh = runtime->force_full_refresh_on_next_render
         || ink_runtime_shell_requires_full_refresh(&state->ui.shell);
+    if (out_model->request_full_refresh) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL;
+    } else if (state->ui.reader_opening || state->ui.reader_menu.open) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE;
+    } else if (state->ui.reader_hold_navigation_active) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW;
+    } else if (state->ui.shell.page == INK_RUNTIME_SHELL_PAGE_LIBRARY) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL;
+    } else if (state->ui.shell.page == INK_RUNTIME_SHELL_PAGE_READER) {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_TURN;
+    } else {
+        out_model->refresh_strategy = INK_REFRESH_STRATEGY_LAB_EXPLICIT_MODE;
+    }
     out_model->state = &state->ui;
     runtime->force_full_refresh_on_next_render = false;
     if (out_model->request_full_refresh

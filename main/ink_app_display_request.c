@@ -20,6 +20,11 @@ static bool display_library_resolve_selected_path(
     size_t path_out_size,
     char *title_out,
     size_t title_out_size);
+static void copy_overlay_title(
+    char *dst,
+    size_t dst_size,
+    const char *src,
+    size_t max_chars);
 static void fill_reader_menu_overlay(
     const ink_ui_model_t *model,
     epd_test_pattern_reader_menu_overlay_t *overlay);
@@ -28,6 +33,23 @@ static void fill_reader_loading_overlay(
     const char *title,
     const char *line1,
     const char *line2);
+
+static void copy_overlay_title(
+    char *dst,
+    size_t dst_size,
+    const char *src,
+    size_t max_chars)
+{
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+
+    epd_test_pattern_truncate_text_middle(
+        src != NULL ? src : "",
+        dst,
+        dst_size,
+        max_chars);
+}
 
 static void format_reader_footer_text(
     const ink_ui_model_t *model,
@@ -446,7 +468,11 @@ static void fill_library_overlay_actions(
 
     overlay->action_popup_open = true;
     overlay->action_count = 2U;
-    snprintf(overlay->action_popup_title, sizeof(overlay->action_popup_title), "%s", title);
+    copy_overlay_title(
+        overlay->action_popup_title,
+        sizeof(overlay->action_popup_title),
+        title,
+        18U);
     snprintf(overlay->actions[0].label, sizeof(overlay->actions[0].label), "%s", "打开");
     snprintf(
         overlay->actions[1].label,
@@ -467,6 +493,7 @@ static void fill_library_overlay(
 
     memset(overlay, 0, sizeof(*overlay));
     overlay->frameless_panel = true;
+    snprintf(overlay->header_title, sizeof(overlay->header_title), "%s", "书库");
     fill_library_overlay_tabs(model, overlay);
     fill_library_overlay_cards(model, overlay);
     fill_library_overlay_actions(model, overlay);
@@ -503,6 +530,7 @@ bool ink_app_build_display_request(
     request->submitted_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
     request->command = command;
     request->page = model->shell.page;
+    request->refresh_strategy = INK_REFRESH_STRATEGY_NONE;
     request->tuning_page = (uint8_t)model->lab.current_page;
     request->refresh_profile = (uint8_t)(
         reader_active
@@ -602,6 +630,22 @@ bool ink_app_build_display_request(
         request->overlay_right[0] = '\0';
     }
 
+    if (request->full_refresh) {
+        request->refresh_strategy = INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL;
+    } else if (request->use_reader_menu_overlay || request->use_library_overlay) {
+        request->refresh_strategy = INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE;
+    } else if (request->use_reader_hold_navigation) {
+        request->refresh_strategy = INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW;
+    } else if (request->page == INK_RUNTIME_SHELL_PAGE_LIBRARY) {
+        request->refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL;
+    } else if (reader_active && request->page == INK_RUNTIME_SHELL_PAGE_READER) {
+        request->refresh_strategy = request->force_white_page || request->force_fast_full_commit
+            ? INK_REFRESH_STRATEGY_READER_TEXT_CLEANUP
+            : INK_REFRESH_STRATEGY_READER_TEXT_TURN;
+    } else {
+        request->refresh_strategy = INK_REFRESH_STRATEGY_LAB_EXPLICIT_MODE;
+    }
+
     return true;
 }
 
@@ -617,16 +661,17 @@ static void fill_reader_loading_overlay(
 
     memset(overlay, 0, sizeof(*overlay));
     overlay->frameless_panel = true;
+    snprintf(overlay->header_title, sizeof(overlay->header_title), "%s", "书库");
     overlay->compact_cards = false;
     overlay->bookmark_cards_tall = false;
     overlay->card_count = 0U;
     overlay->action_popup_open = true;
     overlay->action_count = 0U;
-    snprintf(
+    copy_overlay_title(
         overlay->action_popup_title,
         sizeof(overlay->action_popup_title),
-        "%s",
-        title != NULL ? title : "正在加载");
+        title != NULL ? title : "正在加载",
+        18U);
     (void)line1;
     (void)line2;
 }
@@ -667,11 +712,11 @@ static void fill_reader_menu_overlay(
              i < total && count < EPD_TEST_PATTERN_MENU_CARD_CAPACITY;
              ++i, ++count) {
             const ink_xtc_chapter_entry_t *chapter = &model->reader_session.xtc_book.chapter_entries[i];
-            snprintf(
+            copy_overlay_title(
                 overlay->cards[count].title,
                 sizeof(overlay->cards[count].title),
-                "%.79s",
-                chapter->name);
+                chapter->name,
+                20U);
             overlay->cards[count].selected =
                 model->reader_menu.level == INK_READER_MENU_LEVEL_ITEMS
                 && i == selected;
@@ -680,7 +725,11 @@ static void fill_reader_menu_overlay(
         return;
     }
 
-    snprintf(overlay->cards[0].title, sizeof(overlay->cards[0].title), "%s", "将当前页添加到书签");
+    copy_overlay_title(
+        overlay->cards[0].title,
+        sizeof(overlay->cards[0].title),
+        "将当前页添加到书签",
+        20U);
     snprintf(
         overlay->cards[0].line1,
         sizeof(overlay->cards[0].line1),
@@ -701,11 +750,11 @@ static void fill_reader_menu_overlay(
         if (bookmark == NULL || strcmp(bookmark->book_path, model->reader_session.source_path) != 0) {
             continue;
         }
-        snprintf(
+        copy_overlay_title(
             overlay->cards[overlay->card_count].title,
             sizeof(overlay->cards[overlay->card_count].title),
-            "%.79s",
-            bookmark->chapter_title[0] != '\0' ? bookmark->chapter_title : "书签");
+            bookmark->chapter_title[0] != '\0' ? bookmark->chapter_title : "书签",
+            20U);
         snprintf(
             overlay->cards[overlay->card_count].line1,
             sizeof(overlay->cards[overlay->card_count].line1),
@@ -721,11 +770,11 @@ static void fill_reader_menu_overlay(
     if (model->reader_menu.level == INK_READER_MENU_LEVEL_BOOKMARK_ACTIONS) {
         const bool current_card = model->reader_menu.bookmark_item_index == 0U;
         overlay->action_popup_open = true;
-        snprintf(
+        copy_overlay_title(
             overlay->action_popup_title,
             sizeof(overlay->action_popup_title),
-            "%s",
-            current_card ? "当前页书签" : "书签操作");
+            current_card ? "当前页书签" : "书签操作",
+            18U);
         overlay->action_count = 3U;
         snprintf(overlay->actions[0].label, sizeof(overlay->actions[0].label), "%s", current_card ? "返回" : "跳转");
         snprintf(overlay->actions[1].label, sizeof(overlay->actions[1].label), "%s", current_card ? "添加" : "覆盖");

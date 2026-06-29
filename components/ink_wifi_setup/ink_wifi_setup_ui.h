@@ -25,6 +25,12 @@ typedef struct {
     const ink_cpfont_t *footer;
 } ink_wifi_setup_ui_fonts_t;
 
+typedef struct {
+    const char *title;
+    const char *meta;
+    const char *subtitle;
+} ink_wifi_setup_ui_header_t;
+
 const char *ink_wifi_setup_keyboard_layer_name(ink_wifi_setup_keyboard_layer_t layer);
 
 int ink_wifi_setup_ui_wifi_list_visible_first(const wifi_setup_state_t *wifi);
@@ -54,7 +60,8 @@ void ink_wifi_setup_ui_draw_screen(
     const ink_wifi_setup_ui_cursor_t *keyboard_state,
     const ink_wifi_setup_keyboard_text_t *text,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts);
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header);
 void ink_wifi_setup_ui_draw_keyboard_key(
     uint8_t *buffer,
     ink_wifi_setup_keyboard_layer_t layer,

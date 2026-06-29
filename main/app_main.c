@@ -6,6 +6,7 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_log_level.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -30,6 +31,7 @@
 #include "ink_wifi_setup_input.h"
 #include "ink_wifi_setup_render.h"
 #include "ink_wifi_setup_state.h"
+#include "ink_tilt_input.h"
 #include "voice_note/voice_note_service.h"
 
 static const char *TAG = "ink_reader";
@@ -38,6 +40,7 @@ static const bool kLogAutoProbe = false;
 static ink_display_request_t s_epd_request;
 
 static void run_boot_self_tests(void);
+static void configure_runtime_log_levels(void);
 static void input_task(void *arg);
 static bool queue_button_event_with_priority(ink_app_context_t *app, const ink_ui_event_t *event);
 static bool submit_display_request(
@@ -49,19 +52,37 @@ static bool map_snapshot_to_app_event(
     const ink_button_snapshot_t *snapshot,
     uint32_t event_ms,
     ink_app_event_t *event);
+static bool map_tilt_to_app_event(
+    ink_tilt_direction_t direction,
+    uint32_t event_ms,
+    ink_app_event_t *event);
 static bool handle_runtime_app_button_event(
     ink_app_context_t *app,
     const ink_button_snapshot_t *snapshot,
+    uint32_t event_ms);
+static bool handle_runtime_app_tilt_event(
+    ink_app_context_t *app,
+    ink_tilt_direction_t direction,
     uint32_t event_ms);
 static bool submit_post_white_refresh_request(ink_app_context_t *app, uint32_t event_ms);
 static bool submit_reader_auto_flip_request(ink_app_context_t *app, uint32_t event_ms);
 static bool submit_grid_compare_request(ink_app_context_t *app, uint32_t event_ms);
 static bool submit_fast_browse_preview_request(ink_app_context_t *app, uint32_t event_ms);
+static bool maybe_submit_time_badge_refresh(
+    ink_app_context_t *app,
+    bool runtime_app_active,
+    uint32_t event_ms,
+    char *last_time_badge,
+    size_t last_time_badge_size);
 static esp_err_t perform_boot_white_clear(ink_app_context_t *app);
 static void ui_task(void *arg);
 static void epd_task(void *arg);
 static bool epd_task_stack_budget_self_test(void);
 static bool runtime_app_fast_full_commit_consumed_once_self_test(void);
+static bool runtime_app_tick_budget_self_test(void);
+static bool time_badge_refresh_self_test(void);
+static bool runtime_app_allows_time_badge_refresh(const ink_system_runtime_t *runtime);
+static bool runtime_app_time_badge_policy_self_test(void);
 
 static void run_boot_self_tests(void)
 {
@@ -98,6 +119,11 @@ static void run_boot_self_tests(void)
     ESP_ERROR_CHECK(ink_wifi_setup_app_self_test() ? ESP_OK : ESP_FAIL);
     esp_rom_printf("OK wifi_setup\n");
     esp_rom_printf("ST voice_note\n");
+    ESP_ERROR_CHECK(voice_note_model_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(voice_note_store_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(voice_note_audio_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(voice_note_capture_logic_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(voice_note_asr_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(voice_note_service_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_voice_note_app_self_test() ? ESP_OK : ESP_FAIL);
     esp_rom_printf("OK voice_note\n");
@@ -117,13 +143,39 @@ static void run_boot_self_tests(void)
     ESP_ERROR_CHECK(ink_wifi_coordinator_self_test() ? ESP_OK : ESP_FAIL);
     esp_rom_printf("OK wifi_coord\n");
     ESP_ERROR_CHECK(epd_task_stack_budget_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(runtime_app_tick_budget_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(time_badge_refresh_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(runtime_app_fast_full_commit_consumed_once_self_test() ? ESP_OK : ESP_FAIL);
+}
+
+static void configure_runtime_log_levels(void)
+{
+    esp_log_level_set("*", ESP_LOG_WARN);
+    esp_log_level_set("ink_reader", ESP_LOG_INFO);
+    esp_log_level_set("ink_time", ESP_LOG_INFO);
+    esp_log_level_set("ink_wifi_coord", ESP_LOG_INFO);
+    esp_log_level_set("ink_wifi", ESP_LOG_INFO);
+    esp_log_level_set("voice_note_service", ESP_LOG_INFO);
+    esp_log_level_set("wifi_setup_app", ESP_LOG_INFO);
+    esp_log_level_set("ink_usb_msc", ESP_LOG_INFO);
+    esp_log_level_set("ink_cpfont", ESP_LOG_ERROR);
+    esp_log_level_set("tusb_desc", ESP_LOG_ERROR);
+    esp_log_level_set("TinyUSB", ESP_LOG_WARN);
+    esp_log_level_set("wifi", ESP_LOG_WARN);
+    esp_log_level_set("wifi_init", ESP_LOG_WARN);
+    esp_log_level_set("app_init", ESP_LOG_WARN);
+    esp_log_level_set("heap_init", ESP_LOG_WARN);
+    esp_log_level_set("cpu_start", ESP_LOG_WARN);
+    esp_log_level_set("esp_psram", ESP_LOG_WARN);
+
+    ESP_LOGI(TAG, "boot start");
+    ESP_LOGI(TAG, "runtime logs configured");
 }
 
 static bool epd_task_stack_budget_self_test(void)
 {
     return sizeof(s_epd_request) <= 4096U
-        && INK_EPD_TASK_STACK_BYTES >= 5120U;
+        && INK_EPD_TASK_STACK_BYTES >= 6144U;
 }
 
 static bool runtime_app_fast_full_commit_consumed_once_self_test(void)
@@ -199,6 +251,74 @@ static bool runtime_app_fast_full_commit_consumed_once_self_test(void)
     return true;
 }
 
+static bool runtime_app_tick_budget_self_test(void)
+{
+    return INK_RUNTIME_APP_IDLE_TICK_MS <= 20U
+        && INK_RUNTIME_APP_IDLE_TICK_MS < INK_INPUT_HOLD_EVENT_MS;
+}
+
+static bool time_badge_refresh_self_test(void)
+{
+    char rendered[24];
+    char current[24];
+
+    snprintf(rendered, sizeof(rendered), "%s", "UP 00:00");
+    snprintf(current, sizeof(current), "%s", "12:34");
+    if (strcmp(rendered, current) == 0) {
+        return false;
+    }
+
+    snprintf(rendered, sizeof(rendered), "%s", current);
+    return strcmp(rendered, current) == 0
+        && runtime_app_time_badge_policy_self_test();
+}
+
+static bool runtime_app_allows_time_badge_refresh(const ink_system_runtime_t *runtime)
+{
+    const ink_app_descriptor_t *active_app = NULL;
+
+    if (runtime == NULL || runtime->active_app == NULL) {
+        return true;
+    }
+
+    active_app = runtime->active_app;
+    if (active_app->id != NULL
+        && strcmp(active_app->id, "photo_album") == 0) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool runtime_app_time_badge_policy_self_test(void)
+{
+    static const ink_app_descriptor_t kPhotoAlbumApp = {
+        .id = "photo_album",
+        .name = "Photo Album",
+    };
+    static const ink_app_descriptor_t kVoiceNoteApp = {
+        .id = "voice_note",
+        .name = "Voice Note",
+    };
+    ink_system_runtime_t runtime;
+
+    ink_system_runtime_init(&runtime);
+    if (!runtime_app_allows_time_badge_refresh(NULL)) {
+        return false;
+    }
+    if (!runtime_app_allows_time_badge_refresh(&runtime)) {
+        return false;
+    }
+
+    runtime.active_app = &kPhotoAlbumApp;
+    if (runtime_app_allows_time_badge_refresh(&runtime)) {
+        return false;
+    }
+
+    runtime.active_app = &kVoiceNoteApp;
+    return runtime_app_allows_time_badge_refresh(&runtime);
+}
+
 static bool queue_button_event_with_priority(ink_app_context_t *app, const ink_ui_event_t *event)
 {
     ink_ui_event_t dropped_event;
@@ -238,12 +358,10 @@ static esp_err_t perform_boot_white_clear(ink_app_context_t *app)
 
     memset(app->services.framebuffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
     memset(app->services.previous_framebuffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
-    ESP_LOGI(TAG, "boot white clear begin");
     ESP_RETURN_ON_ERROR(
         epd_gdey0426t82_full_refresh(app->services.framebuffer, EPD_GDEY0426T82_BUFFER_SIZE),
         TAG,
         "boot white clear failed");
-    ESP_LOGI(TAG, "boot white clear done");
     return ESP_OK;
 }
 
@@ -252,12 +370,18 @@ static void input_task(void *arg)
     ink_app_context_t *app = (ink_app_context_t *)arg;
     uint32_t last_hold_event_ms = 0U;
     ink_button_snapshot_t snapshot;
+    ink_tilt_direction_t tilt_direction = INK_TILT_DIRECTION_NONE;
     esp_err_t poll_ret;
+    esp_err_t tilt_ret;
 
-    ESP_LOGI(TAG, "InputTask started");
     memset(&snapshot, 0, sizeof(snapshot));
     for (;;) {
         const uint32_t now_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
+        const ink_app_descriptor_t *active_runtime_app =
+            ink_system_runtime_active_app(&app->runtime);
+        const bool allow_tilt = active_runtime_app != NULL
+            && ink_wifi_setup_app_should_accept_tilt(&app->runtime, active_runtime_app)
+            && uxQueueMessagesWaiting(app->services.ui_queue) == 0U;
         poll_ret = ink_button_input_poll(&snapshot, now_ms);
         if (poll_ret != ESP_OK) {
             ESP_LOGW(TAG, "button poll failed t=%ums ret=%s", (unsigned)now_ms, esp_err_to_name(poll_ret));
@@ -285,6 +409,27 @@ static void input_task(void *arg)
                     (unsigned)snapshot.stable_mask,
                     (unsigned)snapshot.pressed_mask,
                     (unsigned)snapshot.released_mask);
+            }
+        }
+        if (allow_tilt) {
+            tilt_ret = ink_tilt_input_poll(now_ms, &tilt_direction);
+        } else {
+            tilt_ret = ESP_OK;
+            tilt_direction = INK_TILT_DIRECTION_NONE;
+        }
+        if (tilt_ret == ESP_OK && tilt_direction != INK_TILT_DIRECTION_NONE) {
+            ink_ui_event_t event = {
+                .kind = INK_UI_EVENT_TILT,
+                .event_ms = now_ms,
+            };
+            event.data.tilt_direction = (int32_t)tilt_direction;
+            if (!queue_button_event_with_priority(app, &event)) {
+                ESP_LOGW(
+                    TAG,
+                    "ui queue drop kind=tilt t=%ums depth=%u dir=%d",
+                    (unsigned)now_ms,
+                    (unsigned)uxQueueMessagesWaiting(app->services.ui_queue),
+                    (int)tilt_direction);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(INK_INPUT_TASK_PERIOD_MS));
@@ -316,18 +461,15 @@ static bool submit_display_request(
     seq = ink_display_mailbox_submit(&app->services.mailbox, &request);
     ESP_LOGI(
         TAG,
-        "ui submit seq=%u page=%s cmd=%s full=%d preview=%d hold=%d fast_full_commit=%d input_to_ui=%ums build=%ums footer='%s' '%s'",
+        "ui submit seq=%u page=%s strategy=%s cmd=%s full=%d preview=%d hold=%d fast_commit=%d",
         (unsigned)seq,
         ink_app_shell_page_name(request.page),
+        ink_refresh_strategy_name(request.refresh_strategy),
         ink_app_shell_command_name(command),
         request.full_refresh ? 1 : 0,
         request.use_fast_browse_overlay ? 1 : 0,
         request.use_reader_hold_navigation ? 1 : 0,
-        request.force_fast_full_commit ? 1 : 0,
-        0U,
-        0U,
-        request.overlay_left,
-        request.overlay_right);
+        request.force_fast_full_commit ? 1 : 0);
     return true;
 }
 
@@ -357,10 +499,11 @@ static bool submit_active_app_display_request(ink_app_context_t *app, uint32_t e
     seq = ink_display_mailbox_submit(&app->services.mailbox, &request);
     ESP_LOGI(
         TAG,
-        "ui submit runtime-app seq=%u app=%s mode=%u full=%d",
+        "ui submit runtime-app seq=%u app=%s mode=%u strategy=%s full=%d",
         (unsigned)seq,
         app->runtime.active_app->id != NULL ? app->runtime.active_app->id : "unknown",
         (unsigned)request.app_render_mode,
+        ink_refresh_strategy_name(request.refresh_strategy),
         request.full_refresh ? 1 : 0);
     return true;
 }
@@ -403,6 +546,48 @@ static bool map_snapshot_to_app_event(
     return false;
 }
 
+static bool map_tilt_to_app_event(
+    ink_tilt_direction_t direction,
+    uint32_t event_ms,
+    ink_app_event_t *event)
+{
+    if (event == NULL || direction == INK_TILT_DIRECTION_NONE) {
+        return false;
+    }
+
+    memset(event, 0, sizeof(*event));
+    event->event_ms = event_ms;
+    switch (direction) {
+        case INK_TILT_DIRECTION_LEFT:
+            event->kind = INK_APP_EVENT_TILT_PREVIOUS;
+            break;
+        case INK_TILT_DIRECTION_RIGHT:
+            event->kind = INK_APP_EVENT_TILT_NEXT;
+            break;
+        case INK_TILT_DIRECTION_UP:
+            event->kind = INK_APP_EVENT_TILT_UP;
+            break;
+        case INK_TILT_DIRECTION_DOWN:
+            event->kind = INK_APP_EVENT_TILT_DOWN;
+            break;
+        case INK_TILT_DIRECTION_UP_LEFT:
+            event->kind = INK_APP_EVENT_TILT_UP_LEFT;
+            break;
+        case INK_TILT_DIRECTION_UP_RIGHT:
+            event->kind = INK_APP_EVENT_TILT_UP_RIGHT;
+            break;
+        case INK_TILT_DIRECTION_DOWN_LEFT:
+            event->kind = INK_APP_EVENT_TILT_DOWN_LEFT;
+            break;
+        case INK_TILT_DIRECTION_DOWN_RIGHT:
+            event->kind = INK_APP_EVENT_TILT_DOWN_RIGHT;
+            break;
+        default:
+            return false;
+    }
+    return true;
+}
+
 static bool handle_runtime_app_button_event(
     ink_app_context_t *app,
     const ink_button_snapshot_t *snapshot,
@@ -415,6 +600,29 @@ static bool handle_runtime_app_button_event(
         return false;
     }
     if (!map_snapshot_to_app_event(snapshot, event_ms, &app_event)) {
+        return false;
+    }
+
+    dirty = ink_system_runtime_dispatch_input(&app->runtime, &app_event);
+    if (dirty) {
+        return submit_active_app_display_request(app, event_ms);
+    }
+
+    return true;
+}
+
+static bool handle_runtime_app_tilt_event(
+    ink_app_context_t *app,
+    ink_tilt_direction_t direction,
+    uint32_t event_ms)
+{
+    ink_app_event_t app_event;
+    bool dirty = false;
+
+    if (app == NULL || !ink_system_runtime_has_active_app(&app->runtime)) {
+        return false;
+    }
+    if (!map_tilt_to_app_event(direction, event_ms, &app_event)) {
         return false;
     }
 
@@ -441,6 +649,47 @@ static bool submit_fast_browse_preview_request(ink_app_context_t *app, uint32_t 
     }
 
     return submit_display_request(app, INK_RUNTIME_SHELL_COMMAND_NONE, event_ms);
+}
+
+static bool maybe_submit_time_badge_refresh(
+    ink_app_context_t *app,
+    bool runtime_app_active,
+    uint32_t event_ms,
+    char *last_time_badge,
+    size_t last_time_badge_size)
+{
+    char current_time_badge[24];
+    bool submitted = false;
+
+    if (app == NULL
+        || last_time_badge == NULL
+        || last_time_badge_size == 0U
+        || !ink_display_mailbox_is_idle(&app->services.mailbox)) {
+        return false;
+    }
+
+    if (runtime_app_active
+        && !runtime_app_allows_time_badge_refresh(&app->runtime)) {
+        return false;
+    }
+
+    ink_system_services_get_time_badge(
+        &app->services,
+        current_time_badge,
+        sizeof(current_time_badge));
+    if (strcmp(current_time_badge, last_time_badge) == 0) {
+        return false;
+    }
+
+    if (runtime_app_active) {
+        submitted = submit_active_app_display_request(app, event_ms);
+    } else {
+        submitted = submit_display_request(app, INK_RUNTIME_SHELL_COMMAND_NONE, event_ms);
+    }
+    if (submitted) {
+        snprintf(last_time_badge, last_time_badge_size, "%s", current_time_badge);
+    }
+    return submitted;
 }
 
 static bool submit_reader_auto_flip_request(ink_app_context_t *app, uint32_t event_ms)
@@ -509,8 +758,10 @@ static void ui_task(void *arg)
 {
     ink_app_context_t *app = (ink_app_context_t *)arg;
     ink_ui_event_t event;
+    char last_time_badge[24];
 
-    ESP_LOGI(TAG, "UiTask started");
+    ink_system_services_get_time_badge(&app->services, last_time_badge, sizeof(last_time_badge));
+
     if (ink_system_runtime_has_active_app(&app->runtime)) {
         (void)submit_active_app_display_request(app, 0U);
     } else {
@@ -519,25 +770,40 @@ static void ui_task(void *arg)
 
     for (;;) {
         if (ink_system_runtime_has_active_app(&app->runtime)) {
-            const uint32_t wait_ms = INK_UI_IDLE_WAIT_MS;
+            const uint32_t wait_ms = INK_RUNTIME_APP_IDLE_TICK_MS;
             if (xQueueReceive(app->services.ui_queue, &event, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
                 const uint32_t now_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
                 if (ink_system_runtime_dispatch_tick(&app->runtime, now_ms)) {
                     (void)submit_active_app_display_request(app, now_ms);
+                } else {
+                    (void)maybe_submit_time_badge_refresh(
+                        app,
+                        true,
+                        now_ms,
+                        last_time_badge,
+                        sizeof(last_time_badge));
                 }
                 continue;
             }
 
             if (event.kind == INK_UI_EVENT_DISPLAY_DONE) {
-                ESP_LOGI(
-                    TAG,
-                    "ui display done seq=%u result=%s",
-                    (unsigned)event.data.display_done.seq,
-                    esp_err_to_name(event.data.display_done.result));
                 ink_system_runtime_handle_display_done(&app->runtime, event.event_ms);
                 if (ink_system_runtime_dispatch_tick(&app->runtime, event.event_ms)) {
                     (void)submit_active_app_display_request(app, event.event_ms);
+                } else {
+                    (void)maybe_submit_time_badge_refresh(
+                        app,
+                        true,
+                        event.event_ms,
+                        last_time_badge,
+                        sizeof(last_time_badge));
                 }
+                continue;
+            }
+
+            if (event.kind == INK_UI_EVENT_TILT) {
+                const ink_tilt_direction_t direction = (ink_tilt_direction_t)event.data.tilt_direction;
+                (void)handle_runtime_app_tilt_event(app, direction, event.event_ms);
                 continue;
             }
 
@@ -559,16 +825,18 @@ static void ui_task(void *arg)
                 (void)submit_display_request(app, idle_command, now_ms);
             } else if (submit_fast_browse_preview_request(app, now_ms)) {
                 continue;
+            } else {
+                (void)maybe_submit_time_badge_refresh(
+                    app,
+                    false,
+                    now_ms,
+                    last_time_badge,
+                    sizeof(last_time_badge));
             }
             continue;
         }
 
         if (event.kind == INK_UI_EVENT_DISPLAY_DONE) {
-            ESP_LOGI(
-                TAG,
-                "ui display done seq=%u result=%s",
-                (unsigned)event.data.display_done.seq,
-                esp_err_to_name(event.data.display_done.result));
             if (event.data.display_done.result == ESP_OK
                 && app->model.fast_browse.active) {
                 ink_app_fast_browse_note_preview_landed(&app->model);
@@ -599,6 +867,13 @@ static void ui_task(void *arg)
                 if (!submit_display_request(app, INK_RUNTIME_SHELL_COMMAND_NONE, event.event_ms)) {
                     ESP_LOGW(TAG, "ui auto repeat tuning probe submit failed");
                 }
+            } else {
+                (void)maybe_submit_time_badge_refresh(
+                    app,
+                    false,
+                    event.event_ms,
+                    last_time_badge,
+                    sizeof(last_time_badge));
             }
             continue;
         }
@@ -639,12 +914,6 @@ static void epd_task(void *arg)
 {
     ink_app_context_t *app = (ink_app_context_t *)arg;
 
-    ESP_LOGI(TAG, "EpdTask started");
-    ESP_LOGI(
-        TAG,
-        "EpdTask stack watermark start=%u request_bytes=%u",
-        (unsigned)uxTaskGetStackHighWaterMark(NULL),
-        (unsigned)sizeof(s_epd_request));
     ink_display_mailbox_set_notify_task(&app->services.mailbox, xTaskGetCurrentTaskHandle());
 
     for (;;) {
@@ -657,11 +926,12 @@ static void epd_task(void *arg)
             epd_gdey0426t82_phase_t phase = EPD_GDEY0426T82_PHASE_IDLE;
             esp_err_t ret;
 
-            ESP_LOGI(
+            ESP_LOGD(
                 TAG,
-                "epd claim seq=%u page=%s full=%d hold=%d submitted=%ums age=%ums",
+                "epd claim seq=%u page=%s strategy=%s full=%d hold=%d submitted=%ums age=%ums",
                 (unsigned)s_epd_request.seq,
                 ink_app_shell_page_name(s_epd_request.page),
+                ink_refresh_strategy_name(s_epd_request.refresh_strategy),
                 s_epd_request.full_refresh ? 1 : 0,
                 s_epd_request.use_reader_hold_navigation ? 1 : 0,
                 (unsigned)s_epd_request.submitted_ms,
@@ -677,7 +947,7 @@ static void epd_task(void *arg)
             } else {
                 ink_display_mailbox_note_completed(&app->services.mailbox, s_epd_request.seq);
             }
-            ESP_LOGI(
+            ESP_LOGD(
                 TAG,
                 "epd finish seq=%u result=%s phase=%d",
                 (unsigned)s_epd_request.seq,
@@ -714,6 +984,7 @@ void app_main(void)
     TaskHandle_t input_handle = NULL;
 
     ink_app_initialize_context(&app);
+    configure_runtime_log_levels();
     app.aggressive_interrupt_mode = true;
     ink_system_runtime_init(&app.runtime);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_launcher_app_descriptor()) ? ESP_OK : ESP_FAIL);
@@ -728,8 +999,6 @@ void app_main(void)
 
     if (kRunBootSelfTests) {
         run_boot_self_tests();
-    } else {
-        ESP_LOGI(TAG, "boot self-tests skipped; set kRunBootSelfTests=true for strict diagnostics");
     }
 
     ESP_ERROR_CHECK(ink_app_allocate_runtime_buffers(&app));
@@ -739,14 +1008,12 @@ void app_main(void)
     ESP_ERROR_CHECK(epd_gdey0426t82_init(&panel));
     ESP_ERROR_CHECK(perform_boot_white_clear(&app));
     ESP_ERROR_CHECK(ink_button_input_init());
+    (void)ink_tilt_input_init();
 
-    ESP_LOGI(TAG, "creating EpdTask stack=%u", (unsigned)INK_EPD_TASK_STACK_BYTES);
     ESP_ERROR_CHECK(xTaskCreate(epd_task, "EpdTask", INK_EPD_TASK_STACK_BYTES, &app, 5, &epd_handle) == pdPASS ? ESP_OK : ESP_FAIL);
-    ESP_LOGI(TAG, "create EpdTask result=1 handle=%p free_internal=%u", epd_handle, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-    ESP_LOGI(TAG, "creating UiTask stack=%u", (unsigned)INK_UI_TASK_STACK_BYTES);
     ESP_ERROR_CHECK(xTaskCreate(ui_task, "UiTask", INK_UI_TASK_STACK_BYTES, &app, 4, &ui_handle) == pdPASS ? ESP_OK : ESP_FAIL);
-    ESP_LOGI(TAG, "create UiTask result=1 handle=%p free_internal=%u", ui_handle, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-    ESP_LOGI(TAG, "creating InputTask stack=%u", (unsigned)INK_INPUT_TASK_STACK_BYTES);
     ESP_ERROR_CHECK(xTaskCreate(input_task, "InputTask", INK_INPUT_TASK_STACK_BYTES, &app, 3, &input_handle) == pdPASS ? ESP_OK : ESP_FAIL);
-    ESP_LOGI(TAG, "create InputTask result=1 handle=%p free_internal=%u", input_handle, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    if (ink_wifi_coordinator_start_async() != ESP_OK) {
+        ESP_LOGW(TAG, "wifi coordinator background start failed");
+    }
 }

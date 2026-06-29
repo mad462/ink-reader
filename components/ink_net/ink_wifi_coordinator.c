@@ -14,6 +14,7 @@ static const char *TAG = "ink_wifi_coord";
 enum {
     INK_WIFI_COORDINATOR_QUEUE_LEN = 6,
     INK_WIFI_COORDINATOR_TASK_STACK = 6144,
+    INK_WIFI_COORDINATOR_BOOTSTRAP_TASK_STACK = 6144,
     INK_WIFI_COORDINATOR_DEFAULT_IDLE_MS = 30000,
     INK_WIFI_COORDINATOR_MAX_LEASES = 6,
 };
@@ -53,6 +54,7 @@ typedef esp_err_t (*ink_wifi_coordinator_connect_best_fn_t)(
 
 static QueueHandle_t s_request_queue;
 static TaskHandle_t s_worker_task;
+static TaskHandle_t s_bootstrap_task;
 static SemaphoreHandle_t s_state_lock;
 static ink_wifi_coordinator_status_t s_status;
 static ink_wifi_coordinator_lease_slot_t s_leases[INK_WIFI_COORDINATOR_MAX_LEASES];
@@ -100,6 +102,7 @@ static void coordinator_maybe_disconnect_idle(void);
 static int coordinator_acquire_request_slot(void);
 static void coordinator_release_request_slot(int slot_index);
 static void coordinator_worker_task(void *arg);
+static void coordinator_bootstrap_task(void *arg);
 static esp_err_t coordinator_self_test_connect_best_not_found(
     uint32_t timeout_ms,
     ink_wifi_status_t *out_status);
@@ -581,6 +584,35 @@ static void coordinator_worker_task(void *arg)
     }
 }
 
+static void coordinator_bootstrap_task(void *arg)
+{
+    ink_wifi_status_t wifi_status = {0};
+    esp_err_t err = ink_wifi_manager_init();
+
+    (void)arg;
+
+    if (err == ESP_OK) {
+        err = ink_wifi_coordinator_start();
+    }
+
+    if (err == ESP_OK && ink_wifi_manager_status(&wifi_status) == ESP_OK) {
+        coordinator_store_wifi_status(&wifi_status, INK_WIFI_COORDINATOR_RESULT_OK);
+    } else if (err != ESP_OK) {
+        coordinator_lock();
+        s_status.state = INK_WIFI_COORDINATOR_STATE_ERROR;
+        s_status.last_result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+        s_status.wifi_status.connected = false;
+        s_status.wifi_status.last_error = err;
+        coordinator_unlock();
+        ESP_LOGW(TAG, "background bootstrap failed: %s", esp_err_to_name(err));
+    }
+
+    coordinator_lock();
+    s_bootstrap_task = NULL;
+    coordinator_unlock();
+    vTaskDelete(NULL);
+}
+
 esp_err_t ink_wifi_coordinator_init(void)
 {
     ESP_RETURN_ON_ERROR(coordinator_ensure_runtime_primitives(), TAG, "primitive init failed");
@@ -634,6 +666,39 @@ esp_err_t ink_wifi_coordinator_start(void)
     return ESP_OK;
 }
 
+esp_err_t ink_wifi_coordinator_start_async(void)
+{
+    ESP_RETURN_ON_ERROR(coordinator_ensure_runtime_primitives(), TAG, "primitive init failed");
+
+    coordinator_lock();
+    if ((s_request_queue != NULL && s_worker_task != NULL) || s_bootstrap_task != NULL) {
+        coordinator_unlock();
+        return ESP_OK;
+    }
+    s_status.state = INK_WIFI_COORDINATOR_STATE_STARTING;
+    s_status.last_result = INK_WIFI_COORDINATOR_RESULT_OK;
+    coordinator_unlock();
+
+    if (xTaskCreate(
+            coordinator_bootstrap_task,
+            "InkWifiBoot",
+            INK_WIFI_COORDINATOR_BOOTSTRAP_TASK_STACK,
+            NULL,
+            2,
+            &s_bootstrap_task) != pdPASS) {
+        coordinator_lock();
+        s_bootstrap_task = NULL;
+        s_status.state = INK_WIFI_COORDINATOR_STATE_ERROR;
+        s_status.last_result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+        s_status.wifi_status.connected = false;
+        s_status.wifi_status.last_error = ESP_ERR_NO_MEM;
+        coordinator_unlock();
+        return ESP_ERR_NO_MEM;
+    }
+
+    return ESP_OK;
+}
+
 esp_err_t ink_wifi_coordinator_request(
     const ink_wifi_coordinator_request_t *request,
     ink_wifi_coordinator_result_t *out_result)
@@ -647,7 +712,10 @@ esp_err_t ink_wifi_coordinator_request(
 
     ESP_RETURN_ON_FALSE(request != NULL, ESP_ERR_INVALID_ARG, TAG, "request required");
     ESP_RETURN_ON_FALSE(out_result != NULL, ESP_ERR_INVALID_ARG, TAG, "result required");
-    ESP_RETURN_ON_FALSE(s_request_queue != NULL && s_worker_task != NULL, ESP_ERR_INVALID_STATE, TAG, "not started");
+    if (s_request_queue == NULL || s_worker_task == NULL) {
+        *out_result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+        return ESP_ERR_INVALID_STATE;
+    }
 
     slot_index = coordinator_acquire_request_slot();
     ESP_RETURN_ON_FALSE(slot_index >= 0, ESP_ERR_NO_MEM, TAG, "no request slots");
@@ -731,6 +799,7 @@ esp_err_t ink_wifi_coordinator_disconnect_if_idle(uint32_t timeout_ms)
 esp_err_t ink_wifi_coordinator_get_status(ink_wifi_coordinator_status_t *out_status)
 {
     ESP_RETURN_ON_FALSE(out_status != NULL, ESP_ERR_INVALID_ARG, TAG, "status required");
+    ESP_RETURN_ON_ERROR(coordinator_ensure_runtime_primitives(), TAG, "primitive init failed");
 
     coordinator_lock();
     s_status.active_leases = 0;
@@ -843,6 +912,18 @@ bool ink_wifi_coordinator_self_test(void)
     if (ink_wifi_coordinator_release_owner(INK_WIFI_COORDINATOR_OWNER_NONE, 1U) != ESP_ERR_INVALID_ARG) {
         return false;
     }
+    if (ink_wifi_coordinator_start_async() != ESP_OK) {
+        return false;
+    }
+    if (ink_wifi_coordinator_get_status(&status) != ESP_OK) {
+        return false;
+    }
+    if (status.state != INK_WIFI_COORDINATOR_STATE_STARTING
+        && status.state != INK_WIFI_COORDINATOR_STATE_DISCONNECTED
+        && status.state != INK_WIFI_COORDINATOR_STATE_ERROR
+        && status.state != INK_WIFI_COORDINATOR_STATE_ONLINE) {
+        return false;
+    }
     return status.idle_timeout_ms == INK_WIFI_COORDINATOR_DEFAULT_IDLE_MS
-        && status.state == INK_WIFI_COORDINATOR_STATE_OFF;
+        && INK_WIFI_COORDINATOR_BOOTSTRAP_TASK_STACK >= 6144;
 }

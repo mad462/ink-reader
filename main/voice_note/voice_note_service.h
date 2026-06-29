@@ -8,6 +8,7 @@
 #include "voice_note/voice_note_types.h"
 
 esp_err_t voice_note_service_init(void);
+esp_err_t voice_note_service_prepare_storage(void);
 bool voice_note_service_start_capture(uint32_t now_ms);
 bool voice_note_service_stop_capture(uint32_t now_ms);
 bool voice_note_service_retry_note(const char *note_id, uint32_t now_ms);
@@ -23,4 +24,7 @@ bool voice_note_service_load_note(const char *note_id, voice_note_note_t *out_no
 bool voice_note_service_tick(uint32_t now_ms);
 bool voice_note_store_self_test(void);
 bool voice_note_model_self_test(void);
+bool voice_note_audio_self_test(void);
+bool voice_note_capture_logic_self_test(void);
+bool voice_note_asr_self_test(void);
 bool voice_note_service_self_test(void);

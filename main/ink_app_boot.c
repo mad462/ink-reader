@@ -257,7 +257,7 @@ static bool load_first_cpfont_from_dir(ink_cpfont_t *font, const char *dir_path)
         memcpy(full_path + dir_len + 1U, entry->d_name, name_len + 1U);
         if (ink_cpfont_load(font, full_path) == ESP_OK) {
             closedir(dir);
-            ESP_LOGI(TAG, "loaded cpfont from dir path=%s", full_path);
+            ESP_LOGD(TAG, "loaded cpfont from dir path=%s", full_path);
             return true;
         }
     }
@@ -336,7 +336,7 @@ static bool load_font_from_candidates(
     ink_cpfont_init(font);
     for (size_t i = 0; i < path_count; ++i) {
         if (ink_cpfont_load(font, paths[i]) == ESP_OK) {
-            ESP_LOGI(TAG, "loaded font path=%s", paths[i]);
+            ESP_LOGD(TAG, "loaded font path=%s", paths[i]);
             return true;
         }
     }
@@ -552,7 +552,7 @@ esp_err_t ink_app_mount_tf_card(void)
     };
 
     if (s_app_tf_card != NULL) {
-        ESP_LOGI(TAG, "TF card already mounted at %s", INK_APP_MOUNT_POINT);
+        ESP_LOGD(TAG, "TF card already mounted at %s", INK_APP_MOUNT_POINT);
         return ESP_OK;
     }
 
@@ -566,8 +566,7 @@ esp_err_t ink_app_mount_tf_card(void)
     }
 
     s_app_tf_card = card;
-    ESP_LOGI(TAG, "TF card mounted at %s", INK_APP_MOUNT_POINT);
-    sdmmc_card_print_info(stdout, card);
+    ESP_LOGI(TAG, "TF card mounted");
     (void)ensure_state_directory();
     (void)ensure_books_directory();
     (void)ink_app_ensure_photo_directory();

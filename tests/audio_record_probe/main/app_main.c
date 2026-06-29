@@ -1,9 +1,9 @@
+#include "audio_record_http_upload.h"
 #include "audio_record_metrics.h"
 #include "audio_record_probe_logic.h"
-#include "audio_record_protocol.h"
+#include "audio_record_wifi.h"
 #include "audio_record_wav.h"
 
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,8 +13,8 @@
 #include "driver/i2s_common.h"
 #include "driver/i2s_pdm.h"
 #include "esp_check.h"
-#include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
 #include "esp_psram.h"
 #include "esp_rom_uart.h"
 #include "esp_timer.h"
@@ -29,17 +29,18 @@ static const char *TAG = "audio_record_probe";
 #define AUDIO_RECORD_BITS_PER_SAMPLE 16U
 #define AUDIO_RECORD_CHANNELS 1U
 #define AUDIO_RECORD_MAX_CAPTURE_MS 10000U
+#define AUDIO_RECORD_WIFI_CONNECT_TIMEOUT_MS 15000U
 #define AUDIO_RECORD_MAX_PCM_BYTES ((AUDIO_RECORD_SAMPLE_RATE_HZ * (AUDIO_RECORD_BITS_PER_SAMPLE / 8U) * AUDIO_RECORD_CHANNELS * AUDIO_RECORD_MAX_CAPTURE_MS) / 1000U)
 #define AUDIO_RECORD_PDM_CLK_GPIO GPIO_NUM_17
 #define AUDIO_RECORD_PDM_DATA_GPIO GPIO_NUM_18
 #define AUDIO_RECORD_READ_SAMPLES 1024U
-#define AUDIO_RECORD_READY_LINE "AUDIO_RECORD_READY\r\n"
 #define AUDIO_RECORD_EVENT_PREFIX "AUDIO_RECORD_EVENT "
 #define AUDIO_RECORD_STATUS_PREFIX "AUDIO_RECORD_STATUS "
 #define AUDIO_RECORD_IDLE_POLL_MS 10U
 #define AUDIO_RECORD_READ_TIMEOUT_MS 40U
-#define AUDIO_RECORD_PROGRESS_REPORT_MS 250U
+#define AUDIO_RECORD_PROGRESS_REPORT_MS 0U
 #define AUDIO_RECORD_PRIME_READS 4U
+#define AUDIO_RECORD_LOW_SIGNAL_PEAK_THRESHOLD 1000
 
 typedef enum {
     AUDIO_RECORD_PDM_PROFILE_STABLE_RIGHT = 0,
@@ -58,13 +59,6 @@ typedef struct {
 } audio_record_probe_context_t;
 
 static const audio_record_pdm_profile_t AUDIO_RECORD_PDM_PROFILE = AUDIO_RECORD_PDM_PROFILE_STABLE_RIGHT;
-
-static int audio_record_noop_vprintf(const char *fmt, va_list args)
-{
-    (void)fmt;
-    (void)args;
-    return 0;
-}
 
 static bool audio_record_confirm_pressed(void)
 {
@@ -156,6 +150,13 @@ static void audio_record_log_capture_metrics(const audio_record_probe_context_t 
         (long)metrics.rms,
         (long)metrics.peak_abs,
         (unsigned)metrics.clipped_samples);
+    if (metrics.sample_count > 0U && metrics.peak_abs < AUDIO_RECORD_LOW_SIGNAL_PEAK_THRESHOLD) {
+        ESP_LOGW(
+            TAG,
+            "capture signal is very low: peak_abs=%ld threshold=%d, uploaded WAV may sound silent",
+            (long)metrics.peak_abs,
+            AUDIO_RECORD_LOW_SIGNAL_PEAK_THRESHOLD);
+    }
 }
 
 static void audio_record_prime_i2s(audio_record_probe_context_t *ctx)
@@ -328,25 +329,59 @@ static void audio_record_emit_progress(audio_record_probe_context_t *ctx)
 
 static esp_err_t audio_record_export_capture(audio_record_probe_context_t *ctx)
 {
-    audio_record_packet_header_t header;
-    audio_record_protocol_fill_header(
-        &header,
-        AUDIO_RECORD_SAMPLE_RATE_HZ,
-        AUDIO_RECORD_BITS_PER_SAMPLE,
-        AUDIO_RECORD_CHANNELS,
-        (uint32_t)ctx->session.captured_bytes,
-        ctx->session.capture_ms,
-        ctx->session.sequence);
+    const audio_record_wifi_config_t *wifi_config = audio_record_wifi_get_config();
+    ESP_RETURN_ON_FALSE(audio_record_wifi_config_valid(wifi_config), ESP_ERR_INVALID_STATE, TAG, "wifi config missing");
 
-    vprintf_like_t old_vprintf = esp_log_set_vprintf(audio_record_noop_vprintf);
-    esp_err_t ret = audio_record_uart_write_all(AUDIO_RECORD_READY_LINE, strlen(AUDIO_RECORD_READY_LINE));
+    const size_t wav_size = audio_record_wav_total_size((uint32_t)ctx->session.captured_bytes);
+    ESP_RETURN_ON_FALSE(wav_size >= AUDIO_RECORD_WAV_HEADER_SIZE, ESP_ERR_INVALID_SIZE, TAG, "invalid wav size");
+
+    uint8_t *wav_buffer = heap_caps_malloc(wav_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (wav_buffer == NULL) {
+        wav_buffer = heap_caps_malloc(wav_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    ESP_RETURN_ON_FALSE(wav_buffer != NULL, ESP_ERR_NO_MEM, TAG, "alloc wav buffer");
+
+    esp_err_t ret = ESP_OK;
+    if (!audio_record_wav_write_header(
+            wav_buffer,
+            wav_size,
+            AUDIO_RECORD_SAMPLE_RATE_HZ,
+            AUDIO_RECORD_BITS_PER_SAMPLE,
+            AUDIO_RECORD_CHANNELS,
+            (uint32_t)ctx->session.captured_bytes)) {
+        free(wav_buffer);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (ctx->session.captured_bytes > 0U) {
+        memcpy(wav_buffer + AUDIO_RECORD_WAV_HEADER_SIZE, ctx->capture_buffer, ctx->session.captured_bytes);
+    }
+
+    ESP_LOGI(TAG, "connecting wifi for upload: ssid=%s server=%s", wifi_config->ssid, wifi_config->server_base_url);
+    ret = audio_record_wifi_connect(wifi_config, AUDIO_RECORD_WIFI_CONNECT_TIMEOUT_MS);
     if (ret == ESP_OK) {
-        ret = audio_record_uart_write_all(&header, sizeof(header));
+        int http_status = 0;
+        ESP_LOGI(TAG, "uploading wav bytes=%u total_wav_bytes=%u", (unsigned)ctx->session.captured_bytes, (unsigned)wav_size);
+        ret = audio_record_http_upload_wav(
+            wifi_config->server_base_url,
+            wav_buffer,
+            wav_size,
+            ctx->session.sequence,
+            ctx->session.capture_ms,
+            &http_status);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "http upload failed status=%d err=%s", http_status, esp_err_to_name(ret));
+        } else {
+            ESP_LOGI(TAG, "http upload success status=%d sequence=%u", http_status, (unsigned)ctx->session.sequence);
+        }
     }
-    if (ret == ESP_OK && ctx->session.captured_bytes > 0U) {
-        ret = audio_record_uart_write_all(ctx->capture_buffer, ctx->session.captured_bytes);
+
+    esp_err_t quiet_ret = audio_record_wifi_quiet();
+    if (quiet_ret != ESP_OK) {
+        ESP_LOGW(TAG, "failed to quiet wifi after upload: %s", esp_err_to_name(quiet_ret));
     }
-    esp_log_set_vprintf(old_vprintf);
+
+    free(wav_buffer);
     return ret;
 }
 
@@ -447,7 +482,7 @@ static void audio_record_run(audio_record_probe_context_t *ctx)
             const int exporting_written = snprintf(
                 exporting_message,
                 sizeof(exporting_message),
-                "exporting bytes=%u duration_ms=%u",
+                "uploading bytes=%u duration_ms=%u",
                 (unsigned)ctx->session.captured_bytes,
                 (unsigned)duration_ms);
             if (exporting_written > 0 && (size_t)exporting_written < sizeof(exporting_message)) {
@@ -462,13 +497,23 @@ static void audio_record_run(audio_record_probe_context_t *ctx)
             audio_record_log_capture_metrics(ctx);
             esp_err_t ret = audio_record_export_capture(ctx);
             if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "audio export failed: %s", esp_err_to_name(ret));
+                char failed_message[128];
+                int failed_written = snprintf(
+                    failed_message,
+                    sizeof(failed_message),
+                    "upload_failed sequence=%u err=%s",
+                    (unsigned)ctx->session.sequence,
+                    esp_err_to_name(ret));
+                if (failed_written > 0 && (size_t)failed_written < sizeof(failed_message)) {
+                    audio_record_write_text_line(AUDIO_RECORD_STATUS_PREFIX, failed_message);
+                }
+                ESP_LOGE(TAG, "audio upload failed: %s", esp_err_to_name(ret));
             } else {
                 char exported_message[128];
                 const int exported_written = snprintf(
                     exported_message,
                     sizeof(exported_message),
-                    "export_done sequence=%u bytes=%u duration_ms=%u",
+                    "upload_done sequence=%u bytes=%u duration_ms=%u",
                     (unsigned)ctx->session.sequence,
                     (unsigned)ctx->session.captured_bytes,
                     (unsigned)duration_ms);
@@ -477,7 +522,7 @@ static void audio_record_run(audio_record_probe_context_t *ctx)
                 }
                 ESP_LOGI(
                     TAG,
-                    "audio export complete: sequence=%u bytes=%u duration_ms=%u",
+                    "audio upload complete: sequence=%u bytes=%u duration_ms=%u",
                     (unsigned)ctx->session.sequence,
                     (unsigned)ctx->session.captured_bytes,
                     (unsigned)duration_ms);
@@ -494,17 +539,25 @@ void app_main(void)
     ESP_LOGI(TAG, "audio record probe boot");
     ESP_LOGI(TAG, "Confirm GPIO=%d active_low, mic PDM CLK=%d DATA=%d", AUDIO_RECORD_CONFIRM_GPIO, AUDIO_RECORD_PDM_CLK_GPIO, AUDIO_RECORD_PDM_DATA_GPIO);
     ESP_LOGI(TAG, "format=%u Hz %u-bit mono max_ms=%u", AUDIO_RECORD_SAMPLE_RATE_HZ, AUDIO_RECORD_BITS_PER_SAMPLE, AUDIO_RECORD_MAX_CAPTURE_MS);
-    ESP_ERROR_CHECK(audio_record_protocol_self_test() ? ESP_OK : ESP_FAIL);
+    const audio_record_wifi_config_t *wifi_config = audio_record_wifi_get_config();
     ESP_ERROR_CHECK(audio_record_probe_logic_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(audio_record_metrics_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(audio_record_wav_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(audio_record_wifi_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(audio_record_http_upload_self_test() ? ESP_OK : ESP_FAIL);
     ESP_LOGI(TAG, "self-tests passed");
+    ESP_LOGI(
+        TAG,
+        "wifi config present=%s server=%s ssid=%s",
+        audio_record_wifi_config_valid(wifi_config) ? "true" : "false",
+        wifi_config->server_base_url != NULL ? wifi_config->server_base_url : "",
+        wifi_config->ssid != NULL ? wifi_config->ssid : "");
 
     audio_record_probe_session_init(&ctx.session, AUDIO_RECORD_MAX_CAPTURE_MS, AUDIO_RECORD_MAX_PCM_BYTES);
     ESP_ERROR_CHECK(audio_record_init_button());
     ESP_ERROR_CHECK(audio_record_alloc_buffers(&ctx));
     ESP_ERROR_CHECK(audio_record_init_i2s(&ctx));
 
-    ESP_LOGI(TAG, "ready: hold Confirm to record, release to export WAV payload over UART0");
+    ESP_LOGI(TAG, "ready: hold Confirm to record, release to upload WAV over Wi-Fi HTTP");
     audio_record_run(&ctx);
 }

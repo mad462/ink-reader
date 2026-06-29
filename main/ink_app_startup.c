@@ -34,7 +34,7 @@ esp_err_t ink_app_allocate_runtime_buffers(ink_app_context_t *app)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(
+    ESP_LOGD(
         TAG,
         "before display alloc free_internal=%u free_8bit=%u largest_8bit=%u largest_spiram=%u",
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
@@ -55,7 +55,7 @@ esp_err_t ink_app_prepare_storage_and_library(ink_app_context_t *app)
             ink_app_prepare_browser_fallback(&app->model.browser);
         }
         if (ink_app_state_load_file(INK_APP_STATE_FILE_PATH, &app->model.app_state) == ESP_OK) {
-            ESP_LOGI(
+            ESP_LOGD(
                 TAG,
                 "state loaded path=%s page=%u",
                 app->model.app_state.open_book_path,

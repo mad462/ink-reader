@@ -1,20 +1,28 @@
 idf_component_register(
     SRCS
         "app_main.c"
+        "audio_record_http_upload.c"
         "audio_record_metrics.c"
         "audio_record_protocol.c"
         "audio_record_probe_logic.c"
+        "audio_record_wifi.c"
         "audio_record_wav.c"
+        "test_audio_record_http_upload.c"
         "test_audio_record_metrics.c"
         "test_audio_record_protocol.c"
         "test_audio_record_probe_logic.c"
+        "test_audio_record_wifi.c"
         "test_audio_record_wav.c"
     INCLUDE_DIRS
         "."
     REQUIRES
         esp_driver_gpio
         esp_driver_i2s
-        esp_driver_uart
+        esp_event
+        esp_http_client
+        esp_netif
         esp_psram
         esp_timer
+        esp_wifi
+        nvs_flash
 )

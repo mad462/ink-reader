@@ -53,6 +53,7 @@ typedef struct {
     const ink_photo_catalog_t *catalog;
     const void *menu_font;
     const void *footer_font;
+    char header_meta[24];
 } ink_photo_album_render_state_t;
 
 const ink_app_descriptor_t *ink_photo_album_app_descriptor(void);

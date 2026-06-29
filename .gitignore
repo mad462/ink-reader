@@ -19,3 +19,7 @@ tools/ebook-canvas-studio/.vite-*.pid
 tools/epub-to-xtc-converter-main/
 tools/epub-to-xtc-converter-main.zip
 tests/tilt_grid/sdkconfig.old
+tests/audio_record_probe/main/local_wifi_config_override.h
+tests/audio_asr_probe/main/local_asr_config_override.h
+main/voice_note/local_voice_note_asr_config_override.h
+tools/audio_record_web_server.local.ps1

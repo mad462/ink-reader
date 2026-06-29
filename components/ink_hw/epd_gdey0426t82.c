@@ -217,6 +217,8 @@ static void epd_timing_add_tx(size_t bytes, int64_t start_us)
 
 static void epd_timing_add_busy(const char *label, int64_t start_us, esp_err_t ret)
 {
+    (void)label;
+    (void)ret;
     if (!s_timing.active) {
         return;
     }
@@ -224,14 +226,6 @@ static void epd_timing_add_busy(const char *label, int64_t start_us, esp_err_t r
     const uint64_t busy_us = epd_elapsed_us_since(start_us);
     s_timing.busy_us += busy_us;
     ++s_timing.busy_calls;
-    ESP_LOGI(
-        TAG,
-        "epd busy op=%s label=%s busy=%ums ret=%s",
-        s_timing.operation != NULL ? s_timing.operation : "?",
-        label != NULL ? label : "?",
-        (unsigned)epd_us_to_ms(busy_us),
-        esp_err_to_name(ret)
-    );
 }
 
 static void epd_timing_log(esp_err_t ret)

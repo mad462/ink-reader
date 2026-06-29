@@ -12,6 +12,7 @@ typedef enum {
     INK_WIFI_COORDINATOR_OWNER_TIME_SYNC,
     INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP,
     INK_WIFI_COORDINATOR_OWNER_VOICE_TAG_ASR,
+    INK_WIFI_COORDINATOR_OWNER_VOICE_NOTE_ASR,
 } ink_wifi_coordinator_owner_t;
 
 typedef enum {
@@ -65,6 +66,7 @@ typedef struct {
 
 esp_err_t ink_wifi_coordinator_init(void);
 esp_err_t ink_wifi_coordinator_start(void);
+esp_err_t ink_wifi_coordinator_start_async(void);
 esp_err_t ink_wifi_coordinator_request(
     const ink_wifi_coordinator_request_t *request,
     ink_wifi_coordinator_result_t *out_result);

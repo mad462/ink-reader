@@ -35,6 +35,13 @@ typedef struct {
     int row_h;
     int row_gap;
     int visible_rows;
+    bool compact_rows;
+    int content_x_inset;
+    int marker_top_inset;
+    int marker_bottom_inset;
+    int title_y_offset;
+    int line1_y_offset;
+    int line2_y_offset;
 } epd_test_pattern_list_layout_t;
 
 typedef struct {
@@ -52,9 +59,20 @@ typedef struct {
     bool emphasized;
 } epd_test_pattern_list_row_t;
 
+typedef struct {
+    const char *title;
+    const char *meta;
+    const epd_test_pattern_list_row_t *rows;
+    size_t row_count;
+    const ink_cpfont_t *title_font;
+    const ink_cpfont_t *meta_font;
+    const ink_cpfont_t *row_title_font;
+    const ink_cpfont_t *row_meta_font;
+} epd_test_pattern_rows_page_spec_t;
+
 #define EPD_TEST_PATTERN_MENU_TAB_CAPACITY 3
 #define EPD_TEST_PATTERN_MENU_CARD_CAPACITY 8
-#define EPD_TEST_PATTERN_MENU_ACTION_CAPACITY 3
+#define EPD_TEST_PATTERN_MENU_ACTION_CAPACITY 4
 
 typedef struct {
     char label[16];
@@ -80,6 +98,8 @@ typedef struct {
     bool compact_cards;
     bool bookmark_cards_tall;
     bool frameless_panel;
+    char header_title[32];
+    char header_meta[24];
     size_t tab_count;
     epd_test_pattern_menu_tab_t tabs[EPD_TEST_PATTERN_MENU_TAB_CAPACITY];
     size_t card_count;
@@ -98,6 +118,12 @@ void epd_test_pattern_truncate_text_middle(
     size_t dst_size,
     size_t max_chars
 );
+void epd_test_pattern_truncate_text_tail(
+    const char *src,
+    char *dst,
+    size_t dst_size,
+    size_t max_chars
+);
 void epd_test_pattern_draw_crosspoint_header(
     uint8_t *buffer,
     const epd_test_pattern_header_spec_t *spec
@@ -109,6 +135,11 @@ void epd_test_pattern_draw_crosspoint_list_row(
     const epd_test_pattern_list_row_t *row,
     const ink_cpfont_t *title_font,
     const ink_cpfont_t *meta_font
+);
+void epd_test_pattern_fill_crosspoint_rows_page(
+    uint8_t *buffer,
+    size_t length,
+    const epd_test_pattern_rows_page_spec_t *spec
 );
 
 void epd_test_pattern_fill_stripes(uint8_t *buffer, size_t length);

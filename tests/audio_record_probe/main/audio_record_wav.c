@@ -1,5 +1,6 @@
 #include "audio_record_wav.h"
 
+#include <limits.h>
 #include <string.h>
 
 static void write_le16(uint8_t *dst, uint16_t value)
@@ -16,6 +17,16 @@ static void write_le32(uint8_t *dst, uint32_t value)
     dst[3] = (uint8_t)((value >> 24) & 0xffU);
 }
 
+static bool add_u32(uint32_t left, uint32_t right, uint32_t *result)
+{
+    if (result == NULL || left > (UINT32_MAX - right)) {
+        return false;
+    }
+
+    *result = left + right;
+    return true;
+}
+
 bool audio_record_wav_write_header(
     uint8_t *buffer,
     size_t buffer_size,
@@ -24,16 +35,34 @@ bool audio_record_wav_write_header(
     uint16_t channels,
     uint32_t pcm_data_size)
 {
-    if (buffer == NULL || buffer_size < AUDIO_RECORD_WAV_HEADER_SIZE || channels == 0U || bits_per_sample == 0U) {
+    if (buffer == NULL
+        || buffer_size < AUDIO_RECORD_WAV_HEADER_SIZE
+        || sample_rate == 0U
+        || channels == 0U
+        || bits_per_sample == 0U
+        || (bits_per_sample % 8U) != 0U) {
         return false;
     }
 
-    const uint32_t block_align = (uint32_t)channels * (uint32_t)(bits_per_sample / 8U);
+    const uint32_t bytes_per_sample = (uint32_t)(bits_per_sample / 8U);
+    if (bytes_per_sample == 0U || (uint32_t)channels > (uint32_t)(UINT16_MAX / bytes_per_sample)) {
+        return false;
+    }
+
+    const uint32_t block_align = (uint32_t)channels * bytes_per_sample;
+    if (block_align == 0U || sample_rate > (UINT32_MAX / block_align)) {
+        return false;
+    }
+
     const uint32_t byte_rate = sample_rate * block_align;
+    uint32_t riff_chunk_size = 0U;
+    if (!add_u32(36U, pcm_data_size, &riff_chunk_size) || audio_record_wav_total_size(pcm_data_size) == 0U) {
+        return false;
+    }
 
     memset(buffer, 0, AUDIO_RECORD_WAV_HEADER_SIZE);
     memcpy(buffer, "RIFF", 4);
-    write_le32(buffer + 4, 36U + pcm_data_size);
+    write_le32(buffer + 4, riff_chunk_size);
     memcpy(buffer + 8, "WAVE", 4);
     memcpy(buffer + 12, "fmt ", 4);
     write_le32(buffer + 16, 16U);
@@ -50,5 +79,9 @@ bool audio_record_wav_write_header(
 
 size_t audio_record_wav_total_size(uint32_t pcm_data_size)
 {
+    if ((size_t)pcm_data_size > ((size_t)-1) - AUDIO_RECORD_WAV_HEADER_SIZE) {
+        return 0U;
+    }
+
     return AUDIO_RECORD_WAV_HEADER_SIZE + (size_t)pcm_data_size;
 }

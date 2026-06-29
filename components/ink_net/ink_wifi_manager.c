@@ -323,22 +323,36 @@ bool ink_wifi_scan_list_add_or_merge(ink_wifi_scan_list_t *list, const ink_wifi_
 
 esp_err_t ink_wifi_manager_scan(ink_wifi_scan_list_t *out_list)
 {
-    wifi_ap_record_t records[WIFI_SCAN_RAW_MAX_RESULTS] = {0};
+    wifi_ap_record_t *records = NULL;
     uint16_t count = WIFI_SCAN_RAW_MAX_RESULTS;
     uint16_t raw_count = 0;
+    esp_err_t ret;
 
     ESP_RETURN_ON_FALSE(out_list != NULL, ESP_ERR_INVALID_ARG, TAG, "scan list missing");
     memset(out_list, 0, sizeof(*out_list));
     ESP_RETURN_ON_ERROR(ink_wifi_manager_init(), TAG, "wifi init before scan");
 
+    records = calloc(WIFI_SCAN_RAW_MAX_RESULTS, sizeof(*records));
+    ESP_RETURN_ON_FALSE(records != NULL, ESP_ERR_NO_MEM, TAG, "scan records alloc");
+
     wifi_scan_config_t scan_cfg = {
         .show_hidden = false,
     };
-    ESP_RETURN_ON_ERROR(esp_wifi_scan_start(&scan_cfg, true), TAG, "wifi scan");
+    ret = esp_wifi_scan_start(&scan_cfg, true);
+    if (ret != ESP_OK) {
+        free(records);
+        ESP_LOGE(TAG, "wifi scan failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
     if (esp_wifi_scan_get_ap_num(&raw_count) != ESP_OK || raw_count == 0) {
         raw_count = count;
     }
-    ESP_RETURN_ON_ERROR(esp_wifi_scan_get_ap_records(&count, records), TAG, "scan records");
+    ret = esp_wifi_scan_get_ap_records(&count, records);
+    if (ret != ESP_OK) {
+        free(records);
+        ESP_LOGE(TAG, "scan records failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     for (uint16_t i = 0; i < count; ++i) {
         ink_wifi_scan_result_t entry = {0};
@@ -349,6 +363,7 @@ esp_err_t ink_wifi_manager_scan(ink_wifi_scan_list_t *out_list)
         entry.ap_count = 1;
         (void)ink_wifi_scan_list_add_or_merge(out_list, &entry);
     }
+    free(records);
     ESP_LOGI(TAG, "scan found %u raw APs, %u merged SSIDs", (unsigned)raw_count, (unsigned)out_list->count);
     return ESP_OK;
 }
@@ -361,7 +376,7 @@ static esp_err_t connect_with_credential(const ink_wifi_credential_t *credential
     wifi_config_t wifi_config = {0};
     copy_string((char *)wifi_config.sta.ssid, sizeof(wifi_config.sta.ssid), credential->ssid);
     copy_string((char *)wifi_config.sta.password, sizeof(wifi_config.sta.password), credential->password);
-    wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_config.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
 
     xEventGroupClearBits(s_wifi_events, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
@@ -461,7 +476,7 @@ esp_err_t ink_wifi_manager_connect_best(uint32_t timeout_ms, ink_wifi_status_t *
     wifi_config_t wifi_config = {0};
     copy_string((char *)wifi_config.sta.ssid, sizeof(wifi_config.sta.ssid), best.ssid);
     copy_string((char *)wifi_config.sta.password, sizeof(wifi_config.sta.password), best.password);
-    wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_config.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
 
     xEventGroupClearBits(s_wifi_events, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
@@ -494,6 +509,8 @@ esp_err_t ink_wifi_manager_connect_best(uint32_t timeout_ms, ink_wifi_status_t *
     }
     ESP_LOGI(TAG, "connect best ssid=%s connected=%d ret=%s", best.ssid, s_status.connected ? 1 : 0, esp_err_to_name(s_status.last_error));
     return s_status.last_error;
+}
+
 esp_err_t ink_wifi_manager_disconnect(void)
 {
     if (!s_initialized) {
@@ -510,8 +527,6 @@ esp_err_t ink_wifi_manager_disconnect(void)
         s_status.last_error = ESP_OK;
     }
     return ret;
-}
-
 }
 
 esp_err_t ink_wifi_manager_status(ink_wifi_status_t *out_status)

@@ -28,4 +28,18 @@ bool voice_note_model_status_copy_for_job(
     voice_note_job_state_t state,
     char *buffer,
     size_t buffer_size);
+bool voice_note_model_format_timestamp(
+    uint32_t epoch_s,
+    char *buffer,
+    size_t buffer_size);
+bool voice_note_model_compose_meta_line(
+    uint32_t created_at_epoch_s,
+    uint32_t duration_ms,
+    voice_note_status_t status,
+    char *buffer,
+    size_t buffer_size);
+bool voice_note_model_normalize_text(
+    const char *src,
+    char *dst,
+    size_t dst_size);
 bool voice_note_model_self_test(void);

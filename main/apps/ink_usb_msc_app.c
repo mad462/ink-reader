@@ -57,7 +57,7 @@ static void sync_usb_msc_lines(ink_usb_msc_app_state_t *state, const ink_usb_msc
         return;
     }
 
-    snprintf(state->title, sizeof(state->title), "%s", "USB DISK MODE");
+    snprintf(state->title, sizeof(state->title), "%s", "USB 磁盘");
     state->line1[0] = '\0';
     state->line2[0] = '\0';
     state->line3[0] = '\0';
@@ -71,33 +71,28 @@ static void sync_usb_msc_lines(ink_usb_msc_app_state_t *state, const ink_usb_msc
     switch (service->state) {
         case INK_USB_MSC_STATE_PROMPT:
             state->view = INK_USB_MSC_APP_VIEW_PROMPT;
-            snprintf(state->line1, sizeof(state->line1), "%s", "USB CONNECTED");
-            snprintf(state->line2, sizeof(state->line2), "%s", "PREPARING MSC EXPORT");
-            snprintf(state->line3, sizeof(state->line3), "%s", "PLEASE WAIT");
+            snprintf(state->line1, sizeof(state->line1), "%s", "U盘模式 关");
             break;
         case INK_USB_MSC_STATE_ACTIVE:
             state->view = INK_USB_MSC_APP_VIEW_ACTIVE;
-            snprintf(state->line1, sizeof(state->line1), "%s", "TF CARD SHARED TO USB");
-            snprintf(state->line2, sizeof(state->line2), "%s", "UNPLUG USB TO EXIT");
-            snprintf(state->line3, sizeof(state->line3), "%s", "PRESS BACK TO RETURN");
+            snprintf(state->line1, sizeof(state->line1), "%s", "U盘模式 开");
             break;
         case INK_USB_MSC_STATE_ERROR:
             state->view = INK_USB_MSC_APP_VIEW_ERROR;
-            snprintf(state->line1, sizeof(state->line1), "%s", "MSC START FAILED");
-            snprintf(state->line2, sizeof(state->line2), "%s", "PRESS BACK TO RETURN");
+            snprintf(state->line1, sizeof(state->line1), "%s", "U盘模式 异常");
             if (service->status_text[0] != '\0') {
                 snprintf(
-                    state->line3,
-                    sizeof(state->line3),
+                    state->line2,
+                    sizeof(state->line2),
                     "%.*s",
-                    (int)(sizeof(state->line3) - 1U),
+                    (int)(sizeof(state->line2) - 1U),
                     service->status_text);
             }
             break;
         case INK_USB_MSC_STATE_IDLE:
         default:
             state->view = INK_USB_MSC_APP_VIEW_PROMPT;
-            snprintf(state->line1, sizeof(state->line1), "%s", "WAITING FOR USB");
+            snprintf(state->line1, sizeof(state->line1), "%s", "U盘模式 关");
             break;
     }
 }
@@ -151,7 +146,9 @@ static void usb_msc_enter(ink_system_runtime_t *runtime, const ink_app_descripto
         if (services->usb_msc.state == INK_USB_MSC_STATE_DISABLED) {
             (void)ink_usb_msc_service_init(&services->usb_msc);
         }
-        (void)s_usb_msc_enter_export_fn(&services->usb_msc, services);
+        if (services->usb_msc.state == INK_USB_MSC_STATE_IDLE) {
+            services->usb_msc.state = INK_USB_MSC_STATE_PROMPT;
+        }
         sync_usb_msc_lines(state, &services->usb_msc);
     } else {
         sync_usb_msc_lines(state, NULL);
@@ -160,6 +157,10 @@ static void usb_msc_enter(ink_system_runtime_t *runtime, const ink_app_descripto
     s_usb_msc_render_state.state = state;
     s_usb_msc_render_state.menu_font = services != NULL ? &services->menu_font : NULL;
     s_usb_msc_render_state.footer_font = services != NULL ? &services->footer_font : NULL;
+    ink_system_services_get_time_badge(
+        services,
+        s_usb_msc_render_state.header_meta,
+        sizeof(s_usb_msc_render_state.header_meta));
     runtime->force_full_refresh_on_next_render = true;
 }
 
@@ -206,10 +207,12 @@ static bool usb_msc_input(
     }
 
     if (event->kind == INK_APP_EVENT_BUTTON_CONFIRM
-        && services != NULL
-        && services->usb_msc.state != INK_USB_MSC_STATE_ACTIVE
-        && services->usb_msc.state != INK_USB_MSC_STATE_PROMPT) {
-        (void)s_usb_msc_enter_export_fn(&services->usb_msc, services);
+        && services != NULL) {
+        if (services->usb_msc.state == INK_USB_MSC_STATE_ACTIVE) {
+            (void)s_usb_msc_exit_export_fn(&services->usb_msc, services);
+        } else {
+            (void)s_usb_msc_enter_export_fn(&services->usb_msc, services);
+        }
         sync_usb_msc_lines(state, &services->usb_msc);
         return true;
     }
@@ -234,9 +237,16 @@ static bool usb_msc_render(
     memset(out_model, 0, sizeof(*out_model));
     out_model->mode = INK_APP_RENDER_MODE_USB_MSC;
     out_model->request_full_refresh = runtime->force_full_refresh_on_next_render;
+    out_model->refresh_strategy = out_model->request_full_refresh
+        ? INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL
+        : INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST;
     s_usb_msc_render_state.state = state;
     s_usb_msc_render_state.menu_font = runtime->services != NULL ? &runtime->services->menu_font : NULL;
     s_usb_msc_render_state.footer_font = runtime->services != NULL ? &runtime->services->footer_font : NULL;
+    ink_system_services_get_time_badge(
+        runtime->services,
+        s_usb_msc_render_state.header_meta,
+        sizeof(s_usb_msc_render_state.header_meta));
     out_model->state = &s_usb_msc_render_state;
     runtime->force_full_refresh_on_next_render = false;
     return true;
@@ -247,6 +257,9 @@ static bool usb_msc_prompt_self_test(void)
     ink_system_runtime_t runtime;
     ink_system_services_t services;
     ink_app_render_model_t model;
+    ink_app_event_t confirm_event = {
+        .kind = INK_APP_EVENT_BUTTON_CONFIRM,
+    };
     ink_app_event_t back_event = {
         .kind = INK_APP_EVENT_BUTTON_BACK,
     };
@@ -282,7 +295,23 @@ static bool usb_msc_prompt_self_test(void)
     if (model.mode != INK_APP_RENDER_MODE_USB_MSC
         || !model.request_full_refresh
         || model.state != &s_usb_msc_render_state
-        || s_usb_msc_state.view != INK_USB_MSC_APP_VIEW_ACTIVE) {
+        || s_usb_msc_state.view != INK_USB_MSC_APP_VIEW_PROMPT) {
+        s_usb_msc_enter_export_fn = ink_usb_msc_service_enter_export;
+        s_usb_msc_exit_export_fn = ink_usb_msc_service_exit_export;
+        return false;
+    }
+
+    if (!usb_msc_input(&runtime, usb_msc, &confirm_event)
+        || services.usb_msc.state != INK_USB_MSC_STATE_ACTIVE
+        || !services.usb_msc.tf_exported) {
+        s_usb_msc_enter_export_fn = ink_usb_msc_service_enter_export;
+        s_usb_msc_exit_export_fn = ink_usb_msc_service_exit_export;
+        return false;
+    }
+
+    if (!usb_msc_input(&runtime, usb_msc, &confirm_event)
+        || services.usb_msc.state != INK_USB_MSC_STATE_IDLE
+        || services.usb_msc.tf_exported) {
         s_usb_msc_enter_export_fn = ink_usb_msc_service_enter_export;
         s_usb_msc_exit_export_fn = ink_usb_msc_service_exit_export;
         return false;

@@ -4,10 +4,12 @@ idf_component_register(
         "epd_test_pattern.c"
         "ink_button_input.c"
         "ink_cpfont.c"
+        "ink_tilt_input.c"
     INCLUDE_DIRS
         "."
     REQUIRES
         driver
+        esp_driver_i2c
         esp_driver_gpio
         esp_driver_spi
         esp_timer

@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "epd_test_pattern.h"
+
 enum {
     KEY_H = 44,
     KEY_GAP_X = 4,
@@ -14,20 +16,22 @@ enum {
     KEY_SELECTION_BAR_H = 6,
     KEYBOARD_W = EPD_GDEY0426T82_WIDTH - 2 * KEY_X0,
     KEYBOARD_H = INK_WIFI_SETUP_KEYBOARD_ROWS * KEY_H + (INK_WIFI_SETUP_KEYBOARD_ROWS - 1) * KEY_GAP_Y,
-    WIFI_LIST_TOP_Y = 100,
-    WIFI_LIST_ROW_H = 58,
+    WIFI_HEADER_TOP_Y = 8,
+    WIFI_HEADER_DIVIDER_Y = 38,
+    WIFI_LIST_TOP_Y = 50,
+    WIFI_LIST_ROW_H = 70,
     WIFI_LIST_BOTTOM_Y = EPD_GDEY0426T82_HEIGHT - 8,
-    WIFI_LIST_CARD_X = 18,
-    WIFI_LIST_CARD_W = EPD_GDEY0426T82_WIDTH - 36,
-    WIFI_LIST_CARD_INSET = 14,
+    WIFI_LIST_CARD_X = 24,
+    WIFI_LIST_CARD_W = EPD_GDEY0426T82_WIDTH - 48,
+    WIFI_LIST_CARD_INSET = 16,
     WIFI_SAVED_MENU_X = 48,
     WIFI_SAVED_MENU_Y = 210,
     WIFI_SAVED_MENU_W = EPD_GDEY0426T82_WIDTH - 96,
     WIFI_SAVED_MENU_H = 220,
     PASSWORD_BOX_X = 24,
-    PASSWORD_BOX_Y = 136,
+    PASSWORD_BOX_Y = 120,
     PASSWORD_BOX_W = EPD_GDEY0426T82_WIDTH - 48,
-    PASSWORD_BOX_H = 72,
+    PASSWORD_BOX_H = 64,
 };
 
 typedef struct {
@@ -483,7 +487,8 @@ static void draw_keyboard_status(
     const ink_wifi_setup_ui_cursor_t *state,
     const ink_wifi_setup_keyboard_text_t *text,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts)
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header)
 {
     char preview[96];
     char wifi_line[96];
@@ -493,6 +498,12 @@ static void draw_keyboard_status(
     const ink_wifi_scan_result_t *ap = ink_wifi_setup_selected_ap(wifi);
     const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
     const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    epd_test_pattern_header_spec_t header_spec = {
+        .title = header != NULL && header->title != NULL ? header->title : "无线网络",
+        .meta = header != NULL ? header->meta : "",
+        .title_font = menu,
+        .meta_font = footer,
+    };
 
     (void)state;
     copy_ascii_clipped(preview, sizeof(preview), value, 24);
@@ -519,9 +530,9 @@ static void draw_keyboard_status(
         snprintf(wifi_status, sizeof(wifi_status), "OFFLINE");
     }
 
-    draw_ui_text(buffer, menu, 24, 34, "WiFi Password", 2, wifi_menu_font_scale_divisor(menu), true);
-    draw_ui_text(buffer, footer, 24, 76, wifi_line, 1, wifi_footer_font_scale_divisor(footer), true);
-    draw_ui_text(buffer, footer, 24, 106, wifi_status, 1, wifi_footer_font_scale_divisor(footer), true);
+    epd_test_pattern_draw_crosspoint_header(buffer, &header_spec);
+    draw_ui_text(buffer, footer, 24, 56, wifi_line, 1, wifi_footer_font_scale_divisor(footer), true);
+    draw_ui_text(buffer, footer, 24, 84, wifi_status, 1, wifi_footer_font_scale_divisor(footer), true);
     draw_rect_outline(buffer, PASSWORD_BOX_X, PASSWORD_BOX_Y, PASSWORD_BOX_W, PASSWORD_BOX_H, 3);
     if (preview[0] != '\0') {
         draw_text(buffer, 36, 156, preview, 3, true);
@@ -535,10 +546,11 @@ static void draw_keyboard(
     const ink_wifi_setup_ui_cursor_t *state,
     const ink_wifi_setup_keyboard_text_t *text,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts)
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header)
 {
     memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
-    draw_keyboard_status(buffer, layer, state, text, wifi, fonts);
+    draw_keyboard_status(buffer, layer, state, text, wifi, fonts, header);
     draw_rect_outline(buffer, KEY_X0 - 10, KEY_Y0 - 10, KEYBOARD_W + 20, KEYBOARD_H + 20, 3);
 
     for (int row = 0; row < INK_WIFI_SETUP_KEYBOARD_ROWS; ++row) {
@@ -584,64 +596,59 @@ void ink_wifi_setup_ui_draw_wifi_list_row(
     }
 
     const bool selected = index == wifi->selected_index;
-    fill_rect(buffer, region.x, region.y, region.w, region.h, selected);
-    draw_rect_outline(buffer, region.x, region.y, region.w, region.h, selected ? 3 : 1);
+    fill_rect(buffer, region.x, region.y, region.w, region.h, false);
     if (selected) {
-        draw_ui_text_inverted(
-            buffer,
-            menu,
-            region.x + WIFI_LIST_CARD_INSET,
-            region.y + 8,
-            ssid,
-            2,
-            wifi_menu_font_scale_divisor(menu));
-        draw_ui_text_inverted(
-            buffer,
-            footer,
-            region.x + WIFI_LIST_CARD_INSET,
-            region.y + 34,
-            meta,
-            1,
-            wifi_footer_font_scale_divisor(footer));
-    } else {
-        draw_ui_text(
-            buffer,
-            menu,
-            region.x + WIFI_LIST_CARD_INSET,
-            region.y + 8,
-            ssid,
-            2,
-            wifi_menu_font_scale_divisor(menu),
-            true);
-        draw_ui_text(
-            buffer,
-            footer,
-            region.x + WIFI_LIST_CARD_INSET,
-            region.y + 34,
-            meta,
-            1,
-            wifi_footer_font_scale_divisor(footer),
-            true);
+        fill_rect(buffer, region.x + 2, region.y + 10, 4, region.h - 20, true);
     }
+    draw_ui_text(
+        buffer,
+        menu,
+        region.x + WIFI_LIST_CARD_INSET,
+        region.y + 8,
+        ssid,
+        2,
+        wifi_menu_font_scale_divisor(menu),
+        true);
+    draw_ui_text(
+        buffer,
+        footer,
+        region.x + WIFI_LIST_CARD_INSET,
+        region.y + 34,
+        meta,
+        1,
+        wifi_footer_font_scale_divisor(footer),
+        true);
+    fill_rect(buffer, region.x, region.y + region.h - 1, region.w, 1, true);
 }
 
 static void draw_wifi_list(
     uint8_t *buffer,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts)
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header)
 {
     const int count = ink_wifi_setup_selectable_count(wifi);
     const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
     const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
+    epd_test_pattern_header_spec_t header_spec = {
+        .title = header != NULL && header->title != NULL ? header->title : "无线网络",
+        .meta = header != NULL ? header->meta : "",
+        .title_font = menu,
+        .meta_font = footer,
+    };
 
     memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
-    draw_ui_text(buffer, menu, 24, 34, "WiFi Setup", 2, wifi_menu_font_scale_divisor(menu), true);
-    if (wifi != NULL && wifi->mode == WIFI_SETUP_UI_CONNECTING) {
-        draw_ui_text(buffer, footer, 24, 70, "Connecting ...", 1, wifi_footer_font_scale_divisor(footer), true);
+    epd_test_pattern_draw_crosspoint_header(buffer, &header_spec);
+    if ((header == NULL || header->meta == NULL || header->meta[0] == '\0')
+        && wifi != NULL
+        && wifi->mode == WIFI_SETUP_UI_CONNECTING) {
+        draw_ui_text(buffer, footer, 24, WIFI_HEADER_TOP_Y + 2, "连接中", 1, wifi_footer_font_scale_divisor(footer), false);
     } else if (wifi != NULL && wifi->scan_in_progress) {
-        draw_ui_text(buffer, footer, 24, 70, "Scanning nearby WiFi ...", 1, wifi_footer_font_scale_divisor(footer), true);
+        draw_ui_text(buffer, footer, 24, WIFI_HEADER_TOP_Y + 2, "扫描附近网络", 1, wifi_footer_font_scale_divisor(footer), false);
+    } else if (header != NULL && header->subtitle != NULL && header->subtitle[0] != '\0') {
+        draw_ui_text(buffer, footer, 24, WIFI_HEADER_TOP_Y + 2, header->subtitle, 1, wifi_footer_font_scale_divisor(footer), false);
     } else {
-        draw_ui_text(buffer, footer, 24, 70, "WiFi networks", 1, wifi_footer_font_scale_divisor(footer), true);
+        draw_ui_text(buffer, footer, 24, WIFI_HEADER_TOP_Y + 2, "可用网络", 1, wifi_footer_font_scale_divisor(footer), false);
     }
 
     if (wifi == NULL || count == 0) {
@@ -659,7 +666,8 @@ static void draw_wifi_list(
 static void draw_result_popup(
     uint8_t *buffer,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts)
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header)
 {
     char line[96];
     char ssid[24];
@@ -667,7 +675,7 @@ static void draw_result_popup(
     const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
     const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
-    draw_wifi_list(buffer, wifi, fonts);
+    draw_wifi_list(buffer, wifi, fonts, header);
     fill_rect(buffer, 48, 210, EPD_GDEY0426T82_WIDTH - 96, 190, false);
     draw_rect_outline(buffer, 48, 210, EPD_GDEY0426T82_WIDTH - 96, 190, 3);
 
@@ -699,7 +707,8 @@ static void draw_result_popup(
 static void draw_saved_wifi_menu(
     uint8_t *buffer,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts)
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header)
 {
     char line[96];
     char ssid[24];
@@ -707,7 +716,7 @@ static void draw_saved_wifi_menu(
     const ink_cpfont_t *menu = fonts != NULL ? fonts->menu : NULL;
     const ink_cpfont_t *footer = fonts != NULL ? fonts->footer : NULL;
 
-    draw_wifi_list(buffer, wifi, fonts);
+    draw_wifi_list(buffer, wifi, fonts, header);
     fill_rect(buffer, 48, 210, EPD_GDEY0426T82_WIDTH - 96, 220, false);
     draw_rect_outline(buffer, 48, 210, EPD_GDEY0426T82_WIDTH - 96, 220, 3);
 
@@ -746,16 +755,17 @@ void ink_wifi_setup_ui_draw_screen(
     const ink_wifi_setup_ui_cursor_t *keyboard_state,
     const ink_wifi_setup_keyboard_text_t *text,
     const wifi_setup_state_t *wifi,
-    const ink_wifi_setup_ui_fonts_t *fonts)
+    const ink_wifi_setup_ui_fonts_t *fonts,
+    const ink_wifi_setup_ui_header_t *header)
 {
     if (wifi != NULL && wifi->mode == WIFI_SETUP_UI_SAVED_MENU) {
-        draw_saved_wifi_menu(buffer, wifi, fonts);
+        draw_saved_wifi_menu(buffer, wifi, fonts, header);
     } else if (wifi != NULL && wifi->mode == WIFI_SETUP_UI_PASSWORD) {
-        draw_keyboard(buffer, layer, keyboard_state, text, wifi, fonts);
+        draw_keyboard(buffer, layer, keyboard_state, text, wifi, fonts, header);
     } else if (wifi != NULL && (wifi->mode == WIFI_SETUP_UI_CONNECTING || wifi->mode == WIFI_SETUP_UI_RESULT)) {
-        draw_result_popup(buffer, wifi, fonts);
+        draw_result_popup(buffer, wifi, fonts, header);
     } else {
-        draw_wifi_list(buffer, wifi, fonts);
+        draw_wifi_list(buffer, wifi, fonts, header);
     }
 }
 
@@ -875,11 +885,67 @@ static bool test_font_scale_divisors_match_compact_wifi_layout(void)
         && wifi_footer_font_scale_divisor(&footer) == 1U;
 }
 
+static bool test_wifi_layout_matches_system_rhythm(void)
+{
+    ink_wifi_setup_ui_region_t region = {0};
+
+    ink_wifi_setup_ui_list_body_region(&region);
+    if (region.y < 80 || region.y > 96) {
+        return false;
+    }
+
+    ink_wifi_setup_ui_password_box_region(&region);
+    return region.x <= 24
+        && region.y <= 120
+        && region.w >= (EPD_GDEY0426T82_WIDTH - 48)
+        && region.h >= 64;
+}
+
+static bool test_password_screen_header_uses_shared_metrics(void)
+{
+    uint8_t *buffer = (uint8_t *)malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    wifi_setup_state_t wifi = {0};
+    ink_wifi_setup_keyboard_text_t text = {0};
+    ink_wifi_setup_ui_fonts_t fonts = {0};
+    ink_wifi_setup_ui_header_t header = {
+        .title = "无线网络",
+        .meta = "12:34",
+        .subtitle = "",
+    };
+    ink_wifi_setup_ui_cursor_t cursor = {.column = 0, .row = 0};
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+    wifi.mode = WIFI_SETUP_UI_PASSWORD;
+    snprintf(text.text, sizeof(text.text), "%s", "12345678");
+
+    ink_wifi_setup_ui_draw_screen(
+        buffer,
+        INK_WIFI_SETUP_KEYBOARD_LAYER_LOWER,
+        &cursor,
+        &text,
+        &wifi,
+        &fonts,
+        &header);
+
+    ok = buffer[0] != 0xAA
+        && !ink_wifi_setup_ui_region_is_valid(NULL)
+        && buffer[(size_t)38 * (EPD_GDEY0426T82_WIDTH / 8U) + (size_t)(24 / 8)] != 0xFFU;
+    free(buffer);
+    return ok;
+}
+
 bool ink_wifi_setup_ui_self_test(void)
 {
     return test_visible_first_centers_selection()
         && test_wifi_row_region_for_scan_action()
         && test_keyboard_key_region_matches_grid()
         && test_pad_align_region_expands_and_aligns()
-        && test_font_scale_divisors_match_compact_wifi_layout();
+        && test_font_scale_divisors_match_compact_wifi_layout()
+        && test_wifi_layout_matches_system_rhythm()
+        && test_password_screen_header_uses_shared_metrics();
 }

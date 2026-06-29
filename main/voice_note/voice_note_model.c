@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 static void truncate_utf8ish_copy(const char *src, char *dst, size_t dst_size)
 {
@@ -24,6 +25,11 @@ static void truncate_utf8ish_copy(const char *src, char *dst, size_t dst_size)
         dst[i - 1U] = '.';
         dst[i] = '\0';
     }
+}
+
+static bool is_ascii_space(char c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
 bool voice_note_model_build_note_paths(
@@ -143,6 +149,120 @@ bool voice_note_model_status_copy_for_job(
     return snprintf(buffer, buffer_size, "%s", text) > 0;
 }
 
+bool voice_note_model_format_timestamp(
+    uint32_t epoch_s,
+    char *buffer,
+    size_t buffer_size)
+{
+    time_t raw_time = (time_t)epoch_s;
+    struct tm local_tm = {0};
+
+    if (buffer == NULL || buffer_size == 0U) {
+        return false;
+    }
+
+    if (epoch_s == 0U || localtime_r(&raw_time, &local_tm) == NULL) {
+        snprintf(buffer, buffer_size, "%s", "时间未同步");
+        return false;
+    }
+
+    snprintf(
+        buffer,
+        buffer_size,
+        "%02d-%02d %02d:%02d",
+        local_tm.tm_mon + 1,
+        local_tm.tm_mday,
+        local_tm.tm_hour,
+        local_tm.tm_min);
+    return true;
+}
+
+bool voice_note_model_compose_meta_line(
+    uint32_t created_at_epoch_s,
+    uint32_t duration_ms,
+    voice_note_status_t status,
+    char *buffer,
+    size_t buffer_size)
+{
+    char time_text[24];
+
+    if (buffer == NULL || buffer_size == 0U) {
+        return false;
+    }
+
+    (void)voice_note_model_format_timestamp(created_at_epoch_s, time_text, sizeof(time_text));
+    snprintf(
+        buffer,
+        buffer_size,
+        "%s  %lus  %s",
+        time_text,
+        (unsigned long)((duration_ms + 500U) / 1000U),
+        status == VOICE_NOTE_STATUS_DONE ? "已完成" : "未完成");
+    return true;
+}
+
+bool voice_note_model_normalize_text(
+    const char *src,
+    char *dst,
+    size_t dst_size)
+{
+    size_t src_index = 0U;
+    size_t dst_index = 0U;
+    bool pending_space = false;
+
+    if (dst == NULL || dst_size == 0U) {
+        return false;
+    }
+    dst[0] = '\0';
+    if (src == NULL) {
+        return false;
+    }
+
+    while (src[src_index] != '\0' && dst_index + 1U < dst_size) {
+        const unsigned char ch = (unsigned char)src[src_index];
+
+        if (is_ascii_space((char)ch)) {
+            pending_space = dst_index > 0U;
+            ++src_index;
+            continue;
+        }
+
+        if (pending_space && dst_index + 1U < dst_size) {
+            dst[dst_index++] = ' ';
+            pending_space = false;
+        }
+
+        if (ch < 0x80U) {
+            dst[dst_index++] = (char)ch;
+            ++src_index;
+            continue;
+        }
+
+        {
+            size_t cp_len = 1U;
+            if ((ch & 0xE0U) == 0xC0U) {
+                cp_len = 2U;
+            } else if ((ch & 0xF0U) == 0xE0U) {
+                cp_len = 3U;
+            } else if ((ch & 0xF8U) == 0xF0U) {
+                cp_len = 4U;
+            }
+            if (dst_index + cp_len >= dst_size) {
+                break;
+            }
+            for (size_t i = 0U; i < cp_len && src[src_index] != '\0'; ++i) {
+                dst[dst_index++] = src[src_index++];
+            }
+        }
+    }
+
+    while (dst_index > 0U && dst[dst_index - 1U] == ' ') {
+        --dst_index;
+    }
+    dst[dst_index] = '\0';
+    return dst_index > 0U;
+}
+
 bool voice_note_model_self_test(void)
 {
     char note_id[VOICE_NOTE_ID_LENGTH];
@@ -151,6 +271,9 @@ bool voice_note_model_self_test(void)
     char title[VOICE_NOTE_TITLE_LENGTH];
     char tiny_title[8];
     char status[VOICE_NOTE_STATUS_COPY_LENGTH];
+    char time_text[24];
+    char meta_text[48];
+    char normalized[VOICE_NOTE_TEXT_LENGTH];
 
     if (!voice_note_model_build_note_paths(
             1719651000U,
@@ -194,6 +317,32 @@ bool voice_note_model_self_test(void)
         tiny_title,
         sizeof(tiny_title));
     if (strcmp(tiny_title, "abcd...") != 0) {
+        return false;
+    }
+    if (!voice_note_model_format_timestamp(1735689600U, time_text, sizeof(time_text))) {
+        return false;
+    }
+    if (strcmp(time_text, "01-01 08:00") != 0) {
+        return false;
+    }
+    if (!voice_note_model_compose_meta_line(
+            1735689600U,
+            3200U,
+            VOICE_NOTE_STATUS_DONE,
+            meta_text,
+            sizeof(meta_text))) {
+        return false;
+    }
+    if (strcmp(meta_text, "01-01 08:00  3s  已完成") != 0) {
+        return false;
+    }
+    if (!voice_note_model_normalize_text(
+            "  第一行\r\n第二行 \n\n  第三行\t结尾  ",
+            normalized,
+            sizeof(normalized))) {
+        return false;
+    }
+    if (strcmp(normalized, "第一行 第二行 第三行 结尾") != 0) {
         return false;
     }
     return strcmp(status, "无效标签，请重新录入") == 0

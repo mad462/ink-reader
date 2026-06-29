@@ -24,6 +24,7 @@ typedef struct {
     const ink_usb_msc_app_state_t *state;
     const ink_cpfont_t *menu_font;
     const ink_cpfont_t *footer_font;
+    char header_meta[24];
 } ink_usb_msc_app_render_state_t;
 
 const ink_app_descriptor_t *ink_usb_msc_app_descriptor(void);

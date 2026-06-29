@@ -1,0 +1,34 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "audio_asr_http.c"
+        "audio_asr_json.c"
+        "audio_asr_metrics.c"
+        "audio_asr_preview_state.c"
+        "audio_asr_probe_logic.c"
+        "audio_asr_web.c"
+        "audio_asr_wav.c"
+        "audio_asr_wifi.c"
+        "test_audio_asr_http.c"
+        "test_audio_asr_metrics.c"
+        "test_audio_asr_preview_state.c"
+        "test_audio_asr_probe_logic.c"
+        "test_audio_asr_web.c"
+        "test_audio_asr_wav.c"
+        "test_audio_asr_wifi.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_driver_gpio
+        esp_driver_i2s
+        esp_event
+        esp_http_client
+        esp_http_server
+        esp_netif
+        json
+        mbedtls
+        esp_psram
+        esp_timer
+        esp_wifi
+        nvs_flash
+)
