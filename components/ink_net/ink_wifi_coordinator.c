@@ -16,7 +16,6 @@ enum {
     INK_WIFI_COORDINATOR_TASK_STACK = 6144,
     INK_WIFI_COORDINATOR_DEFAULT_IDLE_MS = 30000,
     INK_WIFI_COORDINATOR_MAX_LEASES = 6,
-    INK_WIFI_COORDINATOR_INVALID_SLOT = 0xff,
 };
 
 typedef struct {
@@ -54,6 +53,26 @@ static uint32_t coordinator_active_leases(void);
 static bool coordinator_add_lease(ink_wifi_coordinator_owner_t owner);
 static void coordinator_remove_lease(ink_wifi_coordinator_owner_t owner);
 static void coordinator_refresh_status_counts(void);
+static ink_wifi_coordinator_result_t coordinator_result_from_connect_error(esp_err_t err);
+static void coordinator_store_wifi_status(
+    const ink_wifi_status_t *wifi_status,
+    ink_wifi_coordinator_result_t result);
+static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error);
+static ink_wifi_coordinator_result_t coordinator_run_connect_password(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error);
+static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error);
+static ink_wifi_coordinator_result_t coordinator_complete_keep_alive(
+    const ink_wifi_coordinator_request_t *request,
+    ink_wifi_coordinator_result_t base_result);
+static ink_wifi_coordinator_result_t coordinator_run_scan(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error);
+static void coordinator_maybe_disconnect_idle(void);
 static int coordinator_acquire_request_slot(void);
 static void coordinator_release_request_slot(int slot_index);
 static void coordinator_worker_task(void *arg);
@@ -155,6 +174,163 @@ static void coordinator_refresh_status_counts(void)
     coordinator_unlock();
 }
 
+static ink_wifi_coordinator_result_t coordinator_result_from_connect_error(esp_err_t err)
+{
+    if (err == ESP_OK) {
+        return INK_WIFI_COORDINATOR_RESULT_OK;
+    }
+    if (err == ESP_ERR_TIMEOUT) {
+        return INK_WIFI_COORDINATOR_RESULT_TIMEOUT;
+    }
+    if (err == ESP_ERR_NOT_FOUND) {
+        return INK_WIFI_COORDINATOR_RESULT_NO_CREDENTIAL;
+    }
+
+    return INK_WIFI_COORDINATOR_RESULT_CONNECT_FAILED;
+}
+
+static void coordinator_store_wifi_status(
+    const ink_wifi_status_t *wifi_status,
+    ink_wifi_coordinator_result_t result)
+{
+    coordinator_lock();
+    if (wifi_status != NULL) {
+        s_status.wifi_status = *wifi_status;
+        s_status.state = wifi_status->connected
+            ? INK_WIFI_COORDINATOR_STATE_ONLINE
+            : INK_WIFI_COORDINATOR_STATE_DISCONNECTED;
+    } else if (result != INK_WIFI_COORDINATOR_RESULT_OK) {
+        s_status.state = INK_WIFI_COORDINATOR_STATE_ERROR;
+    }
+    s_status.last_result = result;
+    coordinator_unlock();
+}
+
+static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error)
+{
+    esp_err_t err;
+    ink_wifi_status_t status = {0};
+
+    if (request->best_effort_saved) {
+        err = ink_wifi_manager_connect_best(request->timeout_ms, &status);
+    } else {
+        err = ink_wifi_manager_connect_saved(request->ssid, request->timeout_ms, &status);
+    }
+
+    if (request->status_out != NULL) {
+        *request->status_out = status;
+    }
+    if (out_error != NULL) {
+        *out_error = err;
+    }
+
+    coordinator_store_wifi_status(&status, coordinator_result_from_connect_error(err));
+    return coordinator_result_from_connect_error(err);
+}
+
+static ink_wifi_coordinator_result_t coordinator_run_connect_password(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error)
+{
+    ink_wifi_status_t status = {0};
+    esp_err_t err = ink_wifi_manager_connect_password(
+        request->ssid,
+        request->password,
+        request->timeout_ms,
+        &status);
+
+    if (request->status_out != NULL) {
+        *request->status_out = status;
+    }
+    if (out_error != NULL) {
+        *out_error = err;
+    }
+
+    coordinator_store_wifi_status(&status, coordinator_result_from_connect_error(err));
+    return coordinator_result_from_connect_error(err);
+}
+
+static ink_wifi_coordinator_result_t coordinator_complete_keep_alive(
+    const ink_wifi_coordinator_request_t *request,
+    ink_wifi_coordinator_result_t base_result)
+{
+    if (base_result != INK_WIFI_COORDINATOR_RESULT_OK || !request->keep_alive) {
+        return base_result;
+    }
+    if (request->owner == INK_WIFI_COORDINATOR_OWNER_NONE) {
+        return INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+    }
+    if (!coordinator_add_lease(request->owner)) {
+        return INK_WIFI_COORDINATOR_RESULT_BUSY_RETRYABLE;
+    }
+
+    coordinator_refresh_status_counts();
+    return INK_WIFI_COORDINATOR_RESULT_OK;
+}
+
+static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error)
+{
+    ink_wifi_status_t status = {0};
+    esp_err_t err = ink_wifi_manager_status(&status);
+
+    if (err == ESP_OK && status.connected) {
+        if (request->status_out != NULL) {
+            *request->status_out = status;
+        }
+        if (out_error != NULL) {
+            *out_error = ESP_OK;
+        }
+        coordinator_store_wifi_status(&status, INK_WIFI_COORDINATOR_RESULT_OK);
+        return coordinator_complete_keep_alive(request, INK_WIFI_COORDINATOR_RESULT_OK);
+    }
+
+    err = ink_wifi_manager_connect_best(request->timeout_ms, &status);
+    if (request->status_out != NULL) {
+        *request->status_out = status;
+    }
+    if (out_error != NULL) {
+        *out_error = err;
+    }
+
+    ink_wifi_coordinator_result_t result = coordinator_result_from_connect_error(err);
+    coordinator_store_wifi_status(&status, result);
+    return coordinator_complete_keep_alive(request, result);
+}
+
+static ink_wifi_coordinator_result_t coordinator_run_scan(
+    const ink_wifi_coordinator_request_t *request,
+    esp_err_t *out_error)
+{
+    esp_err_t err = ink_wifi_manager_scan(request->scan_out);
+
+    if (out_error != NULL) {
+        *out_error = err;
+    }
+    return err == ESP_OK
+        ? INK_WIFI_COORDINATOR_RESULT_OK
+        : INK_WIFI_COORDINATOR_RESULT_SCAN_FAILED;
+}
+
+static void coordinator_maybe_disconnect_idle(void)
+{
+    coordinator_refresh_status_counts();
+
+    coordinator_lock();
+    if (s_status.active_leases != 0U) {
+        coordinator_unlock();
+        return;
+    }
+
+    memset(&s_status.wifi_status, 0, sizeof(s_status.wifi_status));
+    s_status.state = INK_WIFI_COORDINATOR_STATE_DISCONNECTED;
+    s_status.last_result = INK_WIFI_COORDINATOR_RESULT_OK;
+    coordinator_unlock();
+}
+
 static int coordinator_acquire_request_slot(void)
 {
     int slot_index = -1;
@@ -214,32 +390,41 @@ static void coordinator_worker_task(void *arg)
         item.result = INK_WIFI_COORDINATOR_RESULT_OK;
 
         switch (item.request.type) {
+        case INK_WIFI_COORDINATOR_REQUEST_ENSURE_CONNECTED:
+            item.result = coordinator_run_ensure_connected(&item.request, &item.error);
+            break;
+
+        case INK_WIFI_COORDINATOR_REQUEST_SCAN:
+            item.result = coordinator_run_scan(&item.request, &item.error);
+            break;
+
+        case INK_WIFI_COORDINATOR_REQUEST_CONNECT_SAVED:
+            item.result = coordinator_run_connect_saved(&item.request, &item.error);
+            item.result = coordinator_complete_keep_alive(&item.request, item.result);
+            break;
+
+        case INK_WIFI_COORDINATOR_REQUEST_CONNECT_PASSWORD:
+            item.result = coordinator_run_connect_password(&item.request, &item.error);
+            item.result = coordinator_complete_keep_alive(&item.request, item.result);
+            break;
+
         case INK_WIFI_COORDINATOR_REQUEST_RELEASE_LEASE:
             coordinator_remove_lease(item.request.owner);
-            coordinator_refresh_status_counts();
-            coordinator_lock();
-            if (s_status.active_leases == 0U) {
-                s_status.state = INK_WIFI_COORDINATOR_STATE_OFF;
-            }
-            coordinator_unlock();
+            coordinator_maybe_disconnect_idle();
             break;
 
         case INK_WIFI_COORDINATOR_REQUEST_DISCONNECT_IF_IDLE:
             coordinator_refresh_status_counts();
             coordinator_lock();
             if (s_status.active_leases == 0U) {
-                memset(&s_status.wifi_status, 0, sizeof(s_status.wifi_status));
-                s_status.state = INK_WIFI_COORDINATOR_STATE_OFF;
+                coordinator_unlock();
+                coordinator_maybe_disconnect_idle();
             } else {
                 item.result = INK_WIFI_COORDINATOR_RESULT_BUSY_RETRYABLE;
+                coordinator_unlock();
             }
-            coordinator_unlock();
             break;
 
-        case INK_WIFI_COORDINATOR_REQUEST_ENSURE_CONNECTED:
-        case INK_WIFI_COORDINATOR_REQUEST_SCAN:
-        case INK_WIFI_COORDINATOR_REQUEST_CONNECT_SAVED:
-        case INK_WIFI_COORDINATOR_REQUEST_CONNECT_PASSWORD:
         default:
             item.result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
             break;
@@ -440,6 +625,18 @@ bool ink_wifi_coordinator_self_test(void)
     if (!coordinator_add_lease(INK_WIFI_COORDINATOR_OWNER_TIME_SYNC)) {
         return false;
     }
+    if (!coordinator_add_lease(INK_WIFI_COORDINATOR_OWNER_TIME_SYNC)) {
+        return false;
+    }
+    coordinator_refresh_status_counts();
+    if (s_status.active_leases != 1U) {
+        return false;
+    }
+    coordinator_remove_lease(INK_WIFI_COORDINATOR_OWNER_VOICE_TAG_ASR);
+    coordinator_refresh_status_counts();
+    if (s_status.active_leases != 1U) {
+        return false;
+    }
     if (!coordinator_add_lease(INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP)) {
         return false;
     }
@@ -449,6 +646,12 @@ bool ink_wifi_coordinator_self_test(void)
         return false;
     }
     if (ink_wifi_coordinator_get_status(&status) != ESP_OK) {
+        return false;
+    }
+    if (coordinator_result_from_connect_error(ESP_ERR_NOT_FOUND) != INK_WIFI_COORDINATOR_RESULT_NO_CREDENTIAL) {
+        return false;
+    }
+    if (coordinator_result_from_connect_error(ESP_ERR_TIMEOUT) != INK_WIFI_COORDINATOR_RESULT_TIMEOUT) {
         return false;
     }
     return status.idle_timeout_ms == INK_WIFI_COORDINATOR_DEFAULT_IDLE_MS
