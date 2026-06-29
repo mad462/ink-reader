@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "ink_wifi_manager.c"
+        "ink_wifi_coordinator.c"
     INCLUDE_DIRS
         "."
     REQUIRES
