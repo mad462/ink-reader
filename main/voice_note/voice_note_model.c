@@ -149,6 +149,7 @@ bool voice_note_model_self_test(void)
     char json_path[VOICE_NOTE_PATH_LENGTH];
     char wav_path[VOICE_NOTE_PATH_LENGTH];
     char title[VOICE_NOTE_TITLE_LENGTH];
+    char tiny_title[8];
     char status[VOICE_NOTE_STATUS_COPY_LENGTH];
 
     if (!voice_note_model_build_note_paths(
@@ -185,6 +186,14 @@ bool voice_note_model_self_test(void)
             VOICE_NOTE_JOB_INVALID_SHORT_RECORDING,
             status,
             sizeof(status))) {
+        return false;
+    }
+    voice_note_model_build_title(
+        "abcdefghi",
+        VOICE_NOTE_TRANSCRIPT_READY,
+        tiny_title,
+        sizeof(tiny_title));
+    if (strcmp(tiny_title, "abcd...") != 0) {
         return false;
     }
     return strcmp(status, "无效标签，请重新录入") == 0

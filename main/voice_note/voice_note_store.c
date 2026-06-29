@@ -1,5 +1,6 @@
 #include "voice_note/voice_note_store.h"
 
+#include <errno.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +18,7 @@ static esp_err_t ensure_voice_note_dir(void);
 static bool note_matches_tab(const voice_note_note_t *note, voice_note_tab_t tab);
 static cJSON *note_to_json(const voice_note_note_t *note);
 static bool note_from_json(const cJSON *root, voice_note_note_t *note);
+static esp_err_t delete_file_allow_missing(const char *path);
 static esp_err_t write_note_file(const char *path, const voice_note_note_t *note);
 
 static esp_err_t ensure_voice_note_dir(void)
@@ -132,11 +134,30 @@ static bool note_from_json(const cJSON *root, voice_note_note_t *note)
     return true;
 }
 
+static esp_err_t delete_file_allow_missing(const char *path)
+{
+    if (path == NULL || path[0] == '\0') {
+        return ESP_OK;
+    }
+
+    errno = 0;
+    if (remove(path) == 0) {
+        return ESP_OK;
+    }
+    if (errno == ENOENT) {
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
 static esp_err_t write_note_file(const char *path, const voice_note_note_t *note)
 {
     FILE *fp = NULL;
     cJSON *root = NULL;
     char *text = NULL;
+    size_t text_len = 0U;
+    size_t written = 0U;
+    int close_result = 0;
 
     root = note_to_json(note);
     if (root == NULL) {
@@ -153,10 +174,17 @@ static esp_err_t write_note_file(const char *path, const voice_note_note_t *note
         cJSON_Delete(root);
         return ESP_FAIL;
     }
-    fwrite(text, 1U, strlen(text), fp);
-    fclose(fp);
+    text_len = strlen(text);
+    written = fwrite(text, 1U, text_len, fp);
+    close_result = fclose(fp);
     cJSON_free(text);
     cJSON_Delete(root);
+    if (written != text_len) {
+        return ESP_FAIL;
+    }
+    if (close_result != 0) {
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 
@@ -223,28 +251,39 @@ bool voice_note_store_find_note(const char *note_id, voice_note_note_t *out_note
 esp_err_t voice_note_store_create_processing_note(const voice_note_note_t *note)
 {
     char path[VOICE_NOTE_PATH_LENGTH];
+    esp_err_t err = ESP_OK;
 
     if (note == NULL || s_note_count >= VOICE_NOTE_MAX_NOTES) {
         return ESP_ERR_INVALID_ARG;
     }
     snprintf(path, sizeof(path), "%s/%s.json", VOICE_NOTE_ROOT_DIR, note->id);
-    s_notes[s_note_count++] = *note;
-    return write_note_file(path, note);
+    err = write_note_file(path, note);
+    if (err != ESP_OK) {
+        return err;
+    }
+    s_notes[s_note_count] = *note;
+    s_note_count++;
+    return ESP_OK;
 }
 
 esp_err_t voice_note_store_update_note(const voice_note_note_t *note)
 {
     size_t i = 0U;
     char path[VOICE_NOTE_PATH_LENGTH];
+    esp_err_t err = ESP_OK;
 
     if (note == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
     for (i = 0U; i < s_note_count; ++i) {
         if (strcmp(s_notes[i].id, note->id) == 0) {
-            s_notes[i] = *note;
             snprintf(path, sizeof(path), "%s/%s.json", VOICE_NOTE_ROOT_DIR, note->id);
-            return write_note_file(path, note);
+            err = write_note_file(path, note);
+            if (err != ESP_OK) {
+                return err;
+            }
+            s_notes[i] = *note;
+            return ESP_OK;
         }
     }
     return ESP_ERR_NOT_FOUND;
@@ -263,8 +302,16 @@ esp_err_t voice_note_store_delete_note(const char *note_id)
             continue;
         }
         snprintf(json_path, sizeof(json_path), "%s/%s.json", VOICE_NOTE_ROOT_DIR, note_id);
-        remove(json_path);
-        remove(s_notes[i].wav_path);
+        // Delete auxiliary WAV first. If cleanup fails unexpectedly, keep metadata on disk and
+        // in memory rather than silently diverging note state.
+        if (delete_file_allow_missing(s_notes[i].wav_path) != ESP_OK) {
+            return ESP_FAIL;
+        }
+        // The JSON metadata file is the backing record for this scaffold store. Only drop the
+        // in-memory note after the backing file has either been deleted or was already absent.
+        if (delete_file_allow_missing(json_path) != ESP_OK) {
+            return ESP_FAIL;
+        }
         memmove(&s_notes[i], &s_notes[i + 1U], (s_note_count - i - 1U) * sizeof(s_notes[0]));
         s_note_count--;
         return ESP_OK;
@@ -275,9 +322,13 @@ esp_err_t voice_note_store_delete_note(const char *note_id)
 bool voice_note_store_self_test(void)
 {
     voice_note_note_t note;
+    voice_note_note_t invalid_note;
     voice_note_note_t copy;
+    voice_note_note_t summaries[2];
     cJSON *json = NULL;
     char *json_text = NULL;
+    char json_path[VOICE_NOTE_PATH_LENGTH];
+    size_t summary_count = 0U;
 
     memset(&note, 0, sizeof(note));
     snprintf(note.id, sizeof(note.id), "%s", "note_test");
@@ -304,11 +355,72 @@ bool voice_note_store_self_test(void)
     if (voice_note_store_create_processing_note(&note) != ESP_OK) {
         return false;
     }
+    if (voice_note_store_count() != 1U) {
+        return false;
+    }
     if (!voice_note_store_find_note("note_test", &copy)) {
         return false;
     }
     if (strcmp(copy.title, "测试便签") != 0) {
         return false;
     }
-    return voice_note_store_delete_note("note_test") == ESP_OK;
+
+    invalid_note = note;
+    snprintf(invalid_note.id, sizeof(invalid_note.id), "%s", "bad/note");
+    if (voice_note_store_create_processing_note(&invalid_note) == ESP_OK) {
+        return false;
+    }
+    if (voice_note_store_count() != 1U) {
+        return false;
+    }
+
+    note.status = VOICE_NOTE_STATUS_DONE;
+    note.transcript_state = VOICE_NOTE_TRANSCRIPT_READY;
+    snprintf(note.title, sizeof(note.title), "%s", "更新后的标题");
+    snprintf(note.text, sizeof(note.text), "%s", "完整文本");
+    if (voice_note_store_update_note(&note) != ESP_OK) {
+        return false;
+    }
+    if (!voice_note_store_find_note("note_test", &copy)) {
+        return false;
+    }
+    if (copy.status != VOICE_NOTE_STATUS_DONE
+        || copy.transcript_state != VOICE_NOTE_TRANSCRIPT_READY
+        || strcmp(copy.title, "更新后的标题") != 0
+        || strcmp(copy.text, "完整文本") != 0) {
+        return false;
+    }
+
+    if (!voice_note_store_copy_summaries(
+            VOICE_NOTE_TAB_DONE,
+            summaries,
+            sizeof(summaries) / sizeof(summaries[0]),
+            &summary_count)) {
+        return false;
+    }
+    if (summary_count != 1U || strcmp(summaries[0].id, "note_test") != 0) {
+        return false;
+    }
+    if (!voice_note_store_copy_summaries(
+            VOICE_NOTE_TAB_PENDING,
+            summaries,
+            sizeof(summaries) / sizeof(summaries[0]),
+            &summary_count)) {
+        return false;
+    }
+    if (summary_count != 0U) {
+        return false;
+    }
+
+    snprintf(json_path, sizeof(json_path), "%s/%s.json", VOICE_NOTE_ROOT_DIR, note.id);
+    if (remove(json_path) != 0) {
+        return false;
+    }
+    if (voice_note_store_delete_note("note_test") != ESP_OK) {
+        return false;
+    }
+    if (voice_note_store_count() != 0U) {
+        return false;
+    }
+    return !voice_note_store_find_note("note_test", &copy);
 }
