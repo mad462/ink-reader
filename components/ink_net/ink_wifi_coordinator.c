@@ -521,9 +521,12 @@ static void coordinator_worker_task(void *arg)
             coordinator_refresh_status_counts();
             coordinator_lock();
             if (s_status.active_leases == 0U) {
+                // Real radio disconnect is deferred until ink_wifi_manager grows a low-level disconnect API.
                 item.result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+                item.error = ESP_ERR_NOT_SUPPORTED;
             } else {
                 item.result = INK_WIFI_COORDINATOR_RESULT_BUSY_RETRYABLE;
+                item.error = ESP_ERR_INVALID_STATE;
             }
             coordinator_unlock();
             break;
