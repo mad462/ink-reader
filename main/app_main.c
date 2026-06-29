@@ -16,6 +16,7 @@
 #include "apps/ink_photo_album_app.h"
 #include "apps/ink_reader_app.h"
 #include "apps/ink_usb_msc_app.h"
+#include "apps/ink_voice_note_app.h"
 #include "apps/ink_wifi_setup_app.h"
 #include "ink_app_boot.h"
 #include "ink_photo_bmp_parser.h"
@@ -29,6 +30,7 @@
 #include "ink_wifi_setup_input.h"
 #include "ink_wifi_setup_render.h"
 #include "ink_wifi_setup_state.h"
+#include "voice_note/voice_note_service.h"
 
 static const char *TAG = "ink_reader";
 static const bool kRunBootSelfTests = false;
@@ -95,6 +97,10 @@ static void run_boot_self_tests(void)
     ESP_ERROR_CHECK(ink_wifi_setup_ui_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_wifi_setup_app_self_test() ? ESP_OK : ESP_FAIL);
     esp_rom_printf("OK wifi_setup\n");
+    esp_rom_printf("ST voice_note\n");
+    ESP_ERROR_CHECK(voice_note_service_self_test() ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_voice_note_app_self_test() ? ESP_OK : ESP_FAIL);
+    esp_rom_printf("OK voice_note\n");
     esp_rom_printf("ST photo_album\n");
     ESP_ERROR_CHECK(ink_photo_catalog_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_photo_bmp_parser_self_test() ? ESP_OK : ESP_FAIL);
@@ -712,6 +718,7 @@ void app_main(void)
     ink_system_runtime_init(&app.runtime);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_launcher_app_descriptor()) ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_reader_app_descriptor()) ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_voice_note_app_descriptor()) ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_wifi_setup_app_descriptor()) ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_photo_album_app_descriptor()) ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_system_runtime_register_app(&app.runtime, ink_gray_cal_app_descriptor()) ? ESP_OK : ESP_FAIL);

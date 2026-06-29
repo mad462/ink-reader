@@ -6,6 +6,7 @@ idf_component_register(
         "apps/ink_photo_album_app.c"
         "apps/ink_reader_app.c"
         "apps/ink_usb_msc_app.c"
+        "apps/ink_voice_note_app.c"
         "apps/ink_wifi_setup_app.c"
         "ink_app_boot.c"
         "ink_app_display_request.c"
@@ -20,6 +21,7 @@ idf_component_register(
         "ink_usb_msc_service.c"
         "ink_tuning_lab.c"
         "ink_app_ui.c"
+        "voice_note/voice_note_service.c"
     INCLUDE_DIRS
         "."
     REQUIRES
@@ -31,6 +33,7 @@ idf_component_register(
         ink_hw
         ink_net
         ink_wifi_setup
+        json
         lwip
         esp_tinyusb
         vfs

@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "ink_refresh_strategy.h"
+
 typedef enum {
     INK_APP_EVENT_NONE = 0,
     INK_APP_EVENT_BUTTON_BACK,
@@ -33,10 +35,12 @@ typedef enum {
     INK_APP_RENDER_MODE_WIFI_SETUP,
     INK_APP_RENDER_MODE_PHOTO_ALBUM,
     INK_APP_RENDER_MODE_USB_MSC,
+    INK_APP_RENDER_MODE_VOICE_NOTE,
 } ink_app_render_mode_t;
 
 typedef struct {
     ink_app_render_mode_t mode;
+    ink_refresh_strategy_t refresh_strategy;
     bool request_full_refresh;
     bool request_partial_refresh;
     bool request_aggressive_interrupt;

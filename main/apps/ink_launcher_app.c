@@ -8,15 +8,17 @@
 #include "apps/ink_photo_album_app.h"
 #include "apps/ink_reader_app.h"
 #include "apps/ink_usb_msc_app.h"
+#include "apps/ink_voice_note_app.h"
 #include "apps/ink_wifi_setup_app.h"
 #include "ink_system_runtime.h"
 
 enum {
-    INK_LAUNCHER_APP_COUNT = 5,
+    INK_LAUNCHER_APP_COUNT = 6,
 };
 
 static const char *const kLauncherTargetIds[INK_LAUNCHER_APP_COUNT] = {
     "reader",
+    "voice_note",
     "wifi_setup",
     "photo_album",
     "gray_cal",
@@ -125,21 +127,21 @@ static bool launcher_selection_self_test(void)
     ink_launcher_app_state_t *state = &s_launcher_state;
     const ink_app_descriptor_t *launcher = ink_launcher_app_descriptor();
     const ink_app_descriptor_t *reader = NULL;
+    const ink_app_descriptor_t *voice_note = NULL;
     const ink_app_descriptor_t *usb_msc = NULL;
 
     ink_system_runtime_init(&runtime);
     if (!ink_system_runtime_register_app(&runtime, launcher)
         || !ink_system_runtime_register_app(&runtime, ink_reader_app_descriptor())
-        || !ink_system_runtime_register_app(&runtime, ink_wifi_setup_app_descriptor())
-        || !ink_system_runtime_register_app(&runtime, ink_photo_album_app_descriptor())
-        || !ink_system_runtime_register_app(&runtime, ink_gray_cal_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_voice_note_app_descriptor())
         || !ink_system_runtime_register_app(&runtime, ink_usb_msc_app_descriptor())) {
         return false;
     }
 
     reader = ink_system_runtime_find_app_by_id(&runtime, "reader");
+    voice_note = ink_system_runtime_find_app_by_id(&runtime, "voice_note");
     usb_msc = ink_system_runtime_find_app_by_id(&runtime, "usb_msc");
-    if (reader == NULL || usb_msc == NULL) {
+    if (reader == NULL || voice_note == NULL || usb_msc == NULL) {
         return false;
     }
 
@@ -161,6 +163,16 @@ static bool launcher_selection_self_test(void)
         return false;
     }
 
+    event.kind = INK_APP_EVENT_BUTTON_CONFIRM;
+    if (!launcher->input(&runtime, launcher, &event)
+        || runtime.pending_app != voice_note
+        || !runtime.force_full_refresh_on_next_render) {
+        return false;
+    }
+
+    runtime.pending_app = NULL;
+    runtime.force_full_refresh_on_next_render = false;
+
     event.kind = INK_APP_EVENT_NAV_NEXT;
     if (!launcher->input(&runtime, launcher, &event) || state->selected_app_index != 2U) {
         return false;
@@ -176,6 +188,11 @@ static bool launcher_selection_self_test(void)
         return false;
     }
 
+    event.kind = INK_APP_EVENT_NAV_NEXT;
+    if (!launcher->input(&runtime, launcher, &event) || state->selected_app_index != 5U) {
+        return false;
+    }
+
     event.kind = INK_APP_EVENT_BUTTON_CONFIRM;
     if (!launcher->input(&runtime, launcher, &event)
         || runtime.pending_app != usb_msc
@@ -188,6 +205,11 @@ static bool launcher_selection_self_test(void)
 
     event.kind = INK_APP_EVENT_NAV_NEXT;
     if (!launcher->input(&runtime, launcher, &event) || state->selected_app_index != 0U) {
+        return false;
+    }
+
+    event.kind = INK_APP_EVENT_NAV_PREVIOUS;
+    if (!launcher->input(&runtime, launcher, &event) || state->selected_app_index != 5U) {
         return false;
     }
 
@@ -238,14 +260,13 @@ static bool launcher_missing_wifi_target_self_test(void)
     ink_system_runtime_init(&runtime);
     if (!ink_system_runtime_register_app(&runtime, launcher)
         || !ink_system_runtime_register_app(&runtime, ink_reader_app_descriptor())
-        || !ink_system_runtime_register_app(&runtime, ink_photo_album_app_descriptor())
-        || !ink_system_runtime_register_app(&runtime, ink_gray_cal_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_voice_note_app_descriptor())
         || !ink_system_runtime_register_app(&runtime, ink_usb_msc_app_descriptor())
         || !ink_system_runtime_set_active_app(&runtime, launcher)) {
         return false;
     }
 
-    state->selected_app_index = 1U;
+    state->selected_app_index = 2U;
     if (launcher->input(&runtime, launcher, &event)) {
         return false;
     }
