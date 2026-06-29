@@ -362,6 +362,17 @@ Each tab shows:
 
 It does not need to appear in `已完成`.
 
+### New-note card idle text
+
+The `新建语音标签` card should have a stable idle presentation when no job is running.
+
+Recommended idle copy:
+
+- title: `新建语音标签`
+- status line: `按住 Confirm 开始录音`
+
+Temporary status and error text should always return to this idle presentation once the transient state has cleared, unless a new recording has already started.
+
 ## New Note Card Status Text
 
 All transient capture and recognition feedback must appear inside the `新建语音标签` card.
@@ -379,13 +390,22 @@ Recommended status chain:
 
 User-visible error variants:
 
-- `录音时间太短`
+- `无效标签，请重新录入`
 - `网络不可用`
 - `WiFi 连接失败`
 - `识别服务失败`
 - `存储失败`
 
 Only one job may run at a time. While this card is busy, the app may still allow browsing existing notes, but it must not allow starting a second recording job.
+
+### Invalid short-recording behavior
+
+If a recording is treated as too short to create a note:
+
+- do not create a note
+- show `无效标签，请重新录入` on the new-note card
+- keep that message visible for 5 seconds
+- if the user does not start a new recording during that window, restore the idle card copy automatically
 
 ## Note Card Layout
 
@@ -494,7 +514,9 @@ If press duration is less than 2 seconds:
 - do not connect Wi-Fi
 - do not send ASR
 - do not create a formal note
-- show `录音时间太短` on the new-note card
+- treat the capture as an invalid note
+- show `无效标签，请重新录入` on the new-note card
+- after 5 seconds without a new recording, restore the default new-note card text
 
 This avoids wasting power and network work on accidental taps.
 
@@ -587,16 +609,17 @@ Minimum test coverage should include:
 2. `全部 / 未完成 / 已完成` filtering is correct
 3. the new-note card shows the expected state sequence
 4. short recordings do not trigger Wi-Fi
-5. successful recognition creates both WAV and metadata
-6. Wi-Fi failure creates a failed note with retryable WAV
-7. ASR failure creates a failed note with retryable WAV
-8. storage failure does not create a half-valid note
-9. reboot restores note list from TF card
-10. interrupted `processing` notes recover as failed notes
-11. delete removes JSON, WAV, and index entry
-12. mark complete / incomplete persists correctly
-13. retry recognition reuses the stored WAV
-14. the app never bypasses the Wi-Fi coordinator
+5. short recordings show `无效标签，请重新录入` and auto-reset after 5 seconds
+6. successful recognition creates both WAV and metadata
+7. Wi-Fi failure creates a failed note with retryable WAV
+8. ASR failure creates a failed note with retryable WAV
+9. storage failure does not create a half-valid note
+10. reboot restores note list from TF card
+11. interrupted `processing` notes recover as failed notes
+12. delete removes JSON, WAV, and index entry
+13. mark complete / incomplete persists correctly
+14. retry recognition reuses the stored WAV
+15. the app never bypasses the Wi-Fi coordinator
 
 Manual validation should include:
 
