@@ -34,8 +34,12 @@ typedef struct {
     bool in_use;
     bool caller_waiting;
     bool completed;
+    bool has_status_out;
+    bool has_scan_out;
     ink_wifi_coordinator_result_t result;
     esp_err_t error;
+    ink_wifi_status_t status_out;
+    ink_wifi_scan_list_t scan_out;
     SemaphoreHandle_t done_sem;
 } ink_wifi_coordinator_request_slot_t;
 
@@ -59,28 +63,38 @@ static ink_wifi_coordinator_connect_best_fn_t s_connect_best_fn = ink_wifi_manag
 static esp_err_t coordinator_ensure_runtime_primitives(void);
 static void coordinator_lock(void);
 static void coordinator_unlock(void);
-static uint32_t coordinator_active_leases(void);
 static bool coordinator_add_lease(ink_wifi_coordinator_owner_t owner);
 static void coordinator_remove_lease(ink_wifi_coordinator_owner_t owner);
 static void coordinator_refresh_status_counts(void);
+static uint32_t coordinator_active_leases_locked(void);
 static ink_wifi_coordinator_result_t coordinator_result_from_connect_error(esp_err_t err);
+static void coordinator_reset_request_slot_locked(int slot_index);
+static void coordinator_store_request_status(int slot_index, const ink_wifi_status_t *status);
+static void coordinator_store_request_scan(int slot_index, const ink_wifi_scan_list_t *scan);
+static void coordinator_copy_request_outputs(
+    int slot_index,
+    const ink_wifi_coordinator_request_t *request);
 static void coordinator_store_wifi_status(
     const ink_wifi_status_t *wifi_status,
     ink_wifi_coordinator_result_t result);
 static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error);
 static ink_wifi_coordinator_result_t coordinator_run_connect_password(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error);
 static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error);
 static ink_wifi_coordinator_result_t coordinator_complete_keep_alive(
     const ink_wifi_coordinator_request_t *request,
     ink_wifi_coordinator_result_t base_result);
 static ink_wifi_coordinator_result_t coordinator_run_scan(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error);
 static void coordinator_maybe_disconnect_idle(void);
 static int coordinator_acquire_request_slot(void);
@@ -133,17 +147,15 @@ static void coordinator_unlock(void)
     xSemaphoreGiveRecursive(s_state_lock);
 }
 
-static uint32_t coordinator_active_leases(void)
+static uint32_t coordinator_active_leases_locked(void)
 {
     uint32_t count = 0;
 
-    coordinator_lock();
     for (size_t i = 0; i < INK_WIFI_COORDINATOR_MAX_LEASES; ++i) {
         if (s_leases[i].in_use) {
             ++count;
         }
     }
-    coordinator_unlock();
 
     return count;
 }
@@ -197,7 +209,7 @@ static void coordinator_remove_lease(ink_wifi_coordinator_owner_t owner)
 static void coordinator_refresh_status_counts(void)
 {
     coordinator_lock();
-    s_status.active_leases = coordinator_active_leases();
+    s_status.active_leases = coordinator_active_leases_locked();
     coordinator_unlock();
 }
 
@@ -214,6 +226,79 @@ static ink_wifi_coordinator_result_t coordinator_result_from_connect_error(esp_e
     }
 
     return INK_WIFI_COORDINATOR_RESULT_CONNECT_FAILED;
+}
+
+static void coordinator_reset_request_slot_locked(int slot_index)
+{
+    memset(&s_request_slots[slot_index].status_out, 0, sizeof(s_request_slots[slot_index].status_out));
+    memset(&s_request_slots[slot_index].scan_out, 0, sizeof(s_request_slots[slot_index].scan_out));
+    s_request_slots[slot_index].in_use = false;
+    s_request_slots[slot_index].caller_waiting = false;
+    s_request_slots[slot_index].completed = false;
+    s_request_slots[slot_index].has_status_out = false;
+    s_request_slots[slot_index].has_scan_out = false;
+    s_request_slots[slot_index].result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+    s_request_slots[slot_index].error = ESP_OK;
+}
+
+static void coordinator_store_request_status(int slot_index, const ink_wifi_status_t *status)
+{
+    if (slot_index < 0 || slot_index >= INK_WIFI_COORDINATOR_QUEUE_LEN || status == NULL) {
+        return;
+    }
+
+    coordinator_lock();
+    if (s_request_slots[slot_index].in_use) {
+        s_request_slots[slot_index].status_out = *status;
+        s_request_slots[slot_index].has_status_out = true;
+    }
+    coordinator_unlock();
+}
+
+static void coordinator_store_request_scan(int slot_index, const ink_wifi_scan_list_t *scan)
+{
+    if (slot_index < 0 || slot_index >= INK_WIFI_COORDINATOR_QUEUE_LEN || scan == NULL) {
+        return;
+    }
+
+    coordinator_lock();
+    if (s_request_slots[slot_index].in_use) {
+        s_request_slots[slot_index].scan_out = *scan;
+        s_request_slots[slot_index].has_scan_out = true;
+    }
+    coordinator_unlock();
+}
+
+static void coordinator_copy_request_outputs(
+    int slot_index,
+    const ink_wifi_coordinator_request_t *request)
+{
+    bool has_status_out = false;
+    bool has_scan_out = false;
+    ink_wifi_status_t status_out = {0};
+    ink_wifi_scan_list_t scan_out = {0};
+
+    if (slot_index < 0 || slot_index >= INK_WIFI_COORDINATOR_QUEUE_LEN || request == NULL) {
+        return;
+    }
+
+    coordinator_lock();
+    has_status_out = s_request_slots[slot_index].has_status_out;
+    has_scan_out = s_request_slots[slot_index].has_scan_out;
+    if (has_status_out) {
+        status_out = s_request_slots[slot_index].status_out;
+    }
+    if (has_scan_out) {
+        scan_out = s_request_slots[slot_index].scan_out;
+    }
+    coordinator_unlock();
+
+    if (has_status_out && request->status_out != NULL) {
+        *request->status_out = status_out;
+    }
+    if (has_scan_out && request->scan_out != NULL) {
+        *request->scan_out = scan_out;
+    }
 }
 
 static void coordinator_store_wifi_status(
@@ -235,6 +320,7 @@ static void coordinator_store_wifi_status(
 
 static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error)
 {
     esp_err_t err;
@@ -246,9 +332,7 @@ static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
         err = s_connect_saved_fn(request->ssid, request->timeout_ms, &status);
     }
 
-    if (request->status_out != NULL) {
-        *request->status_out = status;
-    }
+    coordinator_store_request_status(slot_index, &status);
     if (out_error != NULL) {
         *out_error = err;
     }
@@ -259,6 +343,7 @@ static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
 
 static ink_wifi_coordinator_result_t coordinator_run_connect_password(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error)
 {
     ink_wifi_status_t status = {0};
@@ -268,9 +353,7 @@ static ink_wifi_coordinator_result_t coordinator_run_connect_password(
         request->timeout_ms,
         &status);
 
-    if (request->status_out != NULL) {
-        *request->status_out = status;
-    }
+    coordinator_store_request_status(slot_index, &status);
     if (out_error != NULL) {
         *out_error = err;
     }
@@ -299,15 +382,14 @@ static ink_wifi_coordinator_result_t coordinator_complete_keep_alive(
 
 static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error)
 {
     ink_wifi_status_t status = {0};
     esp_err_t err = ink_wifi_manager_status(&status);
 
     if (err == ESP_OK && status.connected) {
-        if (request->status_out != NULL) {
-            *request->status_out = status;
-        }
+        coordinator_store_request_status(slot_index, &status);
         if (out_error != NULL) {
             *out_error = ESP_OK;
         }
@@ -315,10 +397,11 @@ static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
         return coordinator_complete_keep_alive(request, INK_WIFI_COORDINATOR_RESULT_OK);
     }
 
+    coordinator_lock();
+    s_status.state = INK_WIFI_COORDINATOR_STATE_CONNECTING;
+    coordinator_unlock();
     err = s_connect_best_fn(request->timeout_ms, &status);
-    if (request->status_out != NULL) {
-        *request->status_out = status;
-    }
+    coordinator_store_request_status(slot_index, &status);
     if (out_error != NULL) {
         *out_error = err;
     }
@@ -330,10 +413,15 @@ static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
 
 static ink_wifi_coordinator_result_t coordinator_run_scan(
     const ink_wifi_coordinator_request_t *request,
+    int slot_index,
     esp_err_t *out_error)
 {
-    esp_err_t err = ink_wifi_manager_scan(request->scan_out);
+    ink_wifi_scan_list_t scan = {0};
+    esp_err_t err = ink_wifi_manager_scan(&scan);
 
+    if (err == ESP_OK) {
+        coordinator_store_request_scan(slot_index, &scan);
+    }
     if (out_error != NULL) {
         *out_error = err;
     }
@@ -345,17 +433,6 @@ static ink_wifi_coordinator_result_t coordinator_run_scan(
 static void coordinator_maybe_disconnect_idle(void)
 {
     coordinator_refresh_status_counts();
-
-    coordinator_lock();
-    if (s_status.active_leases != 0U) {
-        coordinator_unlock();
-        return;
-    }
-
-    memset(&s_status.wifi_status, 0, sizeof(s_status.wifi_status));
-    s_status.state = INK_WIFI_COORDINATOR_STATE_DISCONNECTED;
-    s_status.last_result = INK_WIFI_COORDINATOR_RESULT_OK;
-    coordinator_unlock();
 }
 
 static int coordinator_acquire_request_slot(void)
@@ -367,11 +444,9 @@ static int coordinator_acquire_request_slot(void)
         if (!s_request_slots[i].in_use) {
             while (xSemaphoreTake(s_request_slots[i].done_sem, 0) == pdTRUE) {
             }
+            coordinator_reset_request_slot_locked((int)i);
             s_request_slots[i].in_use = true;
             s_request_slots[i].caller_waiting = true;
-            s_request_slots[i].completed = false;
-            s_request_slots[i].result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
-            s_request_slots[i].error = ESP_OK;
             slot_index = (int)i;
             break;
         }
@@ -390,11 +465,7 @@ static void coordinator_release_request_slot(int slot_index)
     coordinator_lock();
     while (xSemaphoreTake(s_request_slots[slot_index].done_sem, 0) == pdTRUE) {
     }
-    s_request_slots[slot_index].in_use = false;
-    s_request_slots[slot_index].caller_waiting = false;
-    s_request_slots[slot_index].completed = false;
-    s_request_slots[slot_index].result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
-    s_request_slots[slot_index].error = ESP_OK;
+    coordinator_reset_request_slot_locked(slot_index);
     coordinator_unlock();
 }
 
@@ -418,20 +489,26 @@ static void coordinator_worker_task(void *arg)
 
         switch (item.request.type) {
         case INK_WIFI_COORDINATOR_REQUEST_ENSURE_CONNECTED:
-            item.result = coordinator_run_ensure_connected(&item.request, &item.error);
+            item.result = coordinator_run_ensure_connected(&item.request, (int)item.request_slot, &item.error);
             break;
 
         case INK_WIFI_COORDINATOR_REQUEST_SCAN:
-            item.result = coordinator_run_scan(&item.request, &item.error);
+            item.result = coordinator_run_scan(&item.request, (int)item.request_slot, &item.error);
             break;
 
         case INK_WIFI_COORDINATOR_REQUEST_CONNECT_SAVED:
-            item.result = coordinator_run_connect_saved(&item.request, &item.error);
+            coordinator_lock();
+            s_status.state = INK_WIFI_COORDINATOR_STATE_CONNECTING;
+            coordinator_unlock();
+            item.result = coordinator_run_connect_saved(&item.request, (int)item.request_slot, &item.error);
             item.result = coordinator_complete_keep_alive(&item.request, item.result);
             break;
 
         case INK_WIFI_COORDINATOR_REQUEST_CONNECT_PASSWORD:
-            item.result = coordinator_run_connect_password(&item.request, &item.error);
+            coordinator_lock();
+            s_status.state = INK_WIFI_COORDINATOR_STATE_CONNECTING;
+            coordinator_unlock();
+            item.result = coordinator_run_connect_password(&item.request, (int)item.request_slot, &item.error);
             item.result = coordinator_complete_keep_alive(&item.request, item.result);
             break;
 
@@ -444,12 +521,11 @@ static void coordinator_worker_task(void *arg)
             coordinator_refresh_status_counts();
             coordinator_lock();
             if (s_status.active_leases == 0U) {
-                coordinator_unlock();
-                coordinator_maybe_disconnect_idle();
+                item.result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
             } else {
                 item.result = INK_WIFI_COORDINATOR_RESULT_BUSY_RETRYABLE;
-                coordinator_unlock();
             }
+            coordinator_unlock();
             break;
 
         default:
@@ -488,11 +564,7 @@ esp_err_t ink_wifi_coordinator_init(void)
     for (size_t i = 0; i < INK_WIFI_COORDINATOR_QUEUE_LEN; ++i) {
         while (xSemaphoreTake(s_request_slots[i].done_sem, 0) == pdTRUE) {
         }
-        s_request_slots[i].in_use = false;
-        s_request_slots[i].caller_waiting = false;
-        s_request_slots[i].completed = false;
-        s_request_slots[i].result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
-        s_request_slots[i].error = ESP_OK;
+        coordinator_reset_request_slot_locked((int)i);
     }
     s_status.state = INK_WIFI_COORDINATOR_STATE_OFF;
     s_status.last_result = INK_WIFI_COORDINATOR_RESULT_OK;
@@ -579,6 +651,7 @@ esp_err_t ink_wifi_coordinator_request(
         result = s_request_slots[slot_index].result;
         err = s_request_slots[slot_index].error;
         coordinator_unlock();
+        coordinator_copy_request_outputs(slot_index, request);
         coordinator_release_request_slot(slot_index);
         *out_result = result;
         return err;
@@ -597,6 +670,7 @@ esp_err_t ink_wifi_coordinator_request(
     result = s_request_slots[slot_index].result;
     err = s_request_slots[slot_index].error;
     coordinator_unlock();
+    coordinator_copy_request_outputs(slot_index, request);
     coordinator_release_request_slot(slot_index);
     *out_result = result;
     return err;
@@ -645,6 +719,8 @@ esp_err_t ink_wifi_coordinator_get_status(ink_wifi_coordinator_status_t *out_sta
 bool ink_wifi_coordinator_self_test(void)
 {
     ink_wifi_coordinator_status_t status;
+    ink_wifi_status_t copied_status = {0};
+    ink_wifi_scan_list_t copied_scan = {0};
     ink_wifi_coordinator_request_t request = {
         .type = INK_WIFI_COORDINATOR_REQUEST_CONNECT_SAVED,
         .best_effort_saved = true,
@@ -657,8 +733,44 @@ bool ink_wifi_coordinator_self_test(void)
         return false;
     }
     s_connect_best_fn = coordinator_self_test_connect_best_not_found;
-    best_effort_result = coordinator_run_connect_saved(&request, NULL);
+    best_effort_result = coordinator_run_connect_saved(&request, -1, NULL);
     s_connect_best_fn = saved_connect_best_fn;
+    coordinator_lock();
+    s_status.wifi_status.connected = true;
+    s_status.state = INK_WIFI_COORDINATOR_STATE_ONLINE;
+    s_status.active_leases = 0;
+    coordinator_unlock();
+    coordinator_maybe_disconnect_idle();
+    if (!s_status.wifi_status.connected || s_status.state != INK_WIFI_COORDINATOR_STATE_ONLINE) {
+        return false;
+    }
+    if (coordinator_acquire_request_slot() < 0) {
+        return false;
+    }
+    coordinator_lock();
+    s_request_slots[0].status_out.connected = true;
+    s_request_slots[0].status_out.rssi = -42;
+    strcpy(s_request_slots[0].status_out.ssid, "copy-test");
+    s_request_slots[0].has_status_out = true;
+    s_request_slots[0].scan_out.count = 1;
+    strcpy(s_request_slots[0].scan_out.results[0].ssid, "scan-copy");
+    s_request_slots[0].scan_out.results[0].rssi = -55;
+    s_request_slots[0].has_scan_out = true;
+    coordinator_unlock();
+    request.status_out = &copied_status;
+    request.scan_out = &copied_scan;
+    coordinator_copy_request_outputs(0, &request);
+    coordinator_release_request_slot(0);
+    if (!copied_status.connected || strcmp(copied_status.ssid, "copy-test") != 0) {
+        return false;
+    }
+    if (copied_scan.count != 1 || strcmp(copied_scan.results[0].ssid, "scan-copy") != 0) {
+        return false;
+    }
+    if (coordinator_acquire_request_slot() != 0) {
+        return false;
+    }
+    coordinator_release_request_slot(0);
     if (!coordinator_add_lease(INK_WIFI_COORDINATOR_OWNER_TIME_SYNC)) {
         return false;
     }
