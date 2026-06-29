@@ -48,8 +48,8 @@ typedef enum {
 
 typedef struct {
     char id[VOICE_NOTE_ID_LENGTH];
-    int64_t created_at_epoch_s;
-    int64_t updated_at_epoch_s;
+    uint32_t created_at_epoch_s;
+    uint32_t updated_at_epoch_s;
     voice_note_status_t status;
     voice_note_transcript_state_t transcript_state;
     char title[VOICE_NOTE_TITLE_LENGTH];
@@ -57,8 +57,8 @@ typedef struct {
     char wav_path[VOICE_NOTE_PATH_LENGTH];
     uint32_t duration_ms;
     uint32_t sample_rate;
-    uint8_t channels;
-    uint8_t bits_per_sample;
+    uint16_t channels;
+    uint16_t bits_per_sample;
     char last_error[VOICE_NOTE_ERROR_LENGTH];
 } voice_note_note_t;
 

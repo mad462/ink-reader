@@ -134,6 +134,9 @@ static bool launcher_selection_self_test(void)
     if (!ink_system_runtime_register_app(&runtime, launcher)
         || !ink_system_runtime_register_app(&runtime, ink_reader_app_descriptor())
         || !ink_system_runtime_register_app(&runtime, ink_voice_note_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_wifi_setup_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_photo_album_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_gray_cal_app_descriptor())
         || !ink_system_runtime_register_app(&runtime, ink_usb_msc_app_descriptor())) {
         return false;
     }
@@ -261,6 +264,8 @@ static bool launcher_missing_wifi_target_self_test(void)
     if (!ink_system_runtime_register_app(&runtime, launcher)
         || !ink_system_runtime_register_app(&runtime, ink_reader_app_descriptor())
         || !ink_system_runtime_register_app(&runtime, ink_voice_note_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_photo_album_app_descriptor())
+        || !ink_system_runtime_register_app(&runtime, ink_gray_cal_app_descriptor())
         || !ink_system_runtime_register_app(&runtime, ink_usb_msc_app_descriptor())
         || !ink_system_runtime_set_active_app(&runtime, launcher)) {
         return false;

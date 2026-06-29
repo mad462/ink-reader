@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "esp_err.h"
+
 static voice_note_service_snapshot_t s_snapshot;
 
 static void voice_note_copy_text(char *dst, size_t dst_size, const char *src);
@@ -22,7 +24,7 @@ static void voice_note_copy_text(char *dst, size_t dst_size, const char *src)
     dst[dst_size - 1U] = '\0';
 }
 
-bool voice_note_service_init(void)
+esp_err_t voice_note_service_init(void)
 {
     memset(&s_snapshot, 0, sizeof(s_snapshot));
     s_snapshot.state = VOICE_NOTE_JOB_IDLE;
@@ -30,7 +32,7 @@ bool voice_note_service_init(void)
         s_snapshot.status_text,
         sizeof(s_snapshot.status_text),
         "按住 Confirm 开始录音");
-    return true;
+    return ESP_OK;
 }
 
 bool voice_note_service_start_capture(uint32_t now_ms)
@@ -69,9 +71,10 @@ bool voice_note_service_stop_capture(uint32_t now_ms)
     return true;
 }
 
-bool voice_note_service_retry_note(const char *note_id)
+bool voice_note_service_retry_note(const char *note_id, uint32_t now_ms)
 {
     (void)note_id;
+    (void)now_ms;
     return false;
 }
 
@@ -99,14 +102,16 @@ bool voice_note_service_get_snapshot(voice_note_service_snapshot_t *out_snapshot
 }
 
 bool voice_note_service_copy_note_summaries(
+    voice_note_tab_t tab,
     voice_note_note_t *out_notes,
     size_t capacity,
-    size_t *out_count)
+    size_t *count_out)
 {
+    (void)tab;
     (void)out_notes;
     (void)capacity;
-    if (out_count != NULL) {
-        *out_count = 0U;
+    if (count_out != NULL) {
+        *count_out = 0U;
     }
     return true;
 }
@@ -127,12 +132,21 @@ bool voice_note_service_tick(uint32_t now_ms)
 bool voice_note_service_self_test(void)
 {
     voice_note_service_snapshot_t snapshot;
+    voice_note_note_t notes[1];
+    size_t count = 1U;
 
-    if (!voice_note_service_init() || !voice_note_service_get_snapshot(&snapshot)) {
+    if (voice_note_service_init() != ESP_OK
+        || !voice_note_service_get_snapshot(&snapshot)
+        || !voice_note_service_copy_note_summaries(
+            VOICE_NOTE_TAB_ALL,
+            notes,
+            1U,
+            &count)) {
         return false;
     }
 
     return snapshot.state == VOICE_NOTE_JOB_IDLE
         && !snapshot.busy
+        && count == 0U
         && strcmp(snapshot.status_text, "按住 Confirm 开始录音") == 0;
 }

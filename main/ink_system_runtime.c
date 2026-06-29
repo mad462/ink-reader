@@ -212,6 +212,10 @@ bool ink_system_runtime_self_test(void)
         .id = "app-e",
         .name = "App E",
     };
+    static const ink_app_descriptor_t kAppF = {
+        .id = "app-f",
+        .name = "App F",
+    };
     ink_system_runtime_t runtime;
 
     ink_system_runtime_init(&runtime);
@@ -238,13 +242,14 @@ bool ink_system_runtime_self_test(void)
         return false;
     }
     if (!ink_system_runtime_register_app(&runtime, &kAppC)
-        || !ink_system_runtime_register_app(&runtime, &kAppD)) {
+        || !ink_system_runtime_register_app(&runtime, &kAppD)
+        || !ink_system_runtime_register_app(&runtime, &kAppE)) {
         return false;
     }
     if (runtime.app_count != INK_SYSTEM_RUNTIME_APP_CAPACITY) {
         return false;
     }
-    if (ink_system_runtime_register_app(&runtime, &kAppE)) {
+    if (ink_system_runtime_register_app(&runtime, &kAppF)) {
         return false;
     }
     if (!ink_system_runtime_set_active_app(&runtime, &kAppA)) {

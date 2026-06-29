@@ -9,7 +9,7 @@
 struct ink_system_services;
 
 enum {
-    INK_SYSTEM_RUNTIME_APP_CAPACITY = 6,
+    INK_SYSTEM_RUNTIME_APP_CAPACITY = 7,
 };
 
 typedef struct ink_system_runtime {
