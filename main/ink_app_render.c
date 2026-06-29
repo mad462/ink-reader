@@ -10,6 +10,7 @@
 #include "apps/ink_photo_album_app.h"
 #include "apps/ink_reader_app.h"
 #include "apps/ink_usb_msc_app.h"
+#include "apps/ink_voice_note_app.h"
 #include "apps/ink_wifi_setup_app.h"
 #include "esp_log.h"
 #include "freertos/task.h"
@@ -48,7 +49,28 @@ static void fill_shell_page(
 static void fill_launcher_page(
     uint8_t *buffer,
     size_t length,
-    const ink_launcher_app_state_t *state);
+    const ink_launcher_app_render_state_t *render_state);
+static void launcher_set_pixel(uint8_t *buffer, int x, int y, bool black);
+static void launcher_fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool black);
+static void launcher_fill_dither_rect(uint8_t *buffer, int x, int y, int w, int h, bool black);
+static void launcher_draw_rect_outline(uint8_t *buffer, int x, int y, int w, int h, int thickness);
+static void launcher_draw_hline(uint8_t *buffer, int x, int y, int w, bool black);
+static void launcher_draw_vline(uint8_t *buffer, int x, int y, int h, bool black);
+static void launcher_draw_text(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    uint8_t scale_divisor,
+    bool inverted);
+static void launcher_draw_book_icon(uint8_t *buffer, int x, int y, bool inverted);
+static void launcher_draw_wifi_icon(uint8_t *buffer, int x, int y, bool inverted);
+static void launcher_draw_photo_icon(uint8_t *buffer, int x, int y, bool inverted);
+static void launcher_draw_cal_icon(uint8_t *buffer, int x, int y, bool inverted);
+static void launcher_draw_usb_icon(uint8_t *buffer, int x, int y, bool inverted);
+static void launcher_draw_row_icon(uint8_t *buffer, size_t index, int x, int y, bool inverted);
+static void launcher_draw_chevron(uint8_t *buffer, int x, int y, bool inverted);
 static void fill_reader_placeholder_page(uint8_t *buffer, size_t length);
 static void fill_wifi_setup_page(
     uint8_t *buffer,
@@ -62,21 +84,38 @@ static void fill_usb_msc_page(
     uint8_t *buffer,
     size_t length,
     const ink_usb_msc_app_render_state_t *render_state);
-static void photo_album_fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool black);
-static void photo_album_draw_rect_outline(uint8_t *buffer, int x, int y, int w, int h, int thickness);
-static void photo_album_draw_text(
+static void fill_voice_note_page(
     uint8_t *buffer,
-    const ink_cpfont_t *font,
+    size_t length,
+    const ink_voice_note_app_render_state_t *render_state);
+static void usb_msc_draw_pill(
+    uint8_t *buffer,
     int x,
     int y,
-    const char *text,
-    bool inverted);
+    int w,
+    int h,
+    bool selected);
+static void usb_msc_draw_status_chip(
+    uint8_t *buffer,
+    const ink_cpfont_t *title_font,
+    const ink_cpfont_t *meta_font,
+    const char *title,
+    const char *status_text);
 static void draw_photo_album_list_page(
     uint8_t *buffer,
     size_t length,
     const ink_photo_album_render_state_t *render_state,
     const ink_cpfont_t *menu_font,
     const ink_cpfont_t *footer_font);
+static bool photo_album_name_without_extension(
+    const char *filename,
+    char *dst,
+    size_t dst_size);
+static void photo_album_compose_list_title(
+    size_t item_index,
+    const char *filename,
+    char *dst,
+    size_t dst_size);
 static bool fill_gray_calibration_planes(
     uint8_t *scratch,
     size_t scratch_length,
@@ -96,6 +135,9 @@ static bool render_model_to_buffer(
     uint8_t *buffer,
     size_t length,
     const ink_app_render_model_t *model);
+static void populate_overlay_header_meta(
+    epd_test_pattern_reader_menu_overlay_t *overlay,
+    const ink_system_services_t *services);
 static bool app_render_request_self_test(void);
 static bool render_grid_compare_variant(
     ink_app_context_t *app,
@@ -112,7 +154,6 @@ static bool grid_compare_cell_region(
 static bool should_reuse_reader_partial_init(
     const ink_app_context_t *app,
     const ink_display_request_t *request);
-static bool should_force_fast_full_commit(const ink_display_request_t *request);
 static bool should_route_footer_preview_to_full_window_stock_partial(
     const ink_display_request_t *request);
 static bool should_promote_reader_partial_to_full_window(
@@ -124,6 +165,10 @@ static bool should_fallback_reader_full_window_to_stock_partial(
 static void log_render_timing(
     uint32_t now_ms,
     const ink_display_request_t *request,
+    const char *route_name,
+    bool gray_refresh,
+    bool interrupt_allowed,
+    bool pinned_during_tx,
     uint16_t dirty_x,
     uint16_t dirty_y,
     uint16_t dirty_width,
@@ -148,6 +193,7 @@ static bool app_debug_self_test(void);
 static bool app_full_refresh_routing_self_test(void);
 static bool app_grid_compare_request_self_test(void);
 static bool app_large_reader_partial_routing_self_test(void);
+static bool app_overlay_never_promotes_to_reader_full_window_self_test(void);
 static bool app_reader_partial_init_reuse_self_test(void);
 static bool app_reader_full_window_stock_fallback_self_test(void);
 static bool app_reader_full_window_stock_fallback_avoids_native_path_self_test(void);
@@ -158,18 +204,30 @@ static bool app_render_model_launcher_self_test(void);
 static bool app_render_model_reader_placeholder_self_test(void);
 static bool app_render_model_reader_subsystem_self_test(void);
 static bool app_library_overlay_render_self_test(void);
+static bool app_render_model_usb_msc_self_test(void);
 static bool app_reader_menu_request_self_test(void);
+static bool app_reader_text_turn_strategy_self_test(void);
+static bool app_reader_overlay_strategy_self_test(void);
 static bool app_reader_menu_overlay_render_self_test(void);
 static bool app_reader_menu_partial_window_policy_self_test(void);
 static bool app_reader_loading_overlay_request_self_test(void);
 static bool app_reader_chapter_menu_request_layout_self_test(void);
 static bool app_reader_loading_overlay_masks_background_self_test(void);
+static bool app_library_overlay_header_meta_self_test(void);
+static bool app_reader_loading_overlay_header_meta_self_test(void);
 static bool app_render_model_wifi_setup_self_test(void);
 static bool app_render_model_photo_album_self_test(void);
+static bool app_render_model_voice_note_self_test(void);
+static bool app_render_model_usb_msc_keeps_time_badge_self_test(void);
+static bool app_library_overlay_tabs_follow_shell_width_self_test(void);
+static bool app_library_overlay_selected_favorite_remains_visible_self_test(void);
+static bool photo_album_list_truncation_self_test(void);
 static bool photo_album_list_layout_self_test(void);
 static bool gray_calibration_planes_self_test(void);
 static bool app_overlay_menu_font_selection_self_test(void);
+static bool app_render_request_strategy_roundtrip_self_test(void);
 static bool app_render_request_photo_album_interrupt_self_test(void);
+static bool render_pixel_is_white(const uint8_t *buffer, int x, int y);
 static const ink_cpfont_t *select_page_font(const ink_system_services_t *services);
 static const ink_cpfont_t *select_footer_font(const ink_system_services_t *services);
 static const ink_cpfont_t *select_menu_font(const ink_system_services_t *services);
@@ -243,6 +301,19 @@ static const ink_cpfont_t *select_small_text_font(const ink_system_services_t *s
     return NULL;
 }
 
+static void populate_overlay_header_meta(
+    epd_test_pattern_reader_menu_overlay_t *overlay,
+    const ink_system_services_t *services)
+{
+    if (overlay == NULL) {
+        return;
+    }
+    ink_system_services_get_time_badge(
+        services,
+        overlay->header_meta,
+        sizeof(overlay->header_meta));
+}
+
 const char *ink_app_shell_page_name(ink_runtime_shell_page_t page)
 {
     switch (page) {
@@ -270,6 +341,37 @@ const char *ink_app_shell_command_name(ink_runtime_shell_command_t command)
             return "NAV_NEXT";
         default:
             return "UNKNOWN";
+    }
+}
+
+const char *ink_refresh_strategy_name(ink_refresh_strategy_t strategy)
+{
+    switch (strategy) {
+        case INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL:
+            return "PAGE_TRANSITION_FULL";
+        case INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST:
+            return "BW_UI_PAGE_FAST";
+        case INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL:
+            return "BW_UI_LIST_LOCAL";
+        case INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE:
+            return "OVERLAY_LOCAL_UPDATE";
+        case INK_REFRESH_STRATEGY_READER_TEXT_TURN:
+            return "READER_TEXT_TURN";
+        case INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW:
+            return "READER_HOLD_PREVIEW";
+        case INK_REFRESH_STRATEGY_READER_TEXT_CLEANUP:
+            return "READER_TEXT_CLEANUP";
+        case INK_REFRESH_STRATEGY_GRAY_IMAGE_PREVIEW:
+            return "GRAY_IMAGE_PREVIEW";
+        case INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE:
+            return "GRAY_IMAGE_INTERRUPTIBLE";
+        case INK_REFRESH_STRATEGY_GRAY_IMAGE_SETTLE:
+            return "GRAY_IMAGE_SETTLE";
+        case INK_REFRESH_STRATEGY_LAB_EXPLICIT_MODE:
+            return "LAB_EXPLICIT_MODE";
+        case INK_REFRESH_STRATEGY_NONE:
+        default:
+            return "NONE";
     }
 }
 
@@ -321,6 +423,10 @@ void ink_app_note_command(
 static void log_render_timing(
     uint32_t now_ms,
     const ink_display_request_t *request,
+    const char *route_name,
+    bool gray_refresh,
+    bool interrupt_allowed,
+    bool pinned_during_tx,
     uint16_t dirty_x,
     uint16_t dirty_y,
     uint16_t dirty_width,
@@ -338,11 +444,16 @@ static void log_render_timing(
     const uint32_t since_command_ms = s_last_command_ms == 0U ? 0U : now_ms - s_last_command_ms;
     ESP_LOGI(
         TAG,
-        "render seq=%u t=%ums page=%s mode=%s cmd=%s since_cmd=%ums view=%ums draw=%ums diff=%ums epd=%ums total=%ums dirty=%u,%u %ux%u cache=+%u/-%u evict+%u ret=%s",
+        "render seq=%u t=%ums page=%s strategy=%s route=%s mode=%s gray=%d interrupt=%d pinned=%d cmd=%s since_cmd=%ums view=%ums draw=%ums diff=%ums epd=%ums total=%ums dirty=%u,%u %ux%u cache=+%u/-%u evict+%u ret=%s",
         (unsigned)s_render_sequence,
         (unsigned)now_ms,
         ink_app_shell_page_name(request->page),
+        ink_refresh_strategy_name(request->refresh_strategy),
+        route_name != NULL ? route_name : "none",
         request->full_refresh ? "full" : "partial",
+        gray_refresh ? 1 : 0,
+        interrupt_allowed ? 1 : 0,
+        pinned_during_tx ? 1 : 0,
         ink_app_shell_command_name(s_last_command),
         (unsigned)since_command_ms,
         (unsigned)view_ms,
@@ -467,6 +578,11 @@ static bool request_pins_during_transmitting(const ink_display_request_t *reques
         return false;
     }
 
+    if (request->refresh_strategy == INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW
+        || request->refresh_strategy == INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE) {
+        return false;
+    }
+
     if (request->use_fast_browse_overlay && request->force_fixed_footer_partial) {
         return true;
     }
@@ -583,37 +699,255 @@ static void fill_shell_page(
 static void fill_launcher_page(
     uint8_t *buffer,
     size_t length,
-    const ink_launcher_app_state_t *state)
+    const ink_launcher_app_render_state_t *render_state)
 {
-    const char *reader_line = "  Reader";
-    const char *wifi_line = "  WiFi Setup";
-    const char *photo_line = "  Photo Album";
-    const char *gray_cal_line = "  Gray Cal";
-    const char *usb_line = "  USB Disk";
+    const ink_launcher_app_state_t *state = render_state != NULL ? render_state->state : NULL;
+    const ink_cpfont_t *title_font = render_state != NULL ? render_state->menu_font : NULL;
+    const ink_cpfont_t *row_font = render_state != NULL ? render_state->menu_font : NULL;
+    const ink_cpfont_t *meta_font = render_state != NULL ? render_state->footer_font : NULL;
+    static const char *const kTitles[6] = {
+        "书库",
+        "语音便签",
+        "无线网络",
+        "相册",
+        "灰阶校准",
+        "USB 磁盘",
+    };
+    static const char *const kMeta[6] = {
+        "打开图书与最近阅读",
+        "录音并生成语音标签",
+        "连接网络与输入密码",
+        "浏览 TF 卡灰阶图片",
+        "检查四阶灰度效果",
+        "共享 TF 卡到电脑",
+    };
+    epd_test_pattern_list_layout_t layout = epd_test_pattern_crosspoint_list_layout();
+    epd_test_pattern_header_spec_t header = {0};
+    size_t selected_index = 0U;
 
-    if (state != NULL) {
-        if (state->selected_app_index == 0U) {
-            reader_line = "> Reader";
-        } else if (state->selected_app_index == 1U) {
-            wifi_line = "> WiFi Setup";
-        } else if (state->selected_app_index == 2U) {
-            photo_line = "> Photo Album";
-        } else if (state->selected_app_index == 3U) {
-            gray_cal_line = "> Gray Cal";
-        } else if (state->selected_app_index == 4U) {
-            usb_line = "> USB Disk";
-        }
+    if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
+        return;
     }
 
-    epd_test_pattern_fill_text_page(
-        buffer,
-        length,
-        "Launcher",
-        reader_line,
-        wifi_line,
-        photo_line,
-        gray_cal_line,
-        usb_line);
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+    if (state != NULL && state->selected_app_index < 6U) {
+        selected_index = state->selected_app_index;
+    }
+
+    header.title = "启动器";
+    header.meta = render_state != NULL ? render_state->header_meta : "UP 00:00";
+    header.title_font = title_font;
+    header.meta_font = meta_font;
+    epd_test_pattern_draw_crosspoint_header(buffer, &header);
+    layout.content_x_inset = 64;
+
+    for (size_t i = 0U; i < 6U; ++i) {
+        const int row_y = layout.list_y + (int)i * (layout.row_h + layout.row_gap);
+        const bool selected = i == selected_index;
+        const int icon_x = layout.list_x + 16;
+        const int chevron_x = layout.list_x + layout.row_w - 26;
+        epd_test_pattern_list_row_t row = {
+            .title = kTitles[i],
+            .line1 = kMeta[i],
+            .line2 = "",
+            .selected = selected,
+            .emphasized = false,
+        };
+
+        epd_test_pattern_draw_crosspoint_list_row(
+            buffer,
+            &layout,
+            i,
+            &row,
+            row_font,
+            meta_font);
+        launcher_draw_row_icon(buffer, i, icon_x, row_y + ((layout.row_h - 20) / 2), false);
+        launcher_draw_chevron(buffer, chevron_x, row_y + 22, false);
+    }
+}
+
+static void launcher_set_pixel(uint8_t *buffer, int x, int y, bool black)
+{
+    const size_t index = (size_t)y * (EPD_GDEY0426T82_WIDTH / 8U) + (size_t)(x / 8);
+    const uint8_t mask = (uint8_t)(0x80U >> (x % 8));
+
+    if (buffer == NULL || x < 0 || x >= EPD_GDEY0426T82_WIDTH || y < 0 || y >= EPD_GDEY0426T82_HEIGHT) {
+        return;
+    }
+    if (black) {
+        buffer[index] &= (uint8_t)~mask;
+    } else {
+        buffer[index] |= mask;
+    }
+}
+
+static void launcher_fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool black)
+{
+    for (int yy = y; yy < y + h; ++yy) {
+        for (int xx = x; xx < x + w; ++xx) {
+            launcher_set_pixel(buffer, xx, yy, black);
+        }
+    }
+}
+
+static void launcher_fill_dither_rect(uint8_t *buffer, int x, int y, int w, int h, bool black)
+{
+    for (int yy = y; yy < y + h; ++yy) {
+        for (int xx = x; xx < x + w; ++xx) {
+            if (((xx + yy) & 1) == 0) {
+                launcher_set_pixel(buffer, xx, yy, black);
+            }
+        }
+    }
+}
+
+static void launcher_draw_rect_outline(uint8_t *buffer, int x, int y, int w, int h, int thickness)
+{
+    launcher_fill_rect(buffer, x, y, w, thickness, true);
+    launcher_fill_rect(buffer, x, y + h - thickness, w, thickness, true);
+    launcher_fill_rect(buffer, x, y, thickness, h, true);
+    launcher_fill_rect(buffer, x + w - thickness, y, thickness, h, true);
+}
+
+static void launcher_draw_hline(uint8_t *buffer, int x, int y, int w, bool black)
+{
+    launcher_fill_rect(buffer, x, y, w, 1, black);
+}
+
+static void launcher_draw_vline(uint8_t *buffer, int x, int y, int h, bool black)
+{
+    launcher_fill_rect(buffer, x, y, 1, h, black);
+}
+
+static void launcher_draw_text(
+    uint8_t *buffer,
+    const ink_cpfont_t *font,
+    int x,
+    int y,
+    const char *text,
+    uint8_t scale_divisor,
+    bool inverted)
+{
+    if (font != NULL && ink_cpfont_is_loaded(font)) {
+        if (scale_divisor == 0U) {
+            scale_divisor = 1U;
+        }
+        if (inverted) {
+            (void)ink_cpfont_draw_text_bw_scaled_inverted(
+                (ink_cpfont_t *)font,
+                buffer,
+                x,
+                y,
+                text != NULL ? text : "",
+                scale_divisor,
+                NULL);
+        } else {
+            (void)ink_cpfont_draw_text_bw_scaled(
+                (ink_cpfont_t *)font,
+                buffer,
+                x,
+                y,
+                text != NULL ? text : "",
+                scale_divisor,
+                NULL);
+        }
+    }
+}
+
+static void launcher_draw_book_icon(uint8_t *buffer, int x, int y, bool inverted)
+{
+    const bool ink = true;
+
+    launcher_draw_rect_outline(buffer, x, y, 18, 20, 1);
+    launcher_draw_vline(buffer, x + 4, y + 2, 16, ink);
+    launcher_draw_hline(buffer, x + 7, y + 5, 8, ink);
+    launcher_draw_hline(buffer, x + 7, y + 9, 8, ink);
+    launcher_draw_hline(buffer, x + 7, y + 13, 6, ink);
+}
+
+static void launcher_draw_wifi_icon(uint8_t *buffer, int x, int y, bool inverted)
+{
+    const bool ink = true;
+
+    launcher_set_pixel(buffer, x + 9, y + 16, ink);
+    launcher_draw_hline(buffer, x + 7, y + 14, 5, ink);
+    launcher_draw_hline(buffer, x + 5, y + 11, 9, ink);
+    launcher_draw_hline(buffer, x + 3, y + 8, 13, ink);
+    launcher_draw_hline(buffer, x + 1, y + 5, 17, ink);
+}
+
+static void launcher_draw_photo_icon(uint8_t *buffer, int x, int y, bool inverted)
+{
+    const bool ink = true;
+
+    launcher_draw_rect_outline(buffer, x, y, 20, 18, 1);
+    launcher_fill_rect(buffer, x + 4, y + 11, 5, 3, ink);
+    launcher_fill_rect(buffer, x + 9, y + 9, 6, 5, ink);
+    launcher_fill_rect(buffer, x + 14, y + 7, 3, 7, ink);
+    launcher_fill_rect(buffer, x + 13, y + 3, 3, 3, ink);
+}
+
+static void launcher_draw_cal_icon(uint8_t *buffer, int x, int y, bool inverted)
+{
+    const bool ink = true;
+
+    launcher_draw_rect_outline(buffer, x, y, 20, 20, 1);
+    launcher_fill_rect(buffer, x + 2, y + 2, 8, 8, ink);
+    launcher_fill_dither_rect(buffer, x + 10, y + 2, 8, 8, ink);
+    launcher_fill_rect(buffer, x + 2, y + 10, 8, 8, false);
+    launcher_draw_rect_outline(buffer, x + 2, y + 10, 8, 8, 1);
+    launcher_fill_rect(buffer, x + 10, y + 10, 8, 8, ink);
+}
+
+static void launcher_draw_usb_icon(uint8_t *buffer, int x, int y, bool inverted)
+{
+    const bool ink = true;
+
+    launcher_draw_vline(buffer, x + 9, y + 2, 12, ink);
+    launcher_draw_hline(buffer, x + 7, y + 2, 5, ink);
+    launcher_draw_hline(buffer, x + 3, y + 8, 13, ink);
+    launcher_draw_vline(buffer, x + 4, y + 8, 7, ink);
+    launcher_draw_vline(buffer, x + 14, y + 8, 7, ink);
+    launcher_fill_rect(buffer, x + 2, y + 15, 5, 3, ink);
+    launcher_fill_rect(buffer, x + 12, y + 15, 5, 3, ink);
+}
+
+static void launcher_draw_row_icon(uint8_t *buffer, size_t index, int x, int y, bool inverted)
+{
+    switch (index) {
+        case 0U:
+            launcher_draw_book_icon(buffer, x, y, inverted);
+            break;
+        case 1U:
+            launcher_draw_book_icon(buffer, x, y, inverted);
+            break;
+        case 2U:
+            launcher_draw_wifi_icon(buffer, x, y, inverted);
+            break;
+        case 3U:
+            launcher_draw_photo_icon(buffer, x, y, inverted);
+            break;
+        case 4U:
+            launcher_draw_cal_icon(buffer, x, y, inverted);
+            break;
+        case 5U:
+        default:
+            launcher_draw_usb_icon(buffer, x, y, inverted);
+            break;
+    }
+}
+
+static void launcher_draw_chevron(uint8_t *buffer, int x, int y, bool inverted)
+{
+    const bool ink = true;
+
+    launcher_set_pixel(buffer, x, y, ink);
+    launcher_set_pixel(buffer, x + 1, y + 1, ink);
+    launcher_set_pixel(buffer, x + 2, y + 2, ink);
+    launcher_set_pixel(buffer, x + 3, y + 3, ink);
+    launcher_set_pixel(buffer, x + 2, y + 4, ink);
+    launcher_set_pixel(buffer, x + 1, y + 5, ink);
+    launcher_set_pixel(buffer, x, y + 6, ink);
 }
 
 static void fill_reader_placeholder_page(uint8_t *buffer, size_t length)
@@ -629,12 +963,74 @@ static void fill_reader_placeholder_page(uint8_t *buffer, size_t length)
         "");
 }
 
+static void usb_msc_draw_pill(
+    uint8_t *buffer,
+    int x,
+    int y,
+    int w,
+    int h,
+    bool selected)
+{
+    const int radius = h / 2;
+    const bool border = true;
+
+    if (buffer == NULL || w <= 0 || h <= 0) {
+        return;
+    }
+
+    launcher_fill_rect(buffer, x + radius, y, w - radius * 2, h, selected);
+    launcher_fill_rect(buffer, x, y + radius, radius, h - radius * 2, selected);
+    launcher_fill_rect(buffer, x + w - radius, y + radius, radius, h - radius * 2, selected);
+
+    for (int yy = 0; yy < h; ++yy) {
+        for (int xx = 0; xx < radius; ++xx) {
+            const int dx = radius - 1 - xx;
+            const int dy = radius - 1 - yy;
+            const int dy_bottom = yy - radius;
+            const bool top_half = yy < radius;
+            const int cy = top_half ? dy : dy_bottom;
+            if (dx * dx + cy * cy <= (radius - 1) * (radius - 1)) {
+                launcher_set_pixel(buffer, x + xx, y + yy, selected);
+                launcher_set_pixel(buffer, x + w - 1 - xx, y + yy, selected);
+            }
+        }
+    }
+
+    if (border) {
+        launcher_draw_rect_outline(buffer, x + radius / 2, y, w - radius, h, 1);
+    }
+}
+
+static void usb_msc_draw_status_chip(
+    uint8_t *buffer,
+    const ink_cpfont_t *title_font,
+    const ink_cpfont_t *meta_font,
+    const char *title,
+    const char *status_text)
+{
+    const int chip_x = 48;
+    const int chip_y = 286;
+    const int chip_w = EPD_GDEY0426T82_WIDTH - 96;
+    const int chip_h = 60;
+
+    usb_msc_draw_pill(buffer, chip_x, chip_y, chip_w, chip_h, false);
+    launcher_draw_text(buffer, title_font, chip_x + 20, chip_y + 18, title != NULL ? title : "U盘模式", 2U, false);
+    if (status_text != NULL && status_text[0] != '\0') {
+        launcher_draw_text(buffer, meta_font, chip_x + chip_w - 84, chip_y + 22, status_text, 1U, false);
+    }
+}
+
 static void fill_wifi_setup_page(
     uint8_t *buffer,
     size_t length,
     const ink_wifi_setup_app_render_state_t *state)
 {
     ink_wifi_setup_ui_cursor_t cursor = {0};
+    ink_wifi_setup_ui_header_t header = {
+        .title = "无线网络",
+        .meta = state != NULL ? state->header_meta : "",
+        .subtitle = "可用网络",
+    };
 
     if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
         return;
@@ -662,7 +1058,8 @@ static void fill_wifi_setup_page(
         &cursor,
         &state->view->keyboard_text,
         &state->view->wifi,
-        &state->fonts);
+        &state->fonts,
+        &header);
 }
 
 static void fill_photo_album_page(
@@ -684,7 +1081,7 @@ static void fill_photo_album_page(
 
     memset(buffer, 0xFF, length);
     if (state == NULL) {
-        epd_test_pattern_fill_text_page(buffer, length, "Photos", "No state", "", "", "", "");
+        epd_test_pattern_fill_text_page(buffer, length, "相册", "No state", "", "", "", "");
         return;
     }
 
@@ -693,24 +1090,38 @@ static void fill_photo_album_page(
         return;
     }
 
-    epd_test_pattern_fill_text_page_with_font(
-        buffer,
-        length,
-        page_font,
-        NULL,
-        NULL,
-        "Photos",
-        state->status_text[0] != '\0' ? state->status_text : "图片读取失败",
-        "",
-        "",
-        "",
-        "");
-    epd_test_pattern_draw_footer_overlay(
-        buffer,
-        length,
-        small_text_font,
-        state->current_name,
-        state->total_count > 0U ? "PREVIEW" : "");
+    if (state->image_loaded && state->lsb_plane != NULL && state->msb_plane != NULL) {
+        return;
+    }
+
+    {
+        epd_test_pattern_list_row_t rows[2];
+        epd_test_pattern_rows_page_spec_t spec;
+        char meta[24];
+
+        memset(rows, 0, sizeof(rows));
+        snprintf(meta, sizeof(meta), "%u item%s", (unsigned)state->total_count, state->total_count == 1U ? "" : "s");
+        rows[0].title = state->status_text[0] != '\0' ? state->status_text : "图片读取失败";
+        rows[0].line1 = state->tf_unavailable ? "Check TF card and photo catalog" : "Confirm to return to the list";
+        rows[0].line2 = "";
+        rows[0].selected = true;
+        rows[1].title = state->current_name[0] != '\0' ? state->current_name : "No current photo";
+        rows[1].line1 = state->total_count > 0U ? "Preview unavailable" : "No photos found";
+        rows[1].line2 = "";
+        rows[1].selected = false;
+        rows[1].emphasized = true;
+
+        memset(&spec, 0, sizeof(spec));
+        spec.title = "Photos";
+        spec.meta = meta;
+        spec.rows = rows;
+        spec.row_count = 2U;
+        spec.title_font = page_font;
+        spec.meta_font = small_text_font;
+        spec.row_title_font = page_font;
+        spec.row_meta_font = small_text_font;
+        epd_test_pattern_fill_crosspoint_rows_page(buffer, length, &spec);
+    }
 }
 
 static void fill_usb_msc_page(
@@ -719,132 +1130,86 @@ static void fill_usb_msc_page(
     const ink_usb_msc_app_render_state_t *render_state)
 {
     const ink_usb_msc_app_state_t *state = render_state != NULL ? render_state->state : NULL;
+    const ink_cpfont_t *title_font = render_state != NULL ? render_state->menu_font : NULL;
+    const ink_cpfont_t *meta_font = render_state != NULL ? render_state->footer_font : NULL;
+    const char *title = "USB 磁盘";
+    const char *meta = render_state != NULL ? render_state->header_meta : "";
+    epd_test_pattern_header_spec_t header = {0};
+    const char *status_text = "关";
 
     if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
         return;
     }
 
-    if (state == NULL) {
-        epd_test_pattern_fill_text_page_with_font(
-            buffer,
-            length,
-            NULL,
-            NULL,
-            NULL,
-            "USB DISK MODE",
-            "No state",
-            "",
-            "",
-            "",
-            "");
-        return;
-    }
-
-    epd_test_pattern_fill_text_page_with_font(
-        buffer,
-        length,
-        NULL,
-        NULL,
-        NULL,
-        state->title,
-        state->line1,
-        state->line2,
-        state->line3,
-        "",
-        "");
-    epd_test_pattern_draw_footer_overlay(
-        buffer,
-        length,
-        NULL,
-        state->view == INK_USB_MSC_APP_VIEW_ACTIVE ? "BACK EXIT" : "",
-        "USB MSC");
-}
-
-static void photo_album_fill_rect(uint8_t *buffer, int x, int y, int w, int h, bool black)
-{
-    if (buffer == NULL || w <= 0 || h <= 0) {
-        return;
-    }
-
-    if (x < 0) {
-        w += x;
-        x = 0;
-    }
-    if (y < 0) {
-        h += y;
-        y = 0;
-    }
-    if (x + w > EPD_GDEY0426T82_WIDTH) {
-        w = EPD_GDEY0426T82_WIDTH - x;
-    }
-    if (y + h > EPD_GDEY0426T82_HEIGHT) {
-        h = EPD_GDEY0426T82_HEIGHT - y;
-    }
-    if (w <= 0 || h <= 0) {
-        return;
-    }
-
-    for (int yy = y; yy < y + h; ++yy) {
-        for (int xx = x; xx < x + w; ++xx) {
-            const size_t index = (size_t)yy * (EPD_GDEY0426T82_WIDTH / 8U) + (size_t)(xx / 8);
-            const uint8_t mask = (uint8_t)(0x80U >> (xx % 8));
-
-            if (black) {
-                buffer[index] &= (uint8_t)~mask;
-            } else {
-                buffer[index] |= mask;
-            }
+    memset(buffer, 0xFF, length);
+    if (state != NULL) {
+        title = state->title[0] != '\0' ? state->title : title;
+        if (state->view == INK_USB_MSC_APP_VIEW_ACTIVE) {
+            status_text = "开";
+        } else if (state->view == INK_USB_MSC_APP_VIEW_ERROR) {
+            status_text = "异常";
+        } else {
+            status_text = "关";
         }
     }
+
+    header.title = title;
+    header.meta = meta;
+    header.title_font = title_font;
+    header.meta_font = meta_font;
+    epd_test_pattern_draw_crosspoint_header(buffer, &header);
+    usb_msc_draw_status_chip(buffer, title_font, meta_font, "U盘模式", status_text);
 }
 
-static void photo_album_draw_rect_outline(uint8_t *buffer, int x, int y, int w, int h, int thickness)
-{
-    if (buffer == NULL || thickness <= 0 || w <= 0 || h <= 0) {
-        return;
-    }
-
-    photo_album_fill_rect(buffer, x, y, w, thickness, true);
-    photo_album_fill_rect(buffer, x, y + h - thickness, w, thickness, true);
-    photo_album_fill_rect(buffer, x, y, thickness, h, true);
-    photo_album_fill_rect(buffer, x + w - thickness, y, thickness, h, true);
-}
-
-static void photo_album_draw_text(
+static void fill_voice_note_page(
     uint8_t *buffer,
-    const ink_cpfont_t *font,
-    int x,
-    int y,
-    const char *text,
-    bool inverted)
+    size_t length,
+    const ink_voice_note_app_render_state_t *render_state)
 {
-    int width_px = 0;
+    const ink_voice_note_app_state_t *state = render_state != NULL ? render_state->state : NULL;
+    epd_test_pattern_list_row_t rows[2];
+    epd_test_pattern_rows_page_spec_t spec;
+    const char *status_text = "按住 Confirm 开始录音";
+    const char *active_note_id = "等待首条标签";
 
-    if (buffer == NULL || text == NULL) {
+    if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
         return;
     }
 
-    if (ink_cpfont_is_loaded(font)) {
-        if (inverted) {
-            (void)ink_cpfont_draw_text_bw_inverted((ink_cpfont_t *)font, buffer, x, y, text, &width_px);
-        } else {
-            (void)ink_cpfont_draw_text_bw((ink_cpfont_t *)font, buffer, x, y, text, &width_px);
+    memset(buffer, 0xFF, length);
+    memset(rows, 0, sizeof(rows));
+    memset(&spec, 0, sizeof(spec));
+
+    if (state != NULL) {
+        if (state->snapshot.status_text[0] != '\0') {
+            status_text = state->snapshot.status_text;
         }
-        return;
-    }
-
-    {
-        const int text_width = (int)strlen(text) * 8;
-        const int draw_width = text_width > 0 ? text_width : 12;
-        const int draw_height = 16;
-
-        if (inverted) {
-            photo_album_fill_rect(buffer, x, y + 4, draw_width, draw_height, false);
-        } else {
-            photo_album_fill_rect(buffer, x, y + 18, draw_width, 2, true);
-            photo_album_fill_rect(buffer, x, y + 8, draw_width > 40 ? 40 : draw_width, 2, true);
+        if (state->snapshot.active_note_id[0] != '\0') {
+            active_note_id = state->snapshot.active_note_id;
         }
     }
+
+    rows[0].title = "新建语音标签";
+    rows[0].line1 = status_text;
+    rows[0].line2 = "";
+    rows[0].selected = true;
+    rows[0].emphasized = true;
+
+    rows[1].title = "最近一次任务";
+    rows[1].line1 = active_note_id;
+    rows[1].line2 = "";
+    rows[1].selected = false;
+    rows[1].emphasized = false;
+
+    spec.title = "语音便签";
+    spec.meta = render_state != NULL ? render_state->header_meta : "";
+    spec.rows = rows;
+    spec.row_count = 2U;
+    spec.title_font = render_state != NULL ? render_state->menu_font : NULL;
+    spec.meta_font = render_state != NULL ? render_state->footer_font : NULL;
+    spec.row_title_font = render_state != NULL ? render_state->reader_font : NULL;
+    spec.row_meta_font = render_state != NULL ? render_state->footer_font : NULL;
+    epd_test_pattern_fill_crosspoint_rows_page(buffer, length, &spec);
 }
 
 static void draw_photo_album_list_page(
@@ -856,110 +1221,203 @@ static void draw_photo_album_list_page(
 {
     const ink_photo_album_app_state_t *state = render_state != NULL ? render_state->state : NULL;
     const ink_photo_catalog_t *catalog = render_state != NULL ? render_state->catalog : NULL;
-    const int panel_x = 16;
-    const int panel_y = 16;
-    const int panel_w = EPD_GDEY0426T82_WIDTH - 32;
-    const int panel_h = EPD_GDEY0426T82_HEIGHT - 32;
-    const int title_y = 30;
-    const int divider_y = 66;
-    const int list_x = 26;
-    const int row_h = 56;
-    const int row_gap = 6;
-    const int first_row_y = 84;
-    const int row_w = EPD_GDEY0426T82_WIDTH - 52;
-    const int visible_rows = 10;
+    epd_test_pattern_list_layout_t list_layout = epd_test_pattern_crosspoint_list_layout();
     size_t start = 0U;
     char count_text[24];
+    char subtitle_text[24];
+    epd_test_pattern_header_spec_t header = {0};
 
     if (buffer == NULL || length < EPD_GDEY0426T82_BUFFER_SIZE) {
         return;
     }
 
     memset(buffer, 0xFF, length);
-    photo_album_draw_rect_outline(buffer, panel_x, panel_y, panel_w, panel_h, 1);
-    photo_album_draw_text(buffer, menu_font, 28, title_y, "Photos", false);
 
     if (state == NULL) {
-        photo_album_draw_text(buffer, footer_font, 30, 120, "No state", false);
-        epd_test_pattern_draw_footer_overlay(buffer, length, footer_font, "Photos", "LIST");
+        epd_test_pattern_list_row_t rows[1];
+        epd_test_pattern_rows_page_spec_t spec;
+
+        memset(rows, 0, sizeof(rows));
+        rows[0].title = "No state";
+        rows[0].line1 = "Photo album unavailable";
+        rows[0].selected = true;
+        memset(&spec, 0, sizeof(spec));
+        spec.title = "Photos";
+        spec.meta = "LIST";
+        spec.rows = rows;
+        spec.row_count = 1U;
+        spec.title_font = menu_font;
+        spec.meta_font = footer_font;
+        spec.row_title_font = menu_font;
+        spec.row_meta_font = footer_font;
+        epd_test_pattern_fill_crosspoint_rows_page(buffer, length, &spec);
         return;
     }
 
-    snprintf(
-        count_text,
-        sizeof(count_text),
-        "%u/%u",
-        state->total_count == 0U ? 0U : (unsigned)(state->list_selected_index + 1U),
-        (unsigned)state->total_count);
-    photo_album_draw_text(buffer, footer_font, EPD_GDEY0426T82_WIDTH - 92, 34, count_text, false);
-    photo_album_fill_rect(buffer, 24, divider_y, EPD_GDEY0426T82_WIDTH - 48, 1, true);
+    list_layout.row_h = 42;
+    list_layout.row_gap = 2;
+    list_layout.visible_rows = 14;
+    list_layout.compact_rows = true;
+    list_layout.marker_top_inset = 8;
+    list_layout.marker_bottom_inset = 8;
+    list_layout.title_y_offset = 8;
+    list_layout.line1_y_offset = 0;
+    list_layout.line2_y_offset = 0;
+
+    snprintf(count_text, sizeof(count_text), "%s", render_state != NULL ? render_state->header_meta : "");
+    snprintf(subtitle_text, sizeof(subtitle_text), "%u/%u", (unsigned)(state->list_selected_index + 1U), (unsigned)state->total_count);
+    header.title = "相册";
+    header.meta = count_text;
+    header.title_font = menu_font;
+    header.meta_font = footer_font;
+    epd_test_pattern_draw_crosspoint_header(buffer, &header);
 
     if (state->total_count == 0U || catalog == NULL) {
-        photo_album_draw_text(
-            buffer,
-            footer_font,
-            30,
-            120,
-            state->status_text[0] != '\0' ? state->status_text : "photos 目录为空",
-            false);
-        epd_test_pattern_draw_footer_overlay(buffer, length, footer_font, "Photos", "LIST");
+        epd_test_pattern_list_row_t row = {
+            .title = state->status_text[0] != '\0' ? state->status_text : "photos 目录为空",
+            .line1 = "",
+            .line2 = "",
+            .selected = true,
+            .emphasized = false,
+        };
+        epd_test_pattern_draw_crosspoint_list_row(buffer, &list_layout, 0U, &row, menu_font, footer_font);
         return;
     }
 
-    if (state->list_selected_index >= (size_t)(visible_rows / 2)) {
-        start = state->list_selected_index - (size_t)(visible_rows / 2);
+    if (state->list_selected_index >= (size_t)(list_layout.visible_rows / 2)) {
+        start = state->list_selected_index - (size_t)(list_layout.visible_rows / 2);
     }
-    if (start + (size_t)visible_rows > state->total_count) {
-        start = state->total_count > (size_t)visible_rows
-            ? state->total_count - (size_t)visible_rows
+    if (start + (size_t)list_layout.visible_rows > state->total_count) {
+        start = state->total_count > (size_t)list_layout.visible_rows
+            ? state->total_count - (size_t)list_layout.visible_rows
             : 0U;
     }
 
-    for (int row = 0; row < visible_rows && start + (size_t)row < state->total_count; ++row) {
+    for (int row = 0; row < list_layout.visible_rows && start + (size_t)row < state->total_count; ++row) {
         const size_t item_index = start + (size_t)row;
         const ink_photo_catalog_entry_t *entry = ink_photo_catalog_entry_at(catalog, item_index);
-        const int row_y = first_row_y + row * (row_h + row_gap);
         const bool selected = item_index == state->list_selected_index;
-        const bool current = item_index == state->current_index;
-        char label[96];
-        char trimmed_name[40];
-        const char *suffix = current ? "  [PREVIEW]" : "";
-        const size_t suffix_len = strlen(suffix);
-        const size_t name_limit = sizeof(trimmed_name) - 1U;
-        size_t src_len = 0U;
+        epd_test_pattern_list_row_t row_spec;
+        char title[48];
+        char base_name[40];
 
         if (entry == NULL) {
             continue;
         }
 
-        src_len = strlen(entry->name);
-        if (src_len <= name_limit) {
-            memcpy(trimmed_name, entry->name, src_len);
-            trimmed_name[src_len] = '\0';
-        } else {
-            const size_t keep = name_limit > 3U ? name_limit - 3U : name_limit;
-            memcpy(trimmed_name, entry->name, keep);
-            trimmed_name[keep] = '\0';
-            if (name_limit >= 3U) {
-                snprintf(trimmed_name + keep, sizeof(trimmed_name) - keep, "...");
+        if (!photo_album_name_without_extension(entry->name, base_name, sizeof(base_name))) {
+            size_t copy_len = strlen(entry->name);
+            if (copy_len >= sizeof(base_name)) {
+                copy_len = sizeof(base_name) - 1U;
             }
+            memcpy(base_name, entry->name, copy_len);
+            base_name[copy_len] = '\0';
         }
-        snprintf(
-            label,
-            sizeof(label),
-            "%02u. %s%s",
-            (unsigned)(item_index + 1U),
-            trimmed_name,
-            suffix_len > 0U ? suffix : "");
+        photo_album_compose_list_title(item_index, base_name, title, sizeof(title));
+        memset(&row_spec, 0, sizeof(row_spec));
+        row_spec.title = title;
+        row_spec.line1 = item_index == state->list_selected_index ? subtitle_text : "";
+        row_spec.line2 = "";
+        row_spec.selected = selected;
+        row_spec.emphasized = false;
+        epd_test_pattern_draw_crosspoint_list_row(
+            buffer,
+            &list_layout,
+            (size_t)row,
+            &row_spec,
+            menu_font,
+            footer_font);
+    }
+}
 
-        if (selected) {
-            photo_album_fill_rect(buffer, list_x, row_y, row_w, row_h, true);
-            photo_album_draw_text(buffer, footer_font, list_x + 10, row_y + 14, label, true);
-        } else {
-            photo_album_draw_rect_outline(buffer, list_x, row_y, row_w, row_h, 1);
-            photo_album_draw_text(buffer, footer_font, list_x + 10, row_y + 14, label, false);
+static bool photo_album_name_without_extension(
+    const char *filename,
+    char *dst,
+    size_t dst_size)
+{
+    const char *dot = NULL;
+    size_t length = 0U;
+
+    if (dst == NULL || dst_size == 0U) {
+        return false;
+    }
+    dst[0] = '\0';
+    if (filename == NULL || filename[0] == '\0') {
+        return false;
+    }
+
+    dot = strrchr(filename, '.');
+    if (dot == NULL || dot == filename) {
+        snprintf(dst, dst_size, "%s", filename);
+        return true;
+    }
+
+    length = (size_t)(dot - filename);
+    if (length >= dst_size) {
+        length = dst_size - 1U;
+    }
+    memcpy(dst, filename, length);
+    dst[length] = '\0';
+    return true;
+}
+
+static void photo_album_compose_list_title(
+    size_t item_index,
+    const char *filename,
+    char *dst,
+    size_t dst_size)
+{
+    char truncated[32];
+
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+    dst[0] = '\0';
+    epd_test_pattern_truncate_text_tail(
+        filename != NULL ? filename : "",
+        truncated,
+        sizeof(truncated),
+        20U);
+    snprintf(dst, dst_size, "%02u. %s", (unsigned)(item_index + 1U), truncated);
+}
+
+static bool render_buffer_has_ink(const uint8_t *buffer, size_t length)
+{
+    if (buffer == NULL) {
+        return false;
+    }
+
+    for (size_t i = 0U; i < length; ++i) {
+        if (buffer[i] != 0xFFU && buffer[i] != 0xAAU) {
+            return true;
         }
     }
+
+    return false;
+}
+
+static bool render_pixel_is_black(const uint8_t *buffer, int x, int y)
+{
+    const size_t byte_index = (size_t)y * (EPD_GDEY0426T82_WIDTH / 8U) + (size_t)(x / 8);
+    const uint8_t mask = (uint8_t)(0x80U >> (x % 8));
+
+    if (buffer == NULL || x < 0 || x >= EPD_GDEY0426T82_WIDTH || y < 0 || y >= EPD_GDEY0426T82_HEIGHT) {
+        return false;
+    }
+
+    return (buffer[byte_index] & mask) == 0U;
+}
+
+static bool render_pixel_is_white(const uint8_t *buffer, int x, int y)
+{
+    const size_t byte_index = (size_t)y * (EPD_GDEY0426T82_WIDTH / 8U) + (size_t)(x / 8);
+    const uint8_t mask = (uint8_t)(0x80U >> (x % 8));
+
+    if (buffer == NULL || x < 0 || x >= EPD_GDEY0426T82_WIDTH || y < 0 || y >= EPD_GDEY0426T82_HEIGHT) {
+        return false;
+    }
+
+    return (buffer[byte_index] & mask) != 0U;
 }
 
 static bool fill_gray_calibration_planes(
@@ -1088,7 +1546,7 @@ static bool render_model_to_buffer(
 
     switch (model->mode) {
         case INK_APP_RENDER_MODE_LAUNCHER:
-            fill_launcher_page(buffer, length, (const ink_launcher_app_state_t *)model->state);
+            fill_launcher_page(buffer, length, (const ink_launcher_app_render_state_t *)model->state);
             return true;
         case INK_APP_RENDER_MODE_READER_PLACEHOLDER:
             fill_reader_placeholder_page(buffer, length);
@@ -1098,6 +1556,9 @@ static bool render_model_to_buffer(
             return true;
         case INK_APP_RENDER_MODE_PHOTO_ALBUM:
             fill_photo_album_page(buffer, length, (const ink_photo_album_render_state_t *)model->state);
+            return true;
+        case INK_APP_RENDER_MODE_VOICE_NOTE:
+            fill_voice_note_page(buffer, length, (const ink_voice_note_app_render_state_t *)model->state);
             return true;
         case INK_APP_RENDER_MODE_USB_MSC:
             fill_usb_msc_page(buffer, length, (const ink_usb_msc_app_render_state_t *)model->state);
@@ -1128,15 +1589,35 @@ bool ink_app_render_model_fill_request(
             request->full_refresh = true;
             request->refresh_profile = INK_TUNING_REFRESH_FULL;
         }
+        if (request->refresh_strategy == INK_REFRESH_STRATEGY_NONE) {
+            if (request->full_refresh) {
+                request->refresh_strategy = INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL;
+            } else if (request->use_reader_menu_overlay || request->use_library_overlay) {
+                request->refresh_strategy = INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE;
+            } else if (request->use_reader_hold_navigation) {
+                request->refresh_strategy = INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW;
+            } else if (request->force_white_page || request->force_fast_full_commit) {
+                request->refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_CLEANUP;
+            } else if (request->use_reader_layout || request->use_bitmap_page || request->use_native_page) {
+                request->refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_TURN;
+            } else {
+                request->refresh_strategy = INK_REFRESH_STRATEGY_LAB_EXPLICIT_MODE;
+            }
+        }
         return true;
     }
 
     memset(request, 0, sizeof(*request));
     request->page = INK_RUNTIME_SHELL_PAGE_READER;
+    request->refresh_strategy = model->refresh_strategy;
     request->full_refresh = model->request_full_refresh;
-    request->refresh_profile = model->request_full_refresh
-        ? INK_TUNING_REFRESH_FULL
-        : INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
+    if (model->request_full_refresh) {
+        request->refresh_profile = INK_TUNING_REFRESH_FULL;
+    } else if (model->refresh_strategy == INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST) {
+        request->refresh_profile = INK_TUNING_REFRESH_FAST_FULL;
+    } else {
+        request->refresh_profile = INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
+    }
     request->use_app_render_model = true;
     request->app_request_partial_refresh = model->request_partial_refresh;
     request->use_aggressive_interrupt = model->request_aggressive_interrupt;
@@ -1228,6 +1709,11 @@ esp_err_t ink_app_render_display_request(
     uint32_t diff_ms = 0U;
     uint32_t epd_ms = 0U;
     esp_err_t ret = ESP_OK;
+    const char *route_name = "none";
+    const bool interrupt_allowed = app->aggressive_interrupt_mode
+        && request != NULL
+        && (request->use_reader_hold_navigation || request->use_aggressive_interrupt);
+    const bool pinned_during_tx = request_pins_during_transmitting(request);
     ink_ui_model_t *owner_model = request_owner_ui_model(app, request);
 
     if (request == NULL
@@ -1316,6 +1802,9 @@ esp_err_t ink_app_render_display_request(
             return ESP_ERR_INVALID_ARG;
         }
     } else if (request->use_library_overlay || request->use_reader_menu_overlay) {
+        populate_overlay_header_meta(
+            (epd_test_pattern_reader_menu_overlay_t *)&request->menu_overlay,
+            &app->services);
         if (!render_library_overlay_to_buffer(
                 app->services.framebuffer,
                 EPD_GDEY0426T82_BUFFER_SIZE,
@@ -1418,6 +1907,7 @@ esp_err_t ink_app_render_display_request(
     } else {
         phase_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount());
         if (request->full_refresh) {
+            route_name = request->use_native_page ? "full_native" : "full";
             dirty_x = 0U;
             dirty_y = 0U;
             dirty_w = EPD_GDEY0426T82_WIDTH;
@@ -1436,17 +1926,11 @@ esp_err_t ink_app_render_display_request(
                     &control);
             }
         } else if (request->refresh_profile == INK_TUNING_REFRESH_FAST_FULL) {
+            route_name = request->use_native_page ? "fast_full_native" : "fast_full_commit";
             dirty_x = 0U;
             dirty_y = 0U;
             dirty_w = EPD_GDEY0426T82_WIDTH;
             dirty_h = EPD_GDEY0426T82_HEIGHT;
-            if (should_force_fast_full_commit(request)) {
-                ESP_LOGI(
-                    TAG,
-                    "render commit seq=%u page=%s route=fast_full_commit",
-                    (unsigned)request->seq,
-                    ink_app_shell_page_name(request->page));
-            }
             if (request->use_native_page
                 && request->native_page_buffer != NULL
                 && request->native_page_length >= EPD_GDEY0426T82_NATIVE_BUFFER_SIZE) {
@@ -1470,16 +1954,12 @@ esp_err_t ink_app_render_display_request(
             dirty_w = EPD_GDEY0426T82_WIDTH;
             dirty_h = 32U;
             if (should_route_footer_preview_to_full_window_stock_partial(request)) {
+                route_name = "footer_full_window_stock";
                 epd_gdey0426t82_refresh_control_t full_window_control = control;
                 full_window_control.use_custom_lut_a = false;
                 full_window_control.use_custom_lut_b = false;
                 full_window_control.use_grid_compare_variant = false;
                 full_window_control.reuse_partial_init = false;
-                ESP_LOGI(
-                    TAG,
-                    "render footer seq=%u page=%s route=footer_full_window_stock",
-                    (unsigned)request->seq,
-                    ink_app_shell_page_name(request->page));
                 dirty_x = 0U;
                 dirty_y = 0U;
                 dirty_w = EPD_GDEY0426T82_WIDTH;
@@ -1489,13 +1969,7 @@ esp_err_t ink_app_render_display_request(
                     EPD_GDEY0426T82_BUFFER_SIZE,
                     &full_window_control);
             } else {
-                ESP_LOGI(
-                    TAG,
-                    "render footer seq=%u page=%s route=%s reuse_init=%d",
-                    (unsigned)request->seq,
-                    ink_app_shell_page_name(request->page),
-                    control.reuse_partial_init ? "footer_partial_reuse" : "footer_partial_cold",
-                    control.reuse_partial_init ? 1 : 0);
+                route_name = control.reuse_partial_init ? "footer_partial_reuse" : "footer_partial_cold";
                 ret = epd_gdey0426t82_partial_refresh_area_ex(
                     app->services.framebuffer,
                     EPD_GDEY0426T82_BUFFER_SIZE,
@@ -1509,24 +1983,15 @@ esp_err_t ink_app_render_display_request(
             epd_gdey0426t82_refresh_control_t full_window_control = control;
             const bool use_stock_partial =
                 should_fallback_reader_full_window_to_stock_partial(request);
+            route_name = use_stock_partial
+                ? "partial_full_window_stock_mainline"
+                : ink_tuning_lab_refresh_profile_name((ink_tuning_refresh_profile_t)request->refresh_profile);
 
             if (use_stock_partial) {
                 full_window_control.use_custom_lut_a = false;
                 full_window_control.use_custom_lut_b = false;
                 full_window_control.reuse_partial_init = false;
             }
-            ESP_LOGI(
-                TAG,
-                "render promote seq=%u page=%s dirty=%u,%u %ux%u route=%s",
-                (unsigned)request->seq,
-                ink_app_shell_page_name(request->page),
-                (unsigned)dirty_x,
-                (unsigned)dirty_y,
-                (unsigned)dirty_w,
-                (unsigned)dirty_h,
-                use_stock_partial
-                    ? "partial_full_window_stock_mainline"
-                    : ink_tuning_lab_refresh_profile_name((ink_tuning_refresh_profile_t)request->refresh_profile));
             dirty_x = 0U;
             dirty_y = 0U;
             dirty_w = EPD_GDEY0426T82_WIDTH;
@@ -1550,15 +2015,7 @@ esp_err_t ink_app_render_display_request(
                     &full_window_control);
             }
         } else {
-            ESP_LOGI(
-                TAG,
-                "render dirty seq=%u page=%s x=%u y=%u w=%u h=%u",
-                (unsigned)request->seq,
-                ink_app_shell_page_name(request->page),
-                (unsigned)dirty_x,
-                (unsigned)dirty_y,
-                (unsigned)dirty_w,
-                (unsigned)dirty_h);
+            route_name = "partial_area";
             ret = epd_gdey0426t82_partial_refresh_area_ex(
                 app->services.framebuffer,
                 EPD_GDEY0426T82_BUFFER_SIZE,
@@ -1608,6 +2065,10 @@ esp_err_t ink_app_render_display_request(
     log_render_timing(
         (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount()),
         request,
+        route_name,
+        false,
+        interrupt_allowed,
+        pinned_during_tx,
         dirty_x,
         dirty_y,
         dirty_w,
@@ -1736,6 +2197,7 @@ static bool should_promote_reader_partial_to_full_window(
     (void)dirty_width;
     (void)dirty_height;
     if (request == NULL
+        || request->refresh_strategy != INK_REFRESH_STRATEGY_READER_TEXT_TURN
         || !request->use_bitmap_page
         || request->use_reader_menu_overlay
         || request->force_fixed_footer_partial
@@ -1745,18 +2207,6 @@ static bool should_promote_reader_partial_to_full_window(
     }
 
     return false;
-}
-
-static bool should_force_fast_full_commit(const ink_display_request_t *request)
-{
-    return request != NULL
-        && request->force_fast_full_commit
-        && (request->page == INK_RUNTIME_SHELL_PAGE_READER
-            || request->page == INK_RUNTIME_SHELL_PAGE_LIBRARY)
-        && !request->use_fast_browse_overlay
-        && !request->full_refresh
-        && !request->force_fixed_footer_partial
-        && !request->force_white_page;
 }
 
 static bool should_route_footer_preview_to_full_window_stock_partial(
@@ -2003,6 +2453,7 @@ static bool app_reader_white_request_self_test(void)
 
     ok = request.force_white_page
         && !request.full_refresh
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_READER_TEXT_CLEANUP
         && !request.use_bitmap_page
         && !request.use_native_page
         && !request.use_footer_overlay
@@ -2058,6 +2509,7 @@ static bool app_reader_fast_browse_request_self_test(void)
     }
 
     ok = request.use_fast_browse_overlay
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW
         && !request.use_reader_hold_navigation
         && request.force_fixed_footer_partial
         && !request.use_bitmap_page
@@ -2103,6 +2555,7 @@ static bool app_reader_fast_browse_commit_request_self_test(void)
     }
 
     ok = request.force_fast_full_commit
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_READER_TEXT_CLEANUP
         && !request.use_fast_browse_overlay
         && !request.force_fixed_footer_partial
         && request.refresh_profile == INK_TUNING_REFRESH_FAST_FULL
@@ -2243,6 +2696,7 @@ static bool app_full_refresh_routing_self_test(void)
     }
 
     return request.full_refresh
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL
         && request.refresh_profile == INK_TUNING_REFRESH_CUSTOM_LUT_A;
 }
 
@@ -2270,6 +2724,7 @@ static bool app_grid_compare_request_self_test(void)
 
     if (!request.use_grid_compare_variant
         || request.use_footer_overlay
+        || request.refresh_strategy != INK_REFRESH_STRATEGY_LAB_EXPLICIT_MODE
         || request.grid_compare_variant_index != 0U
         || strcmp(request.overlay_left, "P5/5 GRID_COMPARE") != 0
         || strcmp(request.overlay_right, "GRID P1 01/16") != 0) {
@@ -2287,6 +2742,7 @@ static bool app_large_reader_partial_routing_self_test(void)
     ink_display_request_t request;
 
     memset(&request, 0, sizeof(request));
+    request.refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_TURN;
     request.refresh_profile = INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
     request.use_bitmap_page = true;
     if (should_promote_reader_partial_to_full_window(&request, 435U, 768U)) {
@@ -2297,6 +2753,19 @@ static bool app_large_reader_partial_routing_self_test(void)
     }
     request.use_bitmap_page = false;
     return !should_promote_reader_partial_to_full_window(&request, 435U, 768U);
+}
+
+static bool app_overlay_never_promotes_to_reader_full_window_self_test(void)
+{
+    ink_display_request_t request;
+
+    memset(&request, 0, sizeof(request));
+    request.refresh_strategy = INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE;
+    request.refresh_profile = INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
+    request.use_bitmap_page = true;
+    request.use_reader_menu_overlay = true;
+
+    return !should_promote_reader_partial_to_full_window(&request, 458U, 757U);
 }
 
 static bool app_reader_partial_init_reuse_self_test(void)
@@ -2347,6 +2816,7 @@ static bool app_reader_full_window_stock_fallback_self_test(void)
 
     memset(&request, 0, sizeof(request));
     request.use_bitmap_page = true;
+    request.refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_TURN;
     request.refresh_profile = INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
     if (!should_fallback_reader_full_window_to_stock_partial(&request)) {
         return false;
@@ -2369,6 +2839,7 @@ static bool app_reader_full_window_stock_fallback_avoids_native_path_self_test(v
     memset(&request, 0, sizeof(request));
     request.use_bitmap_page = true;
     request.use_native_page = true;
+    request.refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_TURN;
     request.native_page_buffer = (const uint8_t *)0x1;
     request.native_page_length = EPD_GDEY0426T82_NATIVE_BUFFER_SIZE;
     request.refresh_profile = INK_TUNING_REFRESH_PARTIAL_AUTO_DIRTY;
@@ -2389,6 +2860,7 @@ static bool app_footer_preview_route_self_test(void)
 
     memset(&request, 0, sizeof(request));
     request.page = INK_RUNTIME_SHELL_PAGE_READER;
+    request.refresh_strategy = INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW;
     request.use_fast_browse_overlay = true;
     request.force_fixed_footer_partial = true;
     if (!should_route_footer_preview_to_full_window_stock_partial(&request)) {
@@ -2440,28 +2912,36 @@ static bool app_reader_cancel_policy_self_test(void)
 {
     ink_display_request_t reader_request;
     ink_display_request_t library_request;
+    ink_display_request_t album_request;
 
     memset(&reader_request, 0, sizeof(reader_request));
     memset(&library_request, 0, sizeof(library_request));
+    memset(&album_request, 0, sizeof(album_request));
 
     reader_request.page = INK_RUNTIME_SHELL_PAGE_READER;
     reader_request.use_bitmap_page = true;
+    reader_request.refresh_strategy = INK_REFRESH_STRATEGY_READER_TEXT_TURN;
     if (!request_pins_during_transmitting(&reader_request)) {
         return false;
     }
 
     reader_request.use_reader_hold_navigation = true;
+    reader_request.refresh_strategy = INK_REFRESH_STRATEGY_READER_HOLD_PREVIEW;
     if (request_pins_during_transmitting(&reader_request)) {
         return false;
     }
 
     library_request.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
     library_request.use_bitmap_page = true;
+    library_request.refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL;
     if (request_pins_during_transmitting(&library_request)) {
         return false;
     }
 
-    return true;
+    album_request.page = INK_RUNTIME_SHELL_PAGE_READER;
+    album_request.refresh_strategy = INK_REFRESH_STRATEGY_GRAY_IMAGE_INTERRUPTIBLE;
+    album_request.use_aggressive_interrupt = true;
+    return !request_pins_during_transmitting(&album_request);
 }
 
 static bool app_render_model_launcher_self_test(void)
@@ -2469,6 +2949,7 @@ static bool app_render_model_launcher_self_test(void)
     uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
     ink_app_render_model_t model;
     ink_launcher_app_state_t state;
+    ink_launcher_app_render_state_t render_state;
     bool ok = false;
 
     if (buffer == NULL) {
@@ -2477,12 +2958,19 @@ static bool app_render_model_launcher_self_test(void)
 
     memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
     memset(&model, 0, sizeof(model));
+    memset(&render_state, 0, sizeof(render_state));
     state.selected_app_index = 1U;
+    render_state.state = &state;
+    snprintf(render_state.header_meta, sizeof(render_state.header_meta), "%s", "UP 01:23");
     model.mode = INK_APP_RENDER_MODE_LAUNCHER;
-    model.state = &state;
+    model.state = &render_state;
 
     ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
-        && memcmp(buffer, "\xAA", 1) != 0;
+        && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+        && render_pixel_is_black(buffer, 24, 50)
+        && render_pixel_is_black(buffer, 28, 154)
+        && render_pixel_is_white(buffer, 120, 154)
+        && render_pixel_is_black(buffer, 376, 18);
     free(buffer);
     return ok;
 }
@@ -2586,6 +3074,212 @@ static bool app_library_overlay_render_self_test(void)
     return ok;
 }
 
+static bool app_library_overlay_header_meta_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+    uint8_t *buffer = NULL;
+    bool ok = false;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
+    ui.browser.entry_count = 1U;
+    ui.browser.entries[0].type = INK_FILE_BROWSER_ENTRY_XTC;
+    snprintf(ui.browser.entries[0].name, sizeof(ui.browser.entries[0].name), "%s", "A.XTC");
+    snprintf(ui.browser.entries[0].full_path, sizeof(ui.browser.entries[0].full_path), "%s", "/sdcard/books/A.XTC");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    if (buffer == NULL) {
+        return false;
+    }
+
+    snprintf(request.menu_overlay.header_meta, sizeof(request.menu_overlay.header_meta), "%s", "12:34");
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+
+    ok = request.use_library_overlay
+        && render_library_overlay_to_buffer(
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            NULL,
+            NULL,
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            &request);
+    free(buffer);
+    return ok
+        && strcmp(request.menu_overlay.header_title, "书库") == 0;
+}
+
+static bool app_library_overlay_tabs_follow_shell_width_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+    uint8_t *buffer = NULL;
+    bool ok = false;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
+    ui.library.active_tab = INK_LIBRARY_TAB_ALL;
+    ui.library.focus = INK_LIBRARY_FOCUS_TABS;
+    ui.browser.entry_count = 2U;
+    ui.browser.entries[0].type = INK_FILE_BROWSER_ENTRY_XTC;
+    ui.browser.entries[1].type = INK_FILE_BROWSER_ENTRY_XTC;
+    snprintf(ui.browser.entries[0].name, sizeof(ui.browser.entries[0].name), "%s", "A.XTC");
+    snprintf(ui.browser.entries[0].full_path, sizeof(ui.browser.entries[0].full_path), "%s", "/sdcard/books/A.XTC");
+    snprintf(ui.browser.entries[1].name, sizeof(ui.browser.entries[1].name), "%s", "B.XTC");
+    snprintf(ui.browser.entries[1].full_path, sizeof(ui.browser.entries[1].full_path), "%s", "/sdcard/books/B.XTC");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+    snprintf(request.menu_overlay.header_meta, sizeof(request.menu_overlay.header_meta), "%s", "12:34");
+
+    ok = request.use_library_overlay
+        && render_library_overlay_to_buffer(
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            NULL,
+            NULL,
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            &request)
+        && render_pixel_is_black(buffer, 24, 38)
+        && render_pixel_is_black(buffer, 455, 71)
+        && render_pixel_is_white(buffer, 463, 71)
+        && render_pixel_is_black(buffer, 455, 158)
+        && render_pixel_is_white(buffer, 463, 158);
+    free(buffer);
+    return ok;
+}
+
+static bool app_library_overlay_selected_favorite_remains_visible_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+    uint8_t *buffer = NULL;
+    bool ok = false;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_LIBRARY;
+    ui.library.active_tab = INK_LIBRARY_TAB_ALL;
+    ui.library.focus = INK_LIBRARY_FOCUS_ITEMS;
+    ui.browser.entry_count = 1U;
+    ui.browser.entries[0].type = INK_FILE_BROWSER_ENTRY_XTC;
+    snprintf(ui.browser.entries[0].name, sizeof(ui.browser.entries[0].name), "%s", "A.XTC");
+    snprintf(ui.browser.entries[0].full_path, sizeof(ui.browser.entries[0].full_path), "%s", "/sdcard/books/A.XTC");
+    (void)ink_app_state_set_xtc_favorite(&ui.app_state, "/sdcard/books/A.XTC", "A.XTC", true);
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+    snprintf(request.menu_overlay.header_meta, sizeof(request.menu_overlay.header_meta), "%s", "12:34");
+
+    ok = request.use_library_overlay
+        && render_library_overlay_to_buffer(
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            NULL,
+            NULL,
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            &request)
+        && render_pixel_is_black(buffer, 443, 144);
+    free(buffer);
+    return ok;
+}
+
+static bool app_render_model_usb_msc_self_test(void)
+{
+    uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_app_render_model_t model;
+    ink_usb_msc_app_state_t state;
+    ink_usb_msc_app_render_state_t render_state;
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+    memset(&model, 0, sizeof(model));
+    memset(&state, 0, sizeof(state));
+    memset(&render_state, 0, sizeof(render_state));
+    state.view = INK_USB_MSC_APP_VIEW_ACTIVE;
+    snprintf(state.title, sizeof(state.title), "%s", "USB DISK MODE");
+    snprintf(state.line1, sizeof(state.line1), "%s", "TF CARD SHARED TO USB");
+    snprintf(state.line2, sizeof(state.line2), "%s", "UNPLUG USB TO EXIT");
+    snprintf(state.line3, sizeof(state.line3), "%s", "PRESS BACK TO RETURN");
+    render_state.state = &state;
+    model.mode = INK_APP_RENDER_MODE_USB_MSC;
+    model.state = &render_state;
+
+    ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+        && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+        && render_pixel_is_black(buffer, 24, 66);
+    free(buffer);
+    return ok;
+}
+
+static bool app_render_model_usb_msc_keeps_time_badge_self_test(void)
+{
+    uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_app_render_model_t model;
+    ink_usb_msc_app_state_t state;
+    ink_usb_msc_app_render_state_t render_state;
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+    memset(&model, 0, sizeof(model));
+    memset(&state, 0, sizeof(state));
+    memset(&render_state, 0, sizeof(render_state));
+    state.view = INK_USB_MSC_APP_VIEW_ACTIVE;
+    snprintf(state.title, sizeof(state.title), "%s", "USB 磁盘");
+    snprintf(state.line1, sizeof(state.line1), "%s", "U盘模式 开");
+    snprintf(render_state.header_meta, sizeof(render_state.header_meta), "%s", "12:34");
+    render_state.state = &state;
+    model.mode = INK_APP_RENDER_MODE_USB_MSC;
+    model.state = &render_state;
+
+    ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+        && render_pixel_is_black(buffer, 430, 10)
+        && render_pixel_is_white(buffer, 24, 250)
+        && render_pixel_is_black(buffer, 48, 310)
+        && render_pixel_is_white(buffer, 44, 310);
+    free(buffer);
+    return ok;
+}
+
 static bool app_reader_menu_request_self_test(void)
 {
     ink_ui_model_t ui;
@@ -2615,6 +3309,7 @@ static bool app_reader_menu_request_self_test(void)
     }
 
     return request.use_reader_menu_overlay
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE
         && !request.full_refresh
         && request.menu_overlay.compact_cards
         && request.menu_overlay.bookmark_cards_tall
@@ -2622,6 +3317,51 @@ static bool app_reader_menu_request_self_test(void)
         && strcmp(request.menu_overlay.cards[0].title, "将当前页添加到书签") == 0
         && strstr(request.menu_overlay.cards[0].line1, "P12") != NULL
         && strstr(request.menu_overlay.cards[0].line1, "第一章") != NULL;
+}
+
+static bool app_reader_text_turn_strategy_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ui.reader_session.active = true;
+    ui.reader_session.xtc_active = true;
+    ui.reader_session.total_pages = 12U;
+    ui.reader_session.current_page = 3U;
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    return request.refresh_strategy == INK_REFRESH_STRATEGY_READER_TEXT_TURN
+        && !request.use_reader_menu_overlay
+        && !request.use_library_overlay;
+}
+
+static bool app_reader_overlay_strategy_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ui.reader_opening = true;
+    snprintf(ui.reader_loading_title, sizeof(ui.reader_loading_title), "%s", "正在加载...");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    return request.refresh_strategy == INK_REFRESH_STRATEGY_OVERLAY_LOCAL_UPDATE
+        && request.use_reader_menu_overlay;
 }
 
 static bool app_reader_menu_overlay_render_self_test(void)
@@ -2663,6 +3403,7 @@ static bool app_reader_menu_overlay_render_self_test(void)
     ok = request.use_reader_menu_overlay
         && !request.full_refresh
         && request.use_bitmap_page
+        && !request.menu_overlay.frameless_panel
         && render_library_overlay_to_buffer(
             buffer,
             EPD_GDEY0426T82_BUFFER_SIZE,
@@ -2671,6 +3412,8 @@ static bool app_reader_menu_overlay_render_self_test(void)
             buffer,
             EPD_GDEY0426T82_BUFFER_SIZE,
             &request)
+        && render_pixel_is_white(buffer, 24, 38)
+        && render_pixel_is_white(buffer, 455, 38)
         && memcmp(buffer, "\xAA", 1) != 0;
     free(buffer);
     return ok;
@@ -2713,6 +3456,47 @@ static bool app_reader_loading_overlay_request_self_test(void)
         && request.menu_overlay.action_popup_open
         && request.menu_overlay.action_count == 0U
         && strcmp(request.menu_overlay.action_popup_title, "正在加载...") == 0;
+}
+
+static bool app_reader_loading_overlay_header_meta_self_test(void)
+{
+    ink_ui_model_t ui;
+    ink_display_request_t request;
+    uint8_t *buffer = NULL;
+    bool ok = false;
+
+    memset(&ui, 0, sizeof(ui));
+    memset(&request, 0, sizeof(request));
+    ink_tuning_lab_init(&ui.lab);
+    ink_runtime_shell_init(&ui.shell);
+    ui.shell.page = INK_RUNTIME_SHELL_PAGE_READER;
+    ui.reader_opening = true;
+    snprintf(ui.reader_loading_title, sizeof(ui.reader_loading_title), "%s", "正在加载...");
+
+    if (!ink_app_build_display_request(&ui, 0U, 0U, INK_RUNTIME_SHELL_COMMAND_NONE, &request)) {
+        return false;
+    }
+
+    buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    if (buffer == NULL) {
+        return false;
+    }
+
+    snprintf(request.menu_overlay.header_meta, sizeof(request.menu_overlay.header_meta), "%s", "12:34");
+    memset(buffer, 0xFF, EPD_GDEY0426T82_BUFFER_SIZE);
+
+    ok = request.use_reader_menu_overlay
+        && render_library_overlay_to_buffer(
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            NULL,
+            NULL,
+            buffer,
+            EPD_GDEY0426T82_BUFFER_SIZE,
+            &request);
+    free(buffer);
+    return ok
+        && strcmp(request.menu_overlay.header_title, "书库") == 0;
 }
 
 static bool app_reader_chapter_menu_request_layout_self_test(void)
@@ -2839,6 +3623,7 @@ static bool app_render_model_wifi_setup_self_test(void)
     uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
     ink_app_render_model_t model;
     ink_wifi_setup_app_view_t view;
+    ink_wifi_setup_app_render_state_t render_state;
     bool ok = false;
 
     if (buffer == NULL) {
@@ -2848,14 +3633,19 @@ static bool app_render_model_wifi_setup_self_test(void)
     memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
     memset(&model, 0, sizeof(model));
     memset(&view, 0, sizeof(view));
+    memset(&render_state, 0, sizeof(render_state));
     view.wifi.scan.count = 1;
     view.wifi.selected_index = 0;
     snprintf(view.wifi.scan.results[0].ssid, sizeof(view.wifi.scan.results[0].ssid), "%s", "demo");
+    snprintf(render_state.header_meta, sizeof(render_state.header_meta), "%s", "12:34");
+    render_state.view = &view;
     model.mode = INK_APP_RENDER_MODE_WIFI_SETUP;
-    model.state = &view;
+    model.state = &render_state;
 
     ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
-        && memcmp(buffer, "\xAA", 1) != 0;
+        && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+        && render_pixel_is_black(buffer, 24, 8)
+        && render_pixel_is_black(buffer, 408, 10);
     free(buffer);
     return ok;
 }
@@ -2878,15 +3668,70 @@ static bool app_render_model_photo_album_self_test(void)
     memset(&render_state, 0, sizeof(render_state));
     state.view_mode = INK_PHOTO_ALBUM_VIEW_LIST;
     snprintf(state.status_text, sizeof(state.status_text), "%s", "3/24");
+    snprintf(render_state.header_meta, sizeof(render_state.header_meta), "%s", "12:34");
     render_state.state = &state;
     model.mode = INK_APP_RENDER_MODE_PHOTO_ALBUM;
     model.refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_LIST_LOCAL;
     model.state = &render_state;
 
     ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
-        && memcmp(buffer, "\xAA", 1) != 0;
+        && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+        && render_pixel_is_black(buffer, 24, 8)
+        && render_pixel_is_black(buffer, 408, 10);
     free(buffer);
     return ok;
+}
+
+static bool app_render_model_voice_note_self_test(void)
+{
+    uint8_t *buffer = malloc(EPD_GDEY0426T82_BUFFER_SIZE);
+    ink_app_render_model_t model;
+    ink_voice_note_app_state_t state;
+    ink_voice_note_app_render_state_t render_state;
+    bool ok = false;
+
+    if (buffer == NULL) {
+        return false;
+    }
+
+    memset(buffer, 0xAA, EPD_GDEY0426T82_BUFFER_SIZE);
+    memset(&model, 0, sizeof(model));
+    memset(&state, 0, sizeof(state));
+    memset(&render_state, 0, sizeof(render_state));
+    snprintf(state.snapshot.status_text, sizeof(state.snapshot.status_text), "%s", "正在录音");
+    snprintf(state.snapshot.active_note_id, sizeof(state.snapshot.active_note_id), "%s", "note-001");
+    snprintf(render_state.header_meta, sizeof(render_state.header_meta), "%s", "12:34");
+    render_state.state = &state;
+    model.mode = INK_APP_RENDER_MODE_VOICE_NOTE;
+    model.state = &render_state;
+
+    ok = render_model_to_buffer(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &model)
+        && render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+        && render_pixel_is_black(buffer, 24, 8)
+        && render_pixel_is_black(buffer, 408, 10)
+        && render_pixel_is_black(buffer, 24, 66);
+    free(buffer);
+    return ok;
+}
+
+static bool photo_album_list_truncation_self_test(void)
+{
+    char base_name[64];
+    char title[48];
+
+    if (!photo_album_name_without_extension(
+            "图书馆书架上的相册封面预览页面-2026-scan-final.bmp",
+            base_name,
+            sizeof(base_name))) {
+        return false;
+    }
+
+    photo_album_compose_list_title(0U, base_name, title, sizeof(title));
+
+    return strstr(base_name, ".bmp") == NULL
+        && strstr(title, "...") != NULL
+        && strstr(title, ".bmp") == NULL
+        && strstr(title, "01. ") == title;
 }
 
 static bool photo_album_list_layout_self_test(void)
@@ -2917,7 +3762,9 @@ static bool photo_album_list_layout_self_test(void)
     render_state.state = &state;
     render_state.catalog = &catalog;
     draw_photo_album_list_page(buffer, EPD_GDEY0426T82_BUFFER_SIZE, &render_state, NULL, NULL);
-    ok = memcmp(buffer, "\xAA", 1) != 0;
+    ok = render_buffer_has_ink(buffer, EPD_GDEY0426T82_BUFFER_SIZE)
+        && render_pixel_is_black(buffer, 24, 66)
+        && render_pixel_is_black(buffer, 24, 84);
     free(buffer);
     return ok;
 }
@@ -2991,6 +3838,28 @@ static bool app_render_request_self_test(void)
     memset(&model, 0, sizeof(model));
     model.mode = INK_APP_RENDER_MODE_LAUNCHER;
     model.refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST;
+    model.request_full_refresh = false;
+    model.request_partial_refresh = false;
+    model.state = (void *)0x1234U;
+
+    if (!ink_app_render_model_fill_request(&model, &request)) {
+        return false;
+    }
+
+    if (!(request.use_app_render_model
+        && !request.full_refresh
+        && request.refresh_strategy == INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST
+        && request.refresh_profile == INK_TUNING_REFRESH_FAST_FULL
+        && !request.app_request_partial_refresh
+        && request.app_render_mode == (uint8_t)INK_APP_RENDER_MODE_LAUNCHER
+        && request.app_render_state == (void *)0x1234U)) {
+        return false;
+    }
+
+    memset(&model, 0, sizeof(model));
+    memset(&request, 0, sizeof(request));
+    model.mode = INK_APP_RENDER_MODE_LAUNCHER;
+    model.refresh_strategy = INK_REFRESH_STRATEGY_BW_UI_PAGE_FAST;
     model.request_full_refresh = true;
     model.request_partial_refresh = false;
     model.state = (void *)0x1234U;
@@ -3006,6 +3875,25 @@ static bool app_render_request_self_test(void)
         && !request.app_request_partial_refresh
         && request.app_render_mode == (uint8_t)INK_APP_RENDER_MODE_LAUNCHER
         && request.app_render_state == (void *)0x1234U;
+}
+
+static bool app_render_request_strategy_roundtrip_self_test(void)
+{
+    ink_app_render_model_t model;
+    ink_display_request_t request;
+
+    memset(&model, 0, sizeof(model));
+    memset(&request, 0, sizeof(request));
+    model.mode = INK_APP_RENDER_MODE_USB_MSC;
+    model.refresh_strategy = INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL;
+    model.request_full_refresh = true;
+
+    if (!ink_app_render_model_fill_request(&model, &request)) {
+        return false;
+    }
+
+    return request.refresh_strategy == INK_REFRESH_STRATEGY_PAGE_TRANSITION_FULL
+        && request.full_refresh;
 }
 
 static bool app_render_request_photo_album_interrupt_self_test(void)
@@ -3100,6 +3988,10 @@ bool ink_app_render_self_test(void)
         printf("FAIL render large_reader_partial_routing\n");
         return false;
     }
+    if (!app_overlay_never_promotes_to_reader_full_window_self_test()) {
+        printf("FAIL render overlay_never_promotes_to_reader_full_window\n");
+        return false;
+    }
     if (!app_reader_partial_init_reuse_self_test()) {
         printf("FAIL render reader_partial_init_reuse\n");
         return false;
@@ -3136,12 +4028,40 @@ bool ink_app_render_self_test(void)
         printf("FAIL render model_reader_subsystem\n");
         return false;
     }
+    if (!app_render_model_usb_msc_self_test()) {
+        printf("FAIL render model_usb_msc\n");
+        return false;
+    }
+    if (!app_render_model_usb_msc_keeps_time_badge_self_test()) {
+        printf("FAIL render model_usb_msc_keeps_time_badge\n");
+        return false;
+    }
     if (!app_library_overlay_render_self_test()) {
         printf("FAIL render library_overlay\n");
         return false;
     }
+    if (!app_library_overlay_header_meta_self_test()) {
+        printf("FAIL render library_overlay_header_meta\n");
+        return false;
+    }
+    if (!app_library_overlay_tabs_follow_shell_width_self_test()) {
+        printf("FAIL render library_overlay_tabs_follow_shell_width\n");
+        return false;
+    }
+    if (!app_library_overlay_selected_favorite_remains_visible_self_test()) {
+        printf("FAIL render library_overlay_selected_favorite_remains_visible\n");
+        return false;
+    }
     if (!app_reader_menu_request_self_test()) {
         printf("FAIL render reader_menu_request\n");
+        return false;
+    }
+    if (!app_reader_text_turn_strategy_self_test()) {
+        printf("FAIL render reader_text_turn_strategy\n");
+        return false;
+    }
+    if (!app_reader_overlay_strategy_self_test()) {
+        printf("FAIL render reader_overlay_strategy\n");
         return false;
     }
     if (!app_reader_menu_overlay_render_self_test()) {
@@ -3154,6 +4074,10 @@ bool ink_app_render_self_test(void)
     }
     if (!app_reader_loading_overlay_request_self_test()) {
         printf("FAIL render reader_loading_overlay_request\n");
+        return false;
+    }
+    if (!app_reader_loading_overlay_header_meta_self_test()) {
+        printf("FAIL render reader_loading_overlay_header_meta\n");
         return false;
     }
     if (!app_reader_chapter_menu_request_layout_self_test()) {
@@ -3174,6 +4098,18 @@ bool ink_app_render_self_test(void)
     }
     if (!app_render_model_photo_album_self_test()) {
         printf("FAIL render model_photo_album\n");
+        return false;
+    }
+    if (!app_render_model_voice_note_self_test()) {
+        printf("FAIL render model_voice_note\n");
+        return false;
+    }
+    if (!photo_album_list_truncation_self_test()) {
+        printf("FAIL render photo_album_list_truncation\n");
+        return false;
+    }
+    if (!app_render_request_strategy_roundtrip_self_test()) {
+        printf("FAIL render strategy_roundtrip\n");
         return false;
     }
     if (!photo_album_list_layout_self_test()) {

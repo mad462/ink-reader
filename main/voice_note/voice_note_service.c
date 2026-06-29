@@ -145,8 +145,34 @@ bool voice_note_service_self_test(void)
         return false;
     }
 
-    return snapshot.state == VOICE_NOTE_JOB_IDLE
+    if (!(snapshot.state == VOICE_NOTE_JOB_IDLE
         && !snapshot.busy
         && count == 0U
-        && strcmp(snapshot.status_text, "按住 Confirm 开始录音") == 0;
+        && strcmp(snapshot.status_text, "按住 Confirm 开始录音") == 0)) {
+        return false;
+    }
+
+    if (!voice_note_service_start_capture(100U)
+        || !voice_note_service_get_snapshot(&snapshot)) {
+        return false;
+    }
+
+    if (!(snapshot.busy
+        && snapshot.state == VOICE_NOTE_JOB_RECORDING
+        && snapshot.started_ms == 100U
+        && snapshot.capture_duration_ms == 0U
+        && strcmp(snapshot.status_text, "正在录音") == 0)) {
+        return false;
+    }
+
+    if (!voice_note_service_stop_capture(340U)
+        || !voice_note_service_get_snapshot(&snapshot)) {
+        return false;
+    }
+
+    return !snapshot.busy
+        && snapshot.state == VOICE_NOTE_JOB_COMPLETED
+        && snapshot.started_ms == 100U
+        && snapshot.capture_duration_ms == 240U
+        && strcmp(snapshot.status_text, "识别完成") == 0;
 }
