@@ -417,10 +417,15 @@ static ink_wifi_coordinator_result_t coordinator_run_scan(
     esp_err_t *out_error)
 {
     ink_wifi_scan_list_t scan = {0};
+    ink_wifi_status_t status = {0};
     esp_err_t err = ink_wifi_manager_scan(&scan);
 
     if (err == ESP_OK) {
         coordinator_store_request_scan(slot_index, &scan);
+        if (ink_wifi_manager_status(&status) == ESP_OK) {
+            coordinator_store_request_status(slot_index, &status);
+            coordinator_store_wifi_status(&status, INK_WIFI_COORDINATOR_RESULT_OK);
+        }
     }
     if (out_error != NULL) {
         *out_error = err;
@@ -433,6 +438,24 @@ static ink_wifi_coordinator_result_t coordinator_run_scan(
 static void coordinator_maybe_disconnect_idle(void)
 {
     coordinator_refresh_status_counts();
+    coordinator_lock();
+    if (s_status.active_leases != 0U) {
+        coordinator_unlock();
+        return;
+    }
+    coordinator_unlock();
+
+    if (ink_wifi_manager_disconnect() == ESP_OK) {
+        ink_wifi_status_t status = {0};
+        if (ink_wifi_manager_status(&status) == ESP_OK) {
+            coordinator_store_wifi_status(&status, INK_WIFI_COORDINATOR_RESULT_OK);
+        } else {
+            coordinator_lock();
+            s_status.state = INK_WIFI_COORDINATOR_STATE_DISCONNECTED;
+            s_status.last_result = INK_WIFI_COORDINATOR_RESULT_OK;
+            coordinator_unlock();
+        }
+    }
 }
 
 static int coordinator_acquire_request_slot(void)
@@ -521,14 +544,15 @@ static void coordinator_worker_task(void *arg)
             coordinator_refresh_status_counts();
             coordinator_lock();
             if (s_status.active_leases == 0U) {
-                // Real radio disconnect is deferred until ink_wifi_manager grows a low-level disconnect API.
-                item.result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
-                item.error = ESP_ERR_NOT_SUPPORTED;
+                coordinator_unlock();
+                coordinator_maybe_disconnect_idle();
+                item.result = INK_WIFI_COORDINATOR_RESULT_OK;
+                item.error = ESP_OK;
             } else {
                 item.result = INK_WIFI_COORDINATOR_RESULT_BUSY_RETRYABLE;
                 item.error = ESP_ERR_INVALID_STATE;
+                coordinator_unlock();
             }
-            coordinator_unlock();
             break;
 
         default:
@@ -683,6 +707,8 @@ esp_err_t ink_wifi_coordinator_release_owner(
     ink_wifi_coordinator_owner_t owner,
     uint32_t timeout_ms)
 {
+    ESP_RETURN_ON_FALSE(owner != INK_WIFI_COORDINATOR_OWNER_NONE, ESP_ERR_INVALID_ARG, TAG, "owner required");
+
     ink_wifi_coordinator_request_t request = {
         .type = INK_WIFI_COORDINATOR_REQUEST_RELEASE_LEASE,
         .owner = owner,
@@ -797,13 +823,24 @@ bool ink_wifi_coordinator_self_test(void)
     if (s_status.active_leases != 1U) {
         return false;
     }
+    coordinator_remove_lease(INK_WIFI_COORDINATOR_OWNER_WIFI_SETUP);
+    coordinator_refresh_status_counts();
+    if (s_status.active_leases != 0U) {
+        return false;
+    }
     if (ink_wifi_coordinator_get_status(&status) != ESP_OK) {
+        return false;
+    }
+    if (status.active_leases != 0U) {
         return false;
     }
     if (best_effort_result != INK_WIFI_COORDINATOR_RESULT_NO_CREDENTIAL) {
         return false;
     }
     if (coordinator_result_from_connect_error(ESP_ERR_TIMEOUT) != INK_WIFI_COORDINATOR_RESULT_TIMEOUT) {
+        return false;
+    }
+    if (ink_wifi_coordinator_release_owner(INK_WIFI_COORDINATOR_OWNER_NONE, 1U) != ESP_ERR_INVALID_ARG) {
         return false;
     }
     return status.idle_timeout_ms == INK_WIFI_COORDINATOR_DEFAULT_IDLE_MS

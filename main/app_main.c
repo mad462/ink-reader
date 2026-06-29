@@ -25,6 +25,7 @@
 #include "ink_app_startup.h"
 #include "ink_app_ui.h"
 #include "ink_usb_msc_service.h"
+#include "ink_wifi_coordinator.h"
 #include "ink_wifi_setup_input.h"
 #include "ink_wifi_setup_render.h"
 #include "ink_wifi_setup_state.h"
@@ -106,6 +107,9 @@ static void run_boot_self_tests(void)
     ESP_ERROR_CHECK(ink_usb_msc_service_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(ink_usb_msc_app_self_test() ? ESP_OK : ESP_FAIL);
     esp_rom_printf("OK usb_msc\n");
+    esp_rom_printf("ST wifi_coord\n");
+    ESP_ERROR_CHECK(ink_wifi_coordinator_self_test() ? ESP_OK : ESP_FAIL);
+    esp_rom_printf("OK wifi_coord\n");
     ESP_ERROR_CHECK(epd_task_stack_budget_self_test() ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(runtime_app_fast_full_commit_consumed_once_self_test() ? ESP_OK : ESP_FAIL);
 }

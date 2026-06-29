@@ -8,12 +8,20 @@
 #include "ink_app_boot.h"
 #include "ink_photo_catalog.h"
 #include "ink_app_priv.h"
+#include "ink_time_service.h"
 #include "ink_usb_msc_service.h"
+#include "ink_wifi_coordinator.h"
 #include "ink_wifi_manager.h"
 
 static const char *TAG = "ink_services";
+static TaskHandle_t s_wifi_auto_connect_task = NULL;
+enum {
+    INK_WIFI_AUTO_CONNECT_TASK_STACK = 6144,
+};
 
 static void reload_service_fonts(ink_system_services_t *services);
+static void wifi_auto_connect_task(void *arg);
+static bool wifi_auto_connect_stack_budget_self_test(void);
 
 void ink_system_services_reset(ink_system_services_t *services)
 {
@@ -24,6 +32,7 @@ void ink_system_services_reset(ink_system_services_t *services)
     memset(services, 0, sizeof(*services));
     services->latest_buttons_lock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
     ink_photo_catalog_init(&services->photo_catalog);
+    ink_time_service_reset(&services->time_service);
     ink_usb_msc_service_reset(&services->usb_msc);
 }
 
@@ -111,7 +120,113 @@ esp_err_t ink_system_services_init(ink_system_services_t *services)
     }
     (void)ink_usb_msc_service_init(&services->usb_msc);
     services->wifi_ready = ink_wifi_manager_init() == ESP_OK;
+    services->wifi_coordinator_ready = false;
+    if (services->wifi_ready) {
+        if (ink_wifi_coordinator_init() == ESP_OK
+            && ink_wifi_coordinator_start() == ESP_OK) {
+            services->wifi_coordinator_ready = true;
+            (void)ink_wifi_coordinator_get_status(&services->wifi_coordinator_status);
+        } else {
+            ESP_LOGW(TAG, "wifi coordinator init/start failed");
+        }
+        if (ink_system_services_start_wifi_auto_connect(services) != ESP_OK) {
+            ESP_LOGW(TAG, "wifi auto connect task start failed");
+        }
+    }
+    if (ink_time_service_start(&services->time_service) != ESP_OK) {
+        ESP_LOGW(TAG, "time service start failed");
+    }
 
+    return ESP_OK;
+}
+
+void ink_system_services_get_time_badge(
+    const ink_system_services_t *services,
+    char *dst,
+    size_t dst_size)
+{
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+
+    if (services == NULL) {
+        snprintf(dst, dst_size, "%s", "UP 00:00");
+        return;
+    }
+
+    ink_time_service_get_display_text(&services->time_service, dst, dst_size);
+}
+
+static void wifi_auto_connect_task(void *arg)
+{
+    ink_system_services_t *services = (ink_system_services_t *)arg;
+    ink_wifi_coordinator_request_t request = {
+        .type = INK_WIFI_COORDINATOR_REQUEST_ENSURE_CONNECTED,
+        .owner = INK_WIFI_COORDINATOR_OWNER_BOOT_AUTO_CONNECT,
+        .keep_alive = false,
+        .best_effort_saved = true,
+        .timeout_ms = 12000,
+    };
+    ink_wifi_coordinator_result_t result = INK_WIFI_COORDINATOR_RESULT_INVALID_STATE;
+    ink_wifi_coordinator_status_t coordinator_status = {0};
+
+    vTaskDelay(pdMS_TO_TICKS(800));
+    if (services == NULL) {
+        s_wifi_auto_connect_task = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    if (ink_wifi_coordinator_get_status(&coordinator_status) == ESP_OK
+        && coordinator_status.wifi_status.connected) {
+        services->wifi_coordinator_status = coordinator_status;
+        services->wifi_auto_connect_started = true;
+        s_wifi_auto_connect_task = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    services->wifi_auto_connect_started = true;
+    if (ink_wifi_coordinator_request(&request, &result) != ESP_OK
+        || result != INK_WIFI_COORDINATOR_RESULT_OK) {
+        (void)ink_wifi_coordinator_get_status(&services->wifi_coordinator_status);
+        ESP_LOGI(
+            TAG,
+            "wifi auto connect skipped or failed: coordinator_result=%d last_error=%s",
+            (int)result,
+            esp_err_to_name(services->wifi_coordinator_status.wifi_status.last_error));
+    } else {
+        if (ink_wifi_coordinator_get_status(&services->wifi_coordinator_status) == ESP_OK) {
+            ESP_LOGI(TAG, "wifi auto connected: %s", services->wifi_coordinator_status.wifi_status.ssid);
+        }
+    }
+
+    s_wifi_auto_connect_task = NULL;
+    vTaskDelete(NULL);
+}
+
+esp_err_t ink_system_services_start_wifi_auto_connect(ink_system_services_t *services)
+{
+    if (services == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (services->wifi_auto_connect_started || s_wifi_auto_connect_task != NULL) {
+        return ESP_OK;
+    }
+    if (!services->wifi_ready || !services->wifi_coordinator_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xTaskCreate(
+            wifi_auto_connect_task,
+            "WifiAutoConn",
+            INK_WIFI_AUTO_CONNECT_TASK_STACK,
+            services,
+            2,
+            &s_wifi_auto_connect_task) != pdPASS) {
+        s_wifi_auto_connect_task = NULL;
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
@@ -256,5 +371,14 @@ bool ink_system_services_self_test(void)
         && services.mailbox.native_snapshot_buffers[0] == services.native_snapshot_a
         && services.mailbox.native_snapshot_buffers[1] == services.native_snapshot_b
         && services.photo_catalog.initialized
-        && services.usb_msc.state == INK_USB_MSC_STATE_DISABLED;
+        && ink_time_service_self_test()
+        && services.usb_msc.state == INK_USB_MSC_STATE_DISABLED
+        && !services.wifi_coordinator_ready
+        && !services.wifi_auto_connect_started
+        && wifi_auto_connect_stack_budget_self_test();
+}
+
+static bool wifi_auto_connect_stack_budget_self_test(void)
+{
+    return INK_WIFI_AUTO_CONNECT_TASK_STACK >= 6144;
 }

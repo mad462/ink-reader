@@ -12,6 +12,7 @@ idf_component_register(
         "ink_app_fast_browse.c"
         "ink_photo_bmp_parser.c"
         "ink_photo_catalog.c"
+        "ink_time_service.c"
         "ink_app_render.c"
         "ink_app_startup.c"
         "ink_system_services.c"
@@ -30,6 +31,7 @@ idf_component_register(
         ink_hw
         ink_net
         ink_wifi_setup
+        lwip
         esp_tinyusb
         vfs
 )

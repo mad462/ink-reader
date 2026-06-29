@@ -14,7 +14,9 @@
 #include "ink_photo_catalog.h"
 #include "ink_app_state.h"
 #include "ink_runtime_shell.h"
+#include "ink_time_service.h"
 #include "ink_usb_msc_service.h"
+#include "ink_wifi_coordinator.h"
 
 typedef struct ink_system_services {
     QueueHandle_t ui_queue;
@@ -29,9 +31,13 @@ typedef struct ink_system_services {
     ink_cpfont_t footer_font;
     ink_cpfont_t reader_font;
     ink_photo_catalog_t photo_catalog;
+    ink_time_service_t time_service;
     ink_usb_msc_service_t usb_msc;
     bool tf_ready;
     bool wifi_ready;
+    bool wifi_coordinator_ready;
+    bool wifi_auto_connect_started;
+    ink_wifi_coordinator_status_t wifi_coordinator_status;
     portMUX_TYPE latest_buttons_lock;
     ink_runtime_shell_button_state_t latest_buttons;
     uint32_t latest_buttons_ms;
@@ -61,4 +67,9 @@ bool ink_system_services_get_latest_button_edge_ms(
     ink_runtime_shell_button_t button,
     uint32_t *pressed_ms_out,
     uint32_t *released_ms_out);
+void ink_system_services_get_time_badge(
+    const ink_system_services_t *services,
+    char *dst,
+    size_t dst_size);
+esp_err_t ink_system_services_start_wifi_auto_connect(ink_system_services_t *services);
 bool ink_system_services_self_test(void);

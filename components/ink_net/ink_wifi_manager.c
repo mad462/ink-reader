@@ -494,6 +494,24 @@ esp_err_t ink_wifi_manager_connect_best(uint32_t timeout_ms, ink_wifi_status_t *
     }
     ESP_LOGI(TAG, "connect best ssid=%s connected=%d ret=%s", best.ssid, s_status.connected ? 1 : 0, esp_err_to_name(s_status.last_error));
     return s_status.last_error;
+esp_err_t ink_wifi_manager_disconnect(void)
+{
+    if (!s_initialized) {
+        return ESP_OK;
+    }
+
+    esp_err_t ret = esp_wifi_disconnect();
+    if (ret == ESP_ERR_WIFI_NOT_CONNECT || ret == ESP_ERR_WIFI_CONN) {
+        ret = ESP_OK;
+    }
+
+    s_status.connected = false;
+    if (ret == ESP_OK) {
+        s_status.last_error = ESP_OK;
+    }
+    return ret;
+}
+
 }
 
 esp_err_t ink_wifi_manager_status(ink_wifi_status_t *out_status)

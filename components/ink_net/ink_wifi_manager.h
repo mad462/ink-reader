@@ -45,4 +45,5 @@ esp_err_t ink_wifi_manager_scan(ink_wifi_scan_list_t *out_list);
 esp_err_t ink_wifi_manager_connect_password(const char *ssid, const char *password, uint32_t timeout_ms, ink_wifi_status_t *out_status);
 esp_err_t ink_wifi_manager_connect_saved(const char *ssid, uint32_t timeout_ms, ink_wifi_status_t *out_status);
 esp_err_t ink_wifi_manager_connect_best(uint32_t timeout_ms, ink_wifi_status_t *out_status);
+esp_err_t ink_wifi_manager_disconnect(void);
 esp_err_t ink_wifi_manager_status(ink_wifi_status_t *out_status);
