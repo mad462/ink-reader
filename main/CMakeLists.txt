@@ -22,6 +22,8 @@ idf_component_register(
         "ink_tuning_lab.c"
         "ink_app_ui.c"
         "voice_note/voice_note_service.c"
+        "voice_note/voice_note_store.c"
+        "voice_note/voice_note_model.c"
     INCLUDE_DIRS
         "."
     REQUIRES

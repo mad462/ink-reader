@@ -21,4 +21,6 @@ bool voice_note_service_copy_note_summaries(
     size_t *count_out);
 bool voice_note_service_load_note(const char *note_id, voice_note_note_t *out_note);
 bool voice_note_service_tick(uint32_t now_ms);
+bool voice_note_store_self_test(void);
+bool voice_note_model_self_test(void);
 bool voice_note_service_self_test(void);
