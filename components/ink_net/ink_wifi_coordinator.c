@@ -39,12 +39,22 @@ typedef struct {
     SemaphoreHandle_t done_sem;
 } ink_wifi_coordinator_request_slot_t;
 
+typedef esp_err_t (*ink_wifi_coordinator_connect_saved_fn_t)(
+    const char *ssid,
+    uint32_t timeout_ms,
+    ink_wifi_status_t *out_status);
+typedef esp_err_t (*ink_wifi_coordinator_connect_best_fn_t)(
+    uint32_t timeout_ms,
+    ink_wifi_status_t *out_status);
+
 static QueueHandle_t s_request_queue;
 static TaskHandle_t s_worker_task;
 static SemaphoreHandle_t s_state_lock;
 static ink_wifi_coordinator_status_t s_status;
 static ink_wifi_coordinator_lease_slot_t s_leases[INK_WIFI_COORDINATOR_MAX_LEASES];
 static ink_wifi_coordinator_request_slot_t s_request_slots[INK_WIFI_COORDINATOR_QUEUE_LEN];
+static ink_wifi_coordinator_connect_saved_fn_t s_connect_saved_fn = ink_wifi_manager_connect_saved;
+static ink_wifi_coordinator_connect_best_fn_t s_connect_best_fn = ink_wifi_manager_connect_best;
 
 static esp_err_t coordinator_ensure_runtime_primitives(void);
 static void coordinator_lock(void);
@@ -76,6 +86,9 @@ static void coordinator_maybe_disconnect_idle(void);
 static int coordinator_acquire_request_slot(void);
 static void coordinator_release_request_slot(int slot_index);
 static void coordinator_worker_task(void *arg);
+static esp_err_t coordinator_self_test_connect_best_not_found(
+    uint32_t timeout_ms,
+    ink_wifi_status_t *out_status);
 
 static esp_err_t coordinator_ensure_runtime_primitives(void)
 {
@@ -92,6 +105,20 @@ static esp_err_t coordinator_ensure_runtime_primitives(void)
     }
 
     return ESP_OK;
+}
+
+static esp_err_t coordinator_self_test_connect_best_not_found(
+    uint32_t timeout_ms,
+    ink_wifi_status_t *out_status)
+{
+    (void)timeout_ms;
+
+    if (out_status != NULL) {
+        memset(out_status, 0, sizeof(*out_status));
+        out_status->last_error = ESP_ERR_NOT_FOUND;
+    }
+
+    return ESP_ERR_NOT_FOUND;
 }
 
 static void coordinator_lock(void)
@@ -214,9 +241,9 @@ static ink_wifi_coordinator_result_t coordinator_run_connect_saved(
     ink_wifi_status_t status = {0};
 
     if (request->best_effort_saved) {
-        err = ink_wifi_manager_connect_best(request->timeout_ms, &status);
+        err = s_connect_best_fn(request->timeout_ms, &status);
     } else {
-        err = ink_wifi_manager_connect_saved(request->ssid, request->timeout_ms, &status);
+        err = s_connect_saved_fn(request->ssid, request->timeout_ms, &status);
     }
 
     if (request->status_out != NULL) {
@@ -288,7 +315,7 @@ static ink_wifi_coordinator_result_t coordinator_run_ensure_connected(
         return coordinator_complete_keep_alive(request, INK_WIFI_COORDINATOR_RESULT_OK);
     }
 
-    err = ink_wifi_manager_connect_best(request->timeout_ms, &status);
+    err = s_connect_best_fn(request->timeout_ms, &status);
     if (request->status_out != NULL) {
         *request->status_out = status;
     }
@@ -618,10 +645,20 @@ esp_err_t ink_wifi_coordinator_get_status(ink_wifi_coordinator_status_t *out_sta
 bool ink_wifi_coordinator_self_test(void)
 {
     ink_wifi_coordinator_status_t status;
+    ink_wifi_coordinator_request_t request = {
+        .type = INK_WIFI_COORDINATOR_REQUEST_CONNECT_SAVED,
+        .best_effort_saved = true,
+        .timeout_ms = 1,
+    };
+    ink_wifi_coordinator_connect_best_fn_t saved_connect_best_fn = s_connect_best_fn;
+    ink_wifi_coordinator_result_t best_effort_result;
 
     if (ink_wifi_coordinator_init() != ESP_OK) {
         return false;
     }
+    s_connect_best_fn = coordinator_self_test_connect_best_not_found;
+    best_effort_result = coordinator_run_connect_saved(&request, NULL);
+    s_connect_best_fn = saved_connect_best_fn;
     if (!coordinator_add_lease(INK_WIFI_COORDINATOR_OWNER_TIME_SYNC)) {
         return false;
     }
@@ -648,7 +685,7 @@ bool ink_wifi_coordinator_self_test(void)
     if (ink_wifi_coordinator_get_status(&status) != ESP_OK) {
         return false;
     }
-    if (coordinator_result_from_connect_error(ESP_ERR_NOT_FOUND) != INK_WIFI_COORDINATOR_RESULT_NO_CREDENTIAL) {
+    if (best_effort_result != INK_WIFI_COORDINATOR_RESULT_NO_CREDENTIAL) {
         return false;
     }
     if (coordinator_result_from_connect_error(ESP_ERR_TIMEOUT) != INK_WIFI_COORDINATOR_RESULT_TIMEOUT) {
