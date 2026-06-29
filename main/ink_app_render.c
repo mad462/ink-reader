@@ -1608,10 +1608,12 @@ static void draw_voice_note_full_text_view(
     static char s_lines[12][VOICE_NOTE_TEXT_LENGTH];
     char overlay_meta[24];
     char meta_line[64];
+    char playback_line[64];
     const char *text = "暂无识别文本";
     size_t line_count = 0U;
     const int text_x = 24;
     const int meta_y = 104;
+    const int playback_y = 126;
     const int text_y0 = 154;
     const int line_gap = 50;
     const int max_width_px = EPD_GDEY0426T82_WIDTH - 48;
@@ -1661,11 +1663,25 @@ static void draw_voice_note_full_text_view(
             text = note->last_error;
         }
         compose_voice_note_meta_line(note, meta_line, sizeof(meta_line));
+        if (strcmp(state->snapshot.playback_note_id, note->id) == 0) {
+            (void)voice_note_model_compose_playback_line(
+                state->snapshot.playback_state,
+                state->snapshot.playback_total_ms,
+                state->snapshot.playback_position_ms,
+                playback_line,
+                sizeof(playback_line));
+        } else {
+            playback_line[0] = '\0';
+        }
     } else {
         snprintf(meta_line, sizeof(meta_line), "%s", "时间未同步  0s  未完成");
+        playback_line[0] = '\0';
     }
 
     launcher_draw_text(buffer, meta_font, text_x, meta_y, meta_line, meta_scale_divisor, false);
+    if (playback_line[0] != '\0') {
+        launcher_draw_text(buffer, meta_font, text_x, playback_y, playback_line, meta_scale_divisor, false);
+    }
 
     if (!voice_note_model_normalize_text(text, s_wrapped_text, sizeof(s_wrapped_text))) {
         snprintf(s_wrapped_text, sizeof(s_wrapped_text), "%s", text);

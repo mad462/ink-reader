@@ -46,6 +46,14 @@ typedef enum {
     VOICE_NOTE_JOB_INVALID_SHORT_RECORDING,
 } voice_note_job_state_t;
 
+typedef enum {
+    VOICE_NOTE_PLAYBACK_IDLE = 0,
+    VOICE_NOTE_PLAYBACK_PLAYING,
+    VOICE_NOTE_PLAYBACK_PAUSED,
+    VOICE_NOTE_PLAYBACK_COMPLETED,
+    VOICE_NOTE_PLAYBACK_FAILED,
+} voice_note_playback_state_t;
+
 typedef struct {
     char id[VOICE_NOTE_ID_LENGTH];
     uint32_t created_at_epoch_s;
@@ -64,6 +72,7 @@ typedef struct {
 
 typedef struct {
     voice_note_job_state_t state;
+    voice_note_playback_state_t playback_state;
     uint32_t sequence;
     bool busy;
     bool stop_due_to_limit;
@@ -75,4 +84,7 @@ typedef struct {
     size_t note_count;
     char status_text[VOICE_NOTE_STATUS_COPY_LENGTH];
     char active_note_id[VOICE_NOTE_ID_LENGTH];
+    char playback_note_id[VOICE_NOTE_ID_LENGTH];
+    uint32_t playback_total_ms;
+    uint32_t playback_position_ms;
 } voice_note_service_snapshot_t;

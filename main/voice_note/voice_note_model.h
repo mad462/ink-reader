@@ -38,6 +38,12 @@ bool voice_note_model_compose_meta_line(
     voice_note_status_t status,
     char *buffer,
     size_t buffer_size);
+bool voice_note_model_compose_playback_line(
+    voice_note_playback_state_t state,
+    uint32_t total_ms,
+    uint32_t position_ms,
+    char *buffer,
+    size_t buffer_size);
 bool voice_note_model_normalize_text(
     const char *src,
     char *dst,

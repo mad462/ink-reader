@@ -10,6 +10,7 @@
 #include "driver/gpio.h"
 #include "driver/i2s_common.h"
 #include "driver/i2s_pdm.h"
+#include "driver/i2s_std.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -29,6 +30,9 @@ static const char *TAG = "voice_note_service";
 enum {
     VOICE_NOTE_PDM_CLK_GPIO = GPIO_NUM_17,
     VOICE_NOTE_PDM_DATA_GPIO = GPIO_NUM_18,
+    VOICE_NOTE_SPK_DOUT_GPIO = GPIO_NUM_8,
+    VOICE_NOTE_SPK_LRCLK_GPIO = GPIO_NUM_13,
+    VOICE_NOTE_SPK_BCLK_GPIO = GPIO_NUM_14,
     VOICE_NOTE_READ_SAMPLES = 1024U,
     VOICE_NOTE_READ_TIMEOUT_MS = 20U,
     VOICE_NOTE_PRIME_READS = 4U,
@@ -38,6 +42,9 @@ enum {
     VOICE_NOTE_PDM_AMPLIFY_NUM = 2U,
     VOICE_NOTE_CAPTURE_TASK_STACK_BYTES = 4096U,
     VOICE_NOTE_CAPTURE_TASK_PRIORITY = 6U,
+    VOICE_NOTE_PLAYBACK_TASK_STACK_BYTES = 4096U,
+    VOICE_NOTE_PLAYBACK_TASK_PRIORITY = 5U,
+    VOICE_NOTE_PLAYBACK_FRAMES_PER_CHUNK = 256U,
 };
 
 static voice_note_service_snapshot_t s_snapshot;
@@ -53,11 +60,27 @@ static size_t s_wav_capacity;
 static bool s_rx_enabled;
 static bool s_i2s_ready;
 static TaskHandle_t s_capture_task_handle;
+static i2s_chan_handle_t s_tx_chan;
+static bool s_tx_enabled;
+static bool s_tx_ready;
+static TaskHandle_t s_playback_task_handle;
+static int16_t *s_playback_mono_buffer;
+static int16_t *s_playback_stereo_buffer;
 static portMUX_TYPE s_capture_lock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE s_playback_lock = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool s_capture_stop_requested;
 static volatile bool s_capture_finalize_pending;
 static volatile bool s_capture_error_pending;
 static uint32_t s_last_recording_ui_second;
+static char s_playback_wav_path[VOICE_NOTE_PATH_LENGTH];
+static volatile bool s_playback_start_requested;
+static volatile bool s_playback_stop_requested;
+static volatile bool s_playback_pause_requested;
+static volatile bool s_playback_error_pending;
+static volatile bool s_playback_completed_pending;
+static volatile size_t s_playback_pcm_bytes_total;
+static volatile size_t s_playback_pcm_bytes_played;
+static uint32_t s_last_playback_ui_second;
 
 static void voice_note_copy_text(char *dst, size_t dst_size, const char *src);
 static void voice_note_set_status_from_job(voice_note_job_state_t state);
@@ -70,6 +93,14 @@ static esp_err_t voice_note_enable_capture_io(void);
 static void voice_note_disable_capture_io(void);
 static void voice_note_prime_capture_io(void);
 static void voice_note_capture_task(void *arg);
+static esp_err_t voice_note_ensure_playback_buffers(void);
+static esp_err_t voice_note_ensure_tx_ready(void);
+static void voice_note_release_tx(void);
+static esp_err_t voice_note_ensure_playback_task(void);
+static void voice_note_playback_task(void *arg);
+static bool voice_note_start_playback_locked(const voice_note_note_t *note, uint32_t now_ms);
+static void voice_note_set_playback_idle(void);
+static uint32_t voice_note_playback_position_ms(void);
 static esp_err_t voice_note_write_file(const char *path, const uint8_t *data, size_t length);
 static esp_err_t voice_note_prepare_processing_note(uint32_t now_ms);
 static void voice_note_finalize_capture(uint32_t now_ms);
@@ -131,6 +162,7 @@ static void voice_note_reset_to_idle(void)
     s_capture_error_pending = false;
     memset(&s_active_note, 0, sizeof(s_active_note));
     memset(s_snapshot.active_note_id, 0, sizeof(s_snapshot.active_note_id));
+    voice_note_set_playback_idle();
     voice_note_set_status_from_job(VOICE_NOTE_JOB_IDLE);
 }
 
@@ -169,6 +201,28 @@ static esp_err_t voice_note_ensure_audio_buffers(void)
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
     if (s_pcm_buffer == NULL || s_wav_buffer == NULL || s_read_buffer == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t voice_note_ensure_playback_buffers(void)
+{
+    if (s_playback_mono_buffer != NULL && s_playback_stereo_buffer != NULL) {
+        return ESP_OK;
+    }
+
+    if (s_playback_mono_buffer == NULL) {
+        s_playback_mono_buffer = heap_caps_malloc(
+            VOICE_NOTE_PLAYBACK_FRAMES_PER_CHUNK * sizeof(int16_t),
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    if (s_playback_stereo_buffer == NULL) {
+        s_playback_stereo_buffer = heap_caps_malloc(
+            VOICE_NOTE_PLAYBACK_FRAMES_PER_CHUNK * 2U * sizeof(int16_t),
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    if (s_playback_mono_buffer == NULL || s_playback_stereo_buffer == NULL) {
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
@@ -235,6 +289,53 @@ static void voice_note_release_i2s(void)
     s_i2s_ready = false;
 }
 
+static esp_err_t voice_note_ensure_tx_ready(void)
+{
+    if (s_tx_ready) {
+        return ESP_OK;
+    }
+
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    ESP_RETURN_ON_ERROR(i2s_new_channel(&chan_cfg, &s_tx_chan, NULL), TAG, "alloc tx channel failed");
+
+    const i2s_std_config_t std_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(VOICE_NOTE_SAMPLE_RATE),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = {
+            .mclk = I2S_GPIO_UNUSED,
+            .bclk = VOICE_NOTE_SPK_BCLK_GPIO,
+            .ws = VOICE_NOTE_SPK_LRCLK_GPIO,
+            .dout = VOICE_NOTE_SPK_DOUT_GPIO,
+            .din = I2S_GPIO_UNUSED,
+            .invert_flags = {
+                .mclk_inv = false,
+                .bclk_inv = false,
+                .ws_inv = false,
+            },
+        },
+    };
+
+    if (i2s_channel_init_std_mode(s_tx_chan, &std_cfg) != ESP_OK) {
+        voice_note_release_tx();
+        ESP_RETURN_ON_ERROR(ESP_FAIL, TAG, "init tx failed");
+    }
+    s_tx_ready = true;
+    return ESP_OK;
+}
+
+static void voice_note_release_tx(void)
+{
+    if (s_tx_enabled && s_tx_chan != NULL) {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_disable(s_tx_chan));
+        s_tx_enabled = false;
+    }
+    if (s_tx_chan != NULL) {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_del_channel(s_tx_chan));
+        s_tx_chan = NULL;
+    }
+    s_tx_ready = false;
+}
+
 static esp_err_t voice_note_ensure_capture_task(void)
 {
     if (s_capture_task_handle != NULL) {
@@ -254,6 +355,49 @@ static esp_err_t voice_note_ensure_capture_task(void)
     }
 
     return ESP_OK;
+}
+
+static esp_err_t voice_note_ensure_playback_task(void)
+{
+    if (s_playback_task_handle != NULL) {
+        return ESP_OK;
+    }
+
+    if (xTaskCreate(
+            voice_note_playback_task,
+            "VoiceNotePlay",
+            VOICE_NOTE_PLAYBACK_TASK_STACK_BYTES,
+            NULL,
+            VOICE_NOTE_PLAYBACK_TASK_PRIORITY,
+            &s_playback_task_handle)
+        != pdPASS) {
+        s_playback_task_handle = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    return ESP_OK;
+}
+
+static void voice_note_set_playback_idle(void)
+{
+    s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_IDLE;
+    memset(s_snapshot.playback_note_id, 0, sizeof(s_snapshot.playback_note_id));
+    s_snapshot.playback_total_ms = 0U;
+    s_snapshot.playback_position_ms = 0U;
+    s_playback_start_requested = false;
+    s_playback_stop_requested = false;
+    s_playback_pause_requested = false;
+    s_playback_error_pending = false;
+    s_playback_completed_pending = false;
+    s_playback_pcm_bytes_total = 0U;
+    s_playback_pcm_bytes_played = 0U;
+    s_last_playback_ui_second = 0U;
+    memset(s_playback_wav_path, 0, sizeof(s_playback_wav_path));
+}
+
+static uint32_t voice_note_playback_position_ms(void)
+{
+    return voice_note_audio_pcm_duration_ms((uint32_t)s_playback_pcm_bytes_played);
 }
 
 static esp_err_t voice_note_enable_capture_io(void)
@@ -296,6 +440,39 @@ static void voice_note_prime_capture_io(void)
             break;
         }
     }
+}
+
+static bool voice_note_start_playback_locked(const voice_note_note_t *note, uint32_t now_ms)
+{
+    if (note == NULL || note->id[0] == '\0' || note->wav_path[0] == '\0') {
+        return false;
+    }
+    if (voice_note_ensure_playback_buffers() != ESP_OK
+        || voice_note_ensure_tx_ready() != ESP_OK
+        || voice_note_ensure_playback_task() != ESP_OK) {
+        s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_FAILED;
+        return false;
+    }
+
+    s_playback_stop_requested = false;
+    s_playback_pause_requested = false;
+    s_playback_error_pending = false;
+    s_playback_completed_pending = false;
+    s_playback_start_requested = true;
+    s_playback_pcm_bytes_played = 0U;
+    s_playback_pcm_bytes_total = 0U;
+    s_last_playback_ui_second = 0U;
+    s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_PLAYING;
+    s_snapshot.playback_total_ms = note->duration_ms;
+    s_snapshot.playback_position_ms = 0U;
+    voice_note_copy_text(
+        s_snapshot.playback_note_id,
+        sizeof(s_snapshot.playback_note_id),
+        note->id);
+    snprintf(s_playback_wav_path, sizeof(s_playback_wav_path), "%s", note->wav_path);
+    (void)now_ms;
+    xTaskNotifyGive(s_playback_task_handle);
+    return true;
 }
 
 static void voice_note_capture_task(void *arg)
@@ -383,6 +560,149 @@ static void voice_note_capture_task(void *arg)
                 voice_note_disable_capture_io();
                 break;
             }
+        }
+    }
+}
+
+static void voice_note_playback_task(void *arg)
+{
+    FILE *fp = NULL;
+
+    (void)arg;
+
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        for (;;) {
+            if (s_playback_start_requested) {
+                uint8_t wav_header[VOICE_NOTE_WAV_HEADER_BYTES];
+                size_t header_read = 0U;
+                long file_size = 0L;
+
+                if (fp != NULL) {
+                    fclose(fp);
+                    fp = NULL;
+                }
+                if (s_tx_enabled && s_tx_chan != NULL) {
+                    ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_disable(s_tx_chan));
+                    s_tx_enabled = false;
+                }
+
+                fp = fopen(s_playback_wav_path, "rb");
+                if (fp == NULL) {
+                    s_playback_start_requested = false;
+                    s_playback_error_pending = true;
+                    break;
+                }
+                if (fseek(fp, 0L, SEEK_END) != 0) {
+                    s_playback_start_requested = false;
+                    s_playback_error_pending = true;
+                    break;
+                }
+                file_size = ftell(fp);
+                if (file_size <= (long)VOICE_NOTE_WAV_HEADER_BYTES || fseek(fp, 0L, SEEK_SET) != 0) {
+                    s_playback_start_requested = false;
+                    s_playback_error_pending = true;
+                    break;
+                }
+                header_read = fread(wav_header, 1U, sizeof(wav_header), fp);
+                if (header_read != sizeof(wav_header)
+                    || memcmp(wav_header, "RIFF", 4) != 0
+                    || memcmp(wav_header + 8, "WAVE", 4) != 0) {
+                    s_playback_start_requested = false;
+                    s_playback_error_pending = true;
+                    break;
+                }
+                if (!s_tx_enabled) {
+                    if (i2s_channel_enable(s_tx_chan) != ESP_OK) {
+                        s_playback_start_requested = false;
+                        s_playback_error_pending = true;
+                        break;
+                    }
+                    s_tx_enabled = true;
+                }
+                s_playback_pcm_bytes_total = (size_t)file_size - VOICE_NOTE_WAV_HEADER_BYTES;
+                s_playback_pcm_bytes_played = 0U;
+                s_playback_start_requested = false;
+            }
+
+            if (s_playback_stop_requested) {
+                if (fp != NULL) {
+                    fclose(fp);
+                    fp = NULL;
+                }
+                if (s_tx_enabled && s_tx_chan != NULL) {
+                    ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_disable(s_tx_chan));
+                    s_tx_enabled = false;
+                }
+                s_playback_stop_requested = false;
+                break;
+            }
+
+            if (s_playback_pause_requested) {
+                if (s_tx_enabled && s_tx_chan != NULL) {
+                    ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_disable(s_tx_chan));
+                    s_tx_enabled = false;
+                }
+                ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+                if (!s_playback_pause_requested && !s_tx_enabled && s_tx_chan != NULL) {
+                    if (i2s_channel_enable(s_tx_chan) == ESP_OK) {
+                        s_tx_enabled = true;
+                    } else {
+                        s_playback_error_pending = true;
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            if (fp == NULL) {
+                break;
+            }
+
+            {
+                const size_t mono_samples_read = fread(
+                    s_playback_mono_buffer,
+                    sizeof(int16_t),
+                    VOICE_NOTE_PLAYBACK_FRAMES_PER_CHUNK,
+                    fp);
+                size_t bytes_written = 0U;
+
+                if (mono_samples_read == 0U) {
+                    s_playback_completed_pending = true;
+                    break;
+                }
+
+                for (size_t i = 0U; i < mono_samples_read; ++i) {
+                    const int16_t sample = s_playback_mono_buffer[i];
+                    s_playback_stereo_buffer[i * 2U] = sample;
+                    s_playback_stereo_buffer[i * 2U + 1U] = sample;
+                }
+
+                if (i2s_channel_write(
+                        s_tx_chan,
+                        s_playback_stereo_buffer,
+                        mono_samples_read * 2U * sizeof(int16_t),
+                        &bytes_written,
+                        pdMS_TO_TICKS(100)) != ESP_OK) {
+                    s_playback_error_pending = true;
+                    break;
+                }
+
+                portENTER_CRITICAL(&s_playback_lock);
+                s_playback_pcm_bytes_played += mono_samples_read * sizeof(int16_t);
+                portEXIT_CRITICAL(&s_playback_lock);
+            }
+        }
+
+        if (fp != NULL && (s_playback_completed_pending || s_playback_error_pending)) {
+            fclose(fp);
+            fp = NULL;
+        }
+        if (s_tx_enabled && s_tx_chan != NULL
+            && (s_playback_completed_pending || s_playback_error_pending)) {
+            ESP_ERROR_CHECK_WITHOUT_ABORT(i2s_channel_disable(s_tx_chan));
+            s_tx_enabled = false;
         }
     }
 }
@@ -816,6 +1136,57 @@ bool voice_note_service_stop_capture(uint32_t now_ms)
     return true;
 }
 
+bool voice_note_service_toggle_playback(const char *note_id, uint32_t now_ms)
+{
+    voice_note_note_t note;
+
+    if (note_id == NULL || note_id[0] == '\0' || s_snapshot.busy) {
+        return false;
+    }
+
+    if (s_snapshot.playback_state == VOICE_NOTE_PLAYBACK_PLAYING
+        && strcmp(s_snapshot.playback_note_id, note_id) == 0) {
+        s_playback_pause_requested = true;
+        s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_PAUSED;
+        if (s_playback_task_handle != NULL) {
+            xTaskNotifyGive(s_playback_task_handle);
+        }
+        return true;
+    }
+
+    if (s_snapshot.playback_state == VOICE_NOTE_PLAYBACK_PAUSED
+        && strcmp(s_snapshot.playback_note_id, note_id) == 0) {
+        s_playback_pause_requested = false;
+        s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_PLAYING;
+        if (s_playback_task_handle != NULL) {
+            xTaskNotifyGive(s_playback_task_handle);
+        }
+        return true;
+    }
+
+    if (!voice_note_store_find_note(note_id, &note)) {
+        return false;
+    }
+
+    (void)voice_note_service_stop_playback();
+    return voice_note_start_playback_locked(&note, now_ms);
+}
+
+bool voice_note_service_stop_playback(void)
+{
+    if (s_snapshot.playback_state == VOICE_NOTE_PLAYBACK_IDLE) {
+        return false;
+    }
+
+    s_playback_stop_requested = true;
+    s_playback_pause_requested = false;
+    if (s_playback_task_handle != NULL) {
+        xTaskNotifyGive(s_playback_task_handle);
+    }
+    voice_note_set_playback_idle();
+    return true;
+}
+
 bool voice_note_service_retry_note(const char *note_id, uint32_t now_ms)
 {
     FILE *fp = NULL;
@@ -870,6 +1241,9 @@ bool voice_note_service_delete_note(const char *note_id)
 {
     if (note_id == NULL) {
         return false;
+    }
+    if (strcmp(s_snapshot.playback_note_id, note_id) == 0) {
+        (void)voice_note_service_stop_playback();
     }
     if (voice_note_store_delete_note(note_id) != ESP_OK) {
         return false;
@@ -932,6 +1306,28 @@ bool voice_note_service_tick(uint32_t now_ms)
 {
     time_t current_time = time(NULL);
     uint32_t now_epoch_s = current_time > 1735689600 ? (uint32_t)current_time : 0U;
+
+    if (s_snapshot.playback_state == VOICE_NOTE_PLAYBACK_PLAYING
+        || s_snapshot.playback_state == VOICE_NOTE_PLAYBACK_PAUSED) {
+        const uint32_t position_ms = voice_note_playback_position_ms();
+        const uint32_t position_second = position_ms / 1000U;
+
+        s_snapshot.playback_position_ms = position_ms;
+        if (position_second != s_last_playback_ui_second) {
+            s_last_playback_ui_second = position_second;
+        }
+    }
+    if (s_playback_completed_pending) {
+        s_playback_completed_pending = false;
+        s_snapshot.playback_position_ms = s_snapshot.playback_total_ms;
+        s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_COMPLETED;
+        return true;
+    }
+    if (s_playback_error_pending) {
+        s_playback_error_pending = false;
+        s_snapshot.playback_state = VOICE_NOTE_PLAYBACK_FAILED;
+        return true;
+    }
 
     if (s_snapshot.state == VOICE_NOTE_JOB_RECORDING) {
         uint32_t duration_ms = 0U;
@@ -1128,6 +1524,11 @@ bool voice_note_service_self_test(void)
         return false;
     }
     if (strcmp(snapshot.status_text, "无效标签，请重新录入") != 0) {
+        return false;
+    }
+    if (snapshot.playback_state != VOICE_NOTE_PLAYBACK_IDLE
+        || snapshot.playback_position_ms != 0U
+        || snapshot.playback_total_ms != 0U) {
         return false;
     }
     if (s_capture.captured_bytes < 2048U) {

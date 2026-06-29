@@ -440,16 +440,26 @@ static bool voice_note_input(
     launcher = ink_system_runtime_find_app_by_id(runtime, "launcher");
 
     if (state->full_text_open) {
+        note_index = visible_note_index_from_selection(state, state->selected_index);
         switch (event->kind) {
-            case INK_APP_EVENT_BUTTON_BACK:
             case INK_APP_EVENT_BUTTON_CONFIRM:
+                if (note_index >= state->visible_note_count) {
+                    return false;
+                }
+                return voice_note_service_toggle_playback(
+                    state->visible_notes[note_index].id,
+                    event->event_ms);
+            case INK_APP_EVENT_BUTTON_BACK:
+                (void)voice_note_service_stop_playback();
                 state->full_text_open = false;
                 return true;
             case INK_APP_EVENT_NAV_PREVIOUS:
             case INK_APP_EVENT_TILT_PREVIOUS:
+                (void)voice_note_service_stop_playback();
                 return select_adjacent_note_from_current(state, -1);
             case INK_APP_EVENT_NAV_NEXT:
             case INK_APP_EVENT_TILT_NEXT:
+                (void)voice_note_service_stop_playback();
                 return select_adjacent_note_from_current(state, 1);
             default:
                 return false;
@@ -513,6 +523,7 @@ static bool voice_note_input(
             return move_selection(state, 1);
         case INK_APP_EVENT_BUTTON_CONFIRM:
             if (current_selection_is_new_card(state)) {
+                (void)voice_note_service_stop_playback();
                 if (voice_note_service_start_capture(event->event_ms)) {
                     voice_note_sync_from_service(state);
                     return true;
@@ -688,6 +699,11 @@ bool ink_voice_note_app_self_test(void)
     if (!app->input(&runtime, app, &event)
         || !s_voice_note_state.full_text_open
         || s_voice_note_state.selected_index != 1U) {
+        return false;
+    }
+
+    event.kind = INK_APP_EVENT_BUTTON_CONFIRM;
+    if (!app->input(&runtime, app, &event) || !s_voice_note_state.full_text_open) {
         return false;
     }
 

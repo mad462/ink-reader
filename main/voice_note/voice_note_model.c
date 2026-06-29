@@ -32,6 +32,11 @@ static bool is_ascii_space(char c)
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
+static uint32_t clamp_u32(uint32_t value, uint32_t max_value)
+{
+    return value > max_value ? max_value : value;
+}
+
 bool voice_note_model_build_note_paths(
     uint32_t epoch_s,
     uint32_t sequence,
@@ -201,6 +206,67 @@ bool voice_note_model_compose_meta_line(
     return true;
 }
 
+bool voice_note_model_compose_playback_line(
+    voice_note_playback_state_t state,
+    uint32_t total_ms,
+    uint32_t position_ms,
+    char *buffer,
+    size_t buffer_size)
+{
+    const char *label = "";
+    uint32_t remaining_ms = 0U;
+    uint32_t remaining_s = 0U;
+    uint32_t minutes = 0U;
+    uint32_t seconds = 0U;
+
+    if (buffer == NULL || buffer_size == 0U) {
+        return false;
+    }
+
+    switch (state) {
+        case VOICE_NOTE_PLAYBACK_PLAYING:
+            label = "播放中";
+            break;
+        case VOICE_NOTE_PLAYBACK_PAUSED:
+            label = "已暂停";
+            break;
+        case VOICE_NOTE_PLAYBACK_COMPLETED:
+            label = "播放完成";
+            break;
+        case VOICE_NOTE_PLAYBACK_FAILED:
+            label = "播放失败";
+            break;
+        case VOICE_NOTE_PLAYBACK_IDLE:
+        default:
+            buffer[0] = '\0';
+            return false;
+    }
+
+    if (state == VOICE_NOTE_PLAYBACK_FAILED) {
+        return snprintf(buffer, buffer_size, "%s", label) > 0;
+    }
+
+    if (state == VOICE_NOTE_PLAYBACK_COMPLETED) {
+        remaining_ms = 0U;
+    } else {
+        remaining_ms = total_ms > clamp_u32(position_ms, total_ms)
+            ? (total_ms - clamp_u32(position_ms, total_ms))
+            : 0U;
+    }
+    remaining_s = (remaining_ms + 999U) / 1000U;
+    minutes = remaining_s / 60U;
+    seconds = remaining_s % 60U;
+
+    return snprintf(
+               buffer,
+               buffer_size,
+               "%s  剩余 %02lu:%02lu",
+               label,
+               (unsigned long)minutes,
+               (unsigned long)seconds)
+        > 0;
+}
+
 bool voice_note_model_normalize_text(
     const char *src,
     char *dst,
@@ -334,6 +400,17 @@ bool voice_note_model_self_test(void)
         return false;
     }
     if (strcmp(meta_text, "01-01 08:00  3s  已完成") != 0) {
+        return false;
+    }
+    if (!voice_note_model_compose_playback_line(
+            VOICE_NOTE_PLAYBACK_PLAYING,
+            12000U,
+            3000U,
+            meta_text,
+            sizeof(meta_text))) {
+        return false;
+    }
+    if (strcmp(meta_text, "播放中  剩余 00:09") != 0) {
         return false;
     }
     if (!voice_note_model_normalize_text(

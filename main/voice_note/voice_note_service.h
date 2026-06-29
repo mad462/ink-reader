@@ -12,6 +12,8 @@ esp_err_t voice_note_service_prepare_storage(void);
 bool voice_note_service_start_capture(uint32_t now_ms);
 bool voice_note_service_stop_capture(uint32_t now_ms);
 bool voice_note_service_retry_note(const char *note_id, uint32_t now_ms);
+bool voice_note_service_toggle_playback(const char *note_id, uint32_t now_ms);
+bool voice_note_service_stop_playback(void);
 bool voice_note_service_delete_note(const char *note_id);
 bool voice_note_service_set_note_status(const char *note_id, voice_note_status_t status);
 bool voice_note_service_get_snapshot(voice_note_service_snapshot_t *out_snapshot);
