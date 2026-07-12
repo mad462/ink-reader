@@ -1,0 +1,5 @@
+.worktrees/
+**/build/
+**/sdkconfig
+sdkconfig.old
+
