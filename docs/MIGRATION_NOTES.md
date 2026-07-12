@@ -49,3 +49,15 @@ launcher 先引用尚不存在的 `ink_epd_ui.h`。修正骨架中缺失的 `com
 没有迁移旧驱动的 cancel callback、phase、aborted error、partial interrupt、mailbox 或 runtime 逻辑。launcher 启动时打印 `APP_START name=launcher`，显示 Reader/Photo 并支持 Left/Right 选择。
 
 launcher 构建生成 `build/launcher.bin`，首次结果大小为 218,912 字节。硬件显示效果和 BUSY 时序仍需上板验证。
+
+## Task 3：boot switch
+
+### RED
+
+launcher Confirm 路径先引用 `ink_boot_switch.h`，构建按预期以 `fatal error: ink_boot_switch.h: No such file or directory` 失败。
+
+### GREEN
+
+新增 `ink_boot_switch`，按 `launcher`、`reader`、`photo` label 查找 app partition，成功执行 `esp_ota_set_boot_partition()` 后调用 `esp_restart()`。目标缺失或设置失败时返回错误且不重启。
+
+launcher 在切换前打印精确的 `BOOT_SWITCH from=launcher to=reader` 或 `BOOT_SWITCH from=launcher to=photo`。
