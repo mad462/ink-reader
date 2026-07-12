@@ -99,3 +99,9 @@ photo 先声明尚不存在的 `ink_photo_core`，构建按预期以 `Failed to 
 新增 `ink_photo_core`：非递归扫描 `/sdcard/photos`，只接受大小写不敏感 `.bmp` 并排序；BMP parser 只接受 480x800、BI_RGB、4bpp indexed bottom-up 文件，并按 palette luminance 输出两个四灰阶平面。
 
 photo 打印 `APP_START name=photo`。有图片时显示第一张，Left/Right 循环切图；空目录显示 `NO PHOTOS FOUND`，解析失败显示 `IMAGE ERROR`。Back 长按打印 `BOOT_SWITCH from=photo to=launcher` 并切回 launcher。
+
+## Task 7：构建与烧录工具
+
+新增 `tools/idf_env.ps1`，固定 `IDF_PATH=C:\esp\v5.5.4\esp-idf` 和 `IDF_TOOLS_PATH=C:\Espressif`。`build_all.ps1` 顺序构建 launcher、reader、photo，任一失败立即退出。
+
+烧录脚本都要求显式 `-Port`：launcher 写 bootloader、partition table、otadata 与 `0x20000` factory image；reader 只写 `0x120000`；photo 只写 `0x520000`。未连接实机时不执行烧录。
