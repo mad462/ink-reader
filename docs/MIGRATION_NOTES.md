@@ -29,3 +29,23 @@ $env:IDF_TOOLS_PATH='C:\Espressif'
 ### 当前限制
 
 三个 `app_main.c` 尚未创建，本任务不要求应用构建成功。硬件初始化、EPD 显示、按键、SD 和启动分区切换均留待后续任务实现与上板验证。
+
+## Task 2：基础 UI、输入与 launcher 最小显示
+
+### RED
+
+launcher 先引用尚不存在的 `ink_epd_ui.h`。修正骨架中缺失的 `components` 目录后，构建在 `app_main.c:1` 以 `fatal error: ink_epd_ui.h: No such file or directory` 失败，证明新接口被实际编译。
+
+构建同时发现普通 CMake 变量不能启用 ESP-IDF 5.5.4 minimal build，已统一改用 `idf_build_set_property(MINIMAL_BUILD ON)`。这使三个项目只构建 main 及传递依赖，不把 WiFi/lwIP 等未使用组件纳入固件。
+
+### GREEN
+
+新增：
+
+- `ink_epd_ui`：480x800 单色 framebuffer、像素/矩形、5x7 ASCII 和 launcher/status 页面。
+- `ink_input`：GPIO9/10/12/11/46 低有效轮询、20ms 去抖、按下/释放/持续时间快照。
+- `ink_hw`：GPIO4/5/6/7/15/16 的 GDEY0426T82 同步 SPI 驱动，仅保留初始化、单色全刷、四灰阶全刷和休眠。
+
+没有迁移旧驱动的 cancel callback、phase、aborted error、partial interrupt、mailbox 或 runtime 逻辑。launcher 启动时打印 `APP_START name=launcher`，显示 Reader/Photo 并支持 Left/Right 选择。
+
+launcher 构建生成 `build/launcher.bin`，首次结果大小为 218,912 字节。硬件显示效果和 BUSY 时序仍需上板验证。
