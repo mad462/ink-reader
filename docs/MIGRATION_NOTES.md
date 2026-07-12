@@ -61,3 +61,15 @@ launcher Confirm 路径先引用 `ink_boot_switch.h`，构建按预期以 `fatal
 新增 `ink_boot_switch`，按 `launcher`、`reader`、`photo` label 查找 app partition，成功执行 `esp_ota_set_boot_partition()` 后调用 `esp_restart()`。目标缺失或设置失败时返回错误且不重启。
 
 launcher 在切换前打印精确的 `BOOT_SWITCH from=launcher to=reader` 或 `BOOT_SWITCH from=launcher to=photo`。
+
+## Task 4：SD 组件与 reader 最小启动
+
+### RED
+
+reader 先依赖尚不存在的 `ink_sd`，CMake 按预期以 `Failed to resolve component 'ink_sd'` 失败。
+
+### GREEN
+
+新增 `ink_sd`，固定以 SDMMC 4-bit 挂载 `/sdcard`：CLK40、CMD39、D0 41、D1 42、D2 48、D3 38。禁止自动格式化，mount 失败只返回错误。
+
+reader 打印 `APP_START name=reader`，初始化 EPD、按键并挂载 SD。当前最小状态显示 `NO BOOKS FOUND` 或 `SD CARD ERROR`。Back 持续 1200ms 后只触发一次 `BOOT_SWITCH from=reader to=launcher`。
