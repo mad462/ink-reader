@@ -105,3 +105,23 @@ photo 打印 `APP_START name=photo`。有图片时显示第一张，Left/Right �
 新增 `tools/idf_env.ps1`，固定 `IDF_PATH=C:\esp\v5.5.4\esp-idf` 和 `IDF_TOOLS_PATH=C:\Espressif`。`build_all.ps1` 顺序构建 launcher、reader、photo，任一失败立即退出。
 
 烧录脚本都要求显式 `-Port`：launcher 写 bootloader、partition table、otadata 与 `0x20000` factory image；reader 只写 `0x120000`；photo 只写 `0x520000`。未连接实机时不执行烧录。
+
+## Task 8：最终验证
+
+在 ESP-IDF 5.5.4 环境下删除三个 build 目录后执行 `tools/build_all.ps1`，随后执行一次无改动的顺序构建确认完整退出状态。最终结果：
+
+| app | 镜像大小 | 分区大小 | build |
+| --- | ---: | ---: | --- |
+| launcher | 230,992 bytes | 1,048,576 bytes | PASS |
+| reader | 337,072 bytes | 4,194,304 bytes | PASS |
+| photo | 336,352 bytes | 4,194,304 bytes | PASS |
+
+最终 `build_all.ps1` 退出码为 0，三个子项目均输出 `Project build complete`。PowerShell 脚本 AST 解析通过，`git diff --check` 通过。
+
+源码排除项扫描未发现 voice note、ASR、I2S、WiFi、TinyUSB/USB MSC、resource coordinator、background flush、runtime shell、display mailbox 或 aggressive interrupt。构建组件闭包不包含 `esp_wifi` 或 `esp_driver_i2s`；FAT/VFS 的通用串口 console 依赖不是 USB MSC 服务。
+
+三个 `APP_START` 和四个 `BOOT_SWITCH` 精确日志字符串均已静态核验。
+
+### 待上板验证
+
+当前未提供串口和连接设备，因此以下项目没有宣称通过：GDEY0426T82 实际刷新效果与 BUSY 时序、SD 卡实际挂载和文件读取、按键电平/长按、三个分区间的真实重启切换，以及运行日志中不存在 panic/内存/面板超时错误。应使用 `flash_launcher.ps1 -Port <PORT>` 首次写入完整布局，再分别写 reader/photo 镜像并执行验收流程。
