@@ -73,3 +73,17 @@ reader 先依赖尚不存在的 `ink_sd`，CMake 按预期以 `Failed to resolve
 新增 `ink_sd`，固定以 SDMMC 4-bit 挂载 `/sdcard`：CLK40、CMD39、D0 41、D1 42、D2 48、D3 38。禁止自动格式化，mount 失败只返回错误。
 
 reader 打印 `APP_START name=reader`，初始化 EPD、按键并挂载 SD。当前最小状态显示 `NO BOOKS FOUND` 或 `SD CARD ERROR`。Back 持续 1200ms 后只触发一次 `BOOT_SWITCH from=reader to=launcher`。
+
+## Task 5：reader 核心与字体
+
+### RED
+
+reader 先声明尚不存在的 `ink_fonts` 和 `ink_reader_core`，构建按预期以 `Failed to resolve component 'ink_fonts'` 失败。
+
+### GREEN
+
+新增 `ink_reader_core`，只迁移 XTC/XTCH 的纯业务能力：header/page index 校验、`/sdcard/books` 与根目录扫描、打开/关闭、XTG/XTH 页读取以及页边界导航。没有迁移 session、app state、file browser 或 runtime。
+
+新增 `ink_fonts`，从兼容路径读取 cpfont header，验证 `CPFONT` magic、v4 版本和 style count。字体缺失时 reader 使用内置 ASCII 状态字体继续运行。
+
+reader 找到书后加载第一页，Left/Right 在有效边界内翻页；没有书籍时显示 `NO BOOKS FOUND`。
