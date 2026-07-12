@@ -87,3 +87,15 @@ reader 先声明尚不存在的 `ink_fonts` 和 `ink_reader_core`，构建按预
 新增 `ink_fonts`，从兼容路径读取 cpfont header，验证 `CPFONT` magic、v4 版本和 style count。字体缺失时 reader 使用内置 ASCII 状态字体继续运行。
 
 reader 找到书后加载第一页，Left/Right 在有效边界内翻页；没有书籍时显示 `NO BOOKS FOUND`。
+
+## Task 6：photo 与 BMP 核心
+
+### RED
+
+photo 先声明尚不存在的 `ink_photo_core`，构建按预期以 `Failed to resolve component 'ink_photo_core'` 失败。
+
+### GREEN
+
+新增 `ink_photo_core`：非递归扫描 `/sdcard/photos`，只接受大小写不敏感 `.bmp` 并排序；BMP parser 只接受 480x800、BI_RGB、4bpp indexed bottom-up 文件，并按 palette luminance 输出两个四灰阶平面。
+
+photo 打印 `APP_START name=photo`。有图片时显示第一张，Left/Right 循环切图；空目录显示 `NO PHOTOS FOUND`，解析失败显示 `IMAGE ERROR`。Back 长按打印 `BOOT_SWITCH from=photo to=launcher` 并切回 launcher。
