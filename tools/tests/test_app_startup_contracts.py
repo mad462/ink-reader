@@ -34,11 +34,27 @@ def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> No
     ]
 
     assert "READER_PARTIAL_REFRESH_LIMIT = 50" in text
+    assert "!reader_should_cleanup(48)" in text
+    assert "reader_should_cleanup(49)" in text
     assert "ink_hw_partial_refresh_area(" in page_turn
     assert 'PAGE_REFRESH mode=partial' in page_turn
     assert 'PAGE_REFRESH mode=cleanup_full' in page_turn
+    assert 'PAGE_REFRESH mode=recovery_full' in page_turn
+    assert "bool screen_ready = false;" in text
+    assert "screen_ready = false;" in page_turn
     assert "book.current_page = previous_page;" in page_turn
     assert "memcpy(framebuffer, previous_framebuffer" in page_turn
+
+
+def test_reader_memory_error_keeps_back_navigation_available() -> None:
+    text = source("apps/reader/main/app_main.c")
+    allocation_error = text[
+        text.index("if (!framebuffer || !previous_framebuffer)") :
+        text.index("esp_err_t display_ret")
+    ]
+
+    assert '"MEMORY ERROR"' in allocation_error
+    assert "wait_for_launcher(" in allocation_error
 
 
 def test_photo_starts_in_preview_and_font_task_never_touches_epd() -> None:

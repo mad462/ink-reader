@@ -19,6 +19,7 @@ REQUIRED_PHRASES = (
     Phrase("阅读 / 相册", 16),
     Phrase("书库", 24),
     Phrase("相册", 24),
+    Phrase("相册", 12),
     Phrase("打开图书与最近阅读", 16),
     Phrase("浏览 TF 卡灰阶图片", 16),
     Phrase("正在加载", 16),
@@ -122,6 +123,10 @@ def test_launcher_titles_match_legacy_24px_bounds(tmp_path: Path) -> None:
     ]
     assert "row_y + 10, titles[i], 24U" in launcher
     assert "row_y + 10, titles[i], 12U" not in launcher
+    self_test = ui_source[
+        ui_source.index("bool ink_epd_ui_self_test") :
+    ]
+    assert '"相册", 12U' in self_test
 
 
 def test_generate_matches_checked_in_source_byte_for_byte(tmp_path: Path) -> None:
