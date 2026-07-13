@@ -86,7 +86,7 @@ bool ink_cpfont_self_test(void);
 enum { INK_CPFONT_FB_WIDTH = 480, INK_CPFONT_FB_HEIGHT = 800 };
 ```
 
-所有大缓冲继续从 PSRAM/heap 分配；`ink_cpfont_self_test()` 的栈上渲染缓冲不得超过 1920 bytes。
+所有大缓冲继续从 PSRAM/heap 分配；`ink_cpfont_self_test()` 的渲染缓冲使用 heap，不能在 3584B 主任务栈上保留旧版 1920B 数组。loader 必须校验 file size、offset 加乘法溢出、interval span 与 glyph count，以及 bitmap `data_length` 是否足以容纳 `width * height` 的 2bit 数据；畸形文件必须在读取或绘制前失败。
 
 - [ ] **Step 3: 实现候选路径和目录回退**
 
@@ -125,7 +125,7 @@ git add components/ink_fonts
 git commit -m "字体：迁移同步cpfont渲染核心"
 ```
 
-预期：构建无栈溢出警告，提交只包含字体组件。
+预期：构建无栈溢出警告，提交只包含字体组件。固件 build 只证明 self-test 可编译；Task 7 的串口启动日志负责证明 `ink_cpfont_self_test()` 和 `ink_fonts_self_test()` 在设备上实际执行通过。
 
 ### Task 2：`ink_epd_ui` 可选字体与 UTF-8 页面绘制
 
