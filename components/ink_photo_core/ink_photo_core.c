@@ -27,7 +27,7 @@ static uint32_t le32(const uint8_t *p) {
 
 static bool parse_headers(const uint8_t file_h[14], const uint8_t dib[40],
                           bmp_info_t *out);
-static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[4]);
+static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[16]);
 typedef enum {
   BMP_PROBE_SUPPORTED,
   BMP_PROBE_SHORT_HEADER,
@@ -43,9 +43,9 @@ static bmp_probe_result_t probe_bmp_parts(const uint8_t file_h[14],
                                           const uint8_t *palette,
                                           size_t palette_size,
                                           bmp_info_t *out_info,
-                                          uint8_t out_map[4]);
+                                          uint8_t out_map[16]);
 static bmp_probe_result_t read_bmp_metadata(FILE *file, bmp_info_t *out_info,
-                                            uint8_t out_map[4]);
+                                            uint8_t out_map[16]);
 
 static bool probe_bmp_file(const char *path, const char **reason) {
   if (reason) *reason = "invalid_path";
@@ -146,26 +146,26 @@ static bool parse_headers(const uint8_t file_h[14], const uint8_t dib[40],
          out->colors <= 16;
 }
 
-static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[4]) {
+static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[16]) {
   if (!palette || count < 4 || count > 16 || !map) return false;
-  uint8_t ranked[16];
   uint32_t lum[16];
+  uint32_t min_lum = UINT32_MAX;
+  uint32_t max_lum = 0;
+  memset(map, 0, 16);
   for (uint32_t i = 0; i < count; ++i) {
-    ranked[i] = (uint8_t)i;
     lum[i] = (uint32_t)palette[i * 4 + 2] * 30 +
              (uint32_t)palette[i * 4 + 1] * 59 + (uint32_t)palette[i * 4] * 11;
+    if (lum[i] < min_lum) min_lum = lum[i];
+    if (lum[i] > max_lum) max_lum = lum[i];
   }
-  for (uint32_t i = 0; i + 1 < count; ++i)
-    for (uint32_t j = i + 1; j < count; ++j)
-      if (lum[ranked[i]] > lum[ranked[j]]) {
-        uint8_t t = ranked[i];
-        ranked[i] = ranked[j];
-        ranked[j] = t;
-      }
-  map[3] = ranked[0];
-  map[2] = ranked[1];
-  map[1] = ranked[count - 2];
-  map[0] = ranked[count - 1];
+  if (max_lum == min_lum) return true;
+
+  const uint32_t range = max_lum - min_lum;
+  for (uint32_t i = 0; i < count; ++i) {
+    const uint32_t level =
+        ((lum[i] - min_lum) * 3U + range / 2U) / range;
+    map[i] = (uint8_t)(3U - level);
+  }
   return true;
 }
 
@@ -182,9 +182,9 @@ static bmp_probe_result_t probe_bmp_parts(const uint8_t file_h[14],
                                           const uint8_t *palette,
                                           size_t palette_size,
                                           bmp_info_t *out_info,
-                                          uint8_t out_map[4]) {
+                                          uint8_t out_map[16]) {
   bmp_info_t info;
-  uint8_t map[4];
+  uint8_t map[16];
   if (!parse_headers(file_h, dib, &info))
     return BMP_PROBE_UNSUPPORTED_HEADER;
 
@@ -205,7 +205,7 @@ static bmp_probe_result_t probe_bmp_parts(const uint8_t file_h[14],
 }
 
 static bmp_probe_result_t read_bmp_metadata(FILE *file, bmp_info_t *out_info,
-                                            uint8_t out_map[4]) {
+                                            uint8_t out_map[16]) {
   uint8_t file_h[14], dib[40], palette[64];
   if (!file || fread(file_h, 1, sizeof(file_h), file) != sizeof(file_h) ||
       fread(dib, 1, sizeof(dib), file) != sizeof(dib))
@@ -224,10 +224,8 @@ static bmp_probe_result_t read_bmp_metadata(FILE *file, bmp_info_t *out_info,
   return probe_bmp_parts(file_h, dib, palette, palette_size, out_info,
                          out_map);
 }
-static uint8_t gray_for(uint8_t index, const uint8_t map[4]) {
-  for (uint8_t gray = 0; gray < 4; ++gray)
-    if (map[gray] == index) return gray;
-  return 0;
+static uint8_t gray_for(uint8_t index, const uint8_t map[16]) {
+  return index < 16 ? map[index] : 0;
 }
 static void set_gray(uint8_t *lsb, uint8_t *msb, uint16_t x, uint16_t y,
                      uint8_t gray) {
@@ -252,7 +250,7 @@ bool ink_photo_decode_bmp(const char *path, uint8_t *lsb, size_t ll,
   memset(msb, 0, INK_PHOTO_PLANE_SIZE);
   FILE *f = fopen(path, "rb");
   if (!f) return false;
-  uint8_t map[4], row[240];
+  uint8_t map[16], row[240];
   bmp_info_t info;
   bool ok = false;
   if (read_bmp_metadata(f, &info, map) != BMP_PROBE_SUPPORTED ||
@@ -279,7 +277,7 @@ bool ink_photo_core_self_test(void) {
           palette[16] = {0,   0,   0,   0, 85,  85,  85,  0,
                          170, 170, 170, 0, 255, 255, 255, 0};
   bmp_info_t info;
-  uint8_t map[4];
+  uint8_t map[16];
   fh[10] = 118;
   dib[4] = 0xe0;
   dib[5] = 1;
