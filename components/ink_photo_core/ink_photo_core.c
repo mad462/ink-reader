@@ -131,6 +131,26 @@ bool ink_photo_catalog_load(ink_photo_catalog_t *catalog) {
   return true;
 }
 
+bool ink_photo_catalog_find_decodable(const ink_photo_catalog_t *catalog,
+                                      size_t first_index, int direction,
+                                      ink_photo_try_item_fn try_item,
+                                      void *context, size_t *out_index) {
+  if (!catalog || catalog->count == 0 || !try_item || !out_index ||
+      (direction != -1 && direction != 1))
+    return false;
+
+  size_t index = first_index % catalog->count;
+  for (size_t checked = 0; checked < catalog->count; ++checked) {
+    if (try_item(&catalog->items[index], context)) {
+      *out_index = index;
+      return true;
+    }
+    index = direction > 0 ? (index + 1) % catalog->count
+                          : (index + catalog->count - 1) % catalog->count;
+  }
+  return false;
+}
+
 static bool parse_headers(const uint8_t file_h[14], const uint8_t dib[40],
                           bmp_info_t *out) {
   if (!file_h || !dib || !out || file_h[0] != 'B' || file_h[1] != 'M' ||
