@@ -110,20 +110,22 @@ void app_main(void) {
     ink_input_snapshot_t input = {0};
     const uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     if (input_ret == ESP_OK && ink_input_poll(now_ms, &input) == ESP_OK) {
-      bool page_changed = false;
-      if (book_ready && ink_input_was_pressed(&input, INK_BUTTON_LEFT))
-        page_changed = ink_reader_book_previous(&book);
-      if (book_ready && ink_input_was_pressed(&input, INK_BUTTON_RIGHT))
-        page_changed = ink_reader_book_next(&book);
-      if (page_changed) {
-        if (ink_reader_book_load_current(&book, framebuffer,
-                                         INK_EPD_BUFFER_SIZE)) {
+      size_t target_page = book.current_page;
+      if (book_ready && ink_input_was_pressed(&input, INK_BUTTON_LEFT) &&
+          target_page > 0)
+        --target_page;
+      if (book_ready && ink_input_was_pressed(&input, INK_BUTTON_RIGHT) &&
+          target_page + 1 < book.page_count)
+        ++target_page;
+      if (target_page != book.current_page) {
+        if (ink_reader_book_load_page(&book, target_page, framebuffer,
+                                      INK_EPD_BUFFER_SIZE)) {
           esp_err_t ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
           if (ret != ESP_OK)
             ESP_LOGE(TAG, "page refresh failed err=%s", esp_err_to_name(ret));
         } else {
           ESP_LOGE(TAG, "page load failed page=%u",
-                   (unsigned)book.current_page);
+                   (unsigned)target_page);
         }
       }
       if (ink_input_was_pressed(&input, INK_BUTTON_BACK)) {

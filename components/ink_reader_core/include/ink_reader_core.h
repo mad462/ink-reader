@@ -38,6 +38,8 @@ ink_reader_scan_result_t ink_reader_open_first_book(
 bool ink_reader_book_open(ink_reader_book_t *book, const char *path);
 bool ink_reader_book_load_current(const ink_reader_book_t *book,
                                   uint8_t *buffer, size_t length);
+bool ink_reader_book_load_page(ink_reader_book_t *book, size_t page_index,
+                               uint8_t *buffer, size_t length);
 bool ink_reader_book_next(ink_reader_book_t *book);
 bool ink_reader_book_previous(ink_reader_book_t *book);
 bool ink_reader_core_self_test(void);

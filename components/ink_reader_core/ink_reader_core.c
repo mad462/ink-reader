@@ -123,6 +123,33 @@ static ink_reader_scan_result_t classify_scan(
   return INK_READER_SCAN_EMPTY;
 }
 
+static bool seek_page_payload(FILE *file, const ink_reader_page_t *page,
+                              uint32_t *data_size) {
+  if (!file || !page || !data_size || page->offset > LONG_MAX ||
+      fseek(file, (long)page->offset, SEEK_SET) != 0)
+    return false;
+  uint8_t header[XTG_HEADER_SIZE];
+  if (fread(header, 1, sizeof(header), file) != sizeof(header)) return false;
+  const uint32_t magic = le32(header);
+  *data_size = le32(header + 10);
+  const uint32_t expected_size =
+      magic == XTG_MAGIC   ? INK_READER_PAGE_SIZE
+      : magic == XTH_MAGIC ? INK_READER_PAGE_SIZE * 2u
+                           : 0u;
+  return le16(header + 4) == 480 && le16(header + 6) == 800 &&
+         expected_size != 0U && *data_size == expected_size &&
+         (uint64_t)XTG_HEADER_SIZE + *data_size <= page->encoded_size;
+}
+
+static bool page_payload_readable(FILE *file, const ink_reader_page_t *page) {
+  uint32_t data_size = 0;
+  if (!seek_page_payload(file, page, &data_size)) return false;
+  const uint64_t last_byte =
+      page->offset + XTG_HEADER_SIZE + (uint64_t)data_size - 1U;
+  return last_byte <= LONG_MAX && fseek(file, (long)last_byte, SEEK_SET) == 0 &&
+         fgetc(file) != EOF;
+}
+
 static bool find_in(const char *dir_path, char *path, size_t path_size) {
   DIR *dir = opendir(dir_path);
   if (!dir) return false;
@@ -174,6 +201,10 @@ ink_reader_scan_result_t ink_reader_open_first_book(
 
   for (size_t i = 0; i < candidates.count; ++i) {
     if (!ink_reader_book_open(book, candidates.paths[i])) continue;
+    if (!page_payload_readable(book->file, &book->pages[0])) {
+      ink_reader_book_close(book);
+      continue;
+    }
     snprintf(candidate_path, path_size, "%s", candidates.paths[i]);
     free(candidates.paths);
     return INK_READER_SCAN_OK;
@@ -249,24 +280,15 @@ static void xth_to_bw(const uint8_t *p0, const uint8_t *p1, uint8_t *out) {
     }
 }
 
-bool ink_reader_book_load_current(const ink_reader_book_t *book,
-                                  uint8_t *buffer, size_t length) {
-  if (!book || !book->file || !buffer || length < INK_READER_PAGE_SIZE ||
-      book->current_page >= book->page_count)
+static bool load_page(FILE *file, const ink_reader_page_t *page,
+                      uint8_t *buffer, size_t length) {
+  if (!file || !page || !buffer || length < INK_READER_PAGE_SIZE)
     return false;
-  const ink_reader_page_t *page = &book->pages[book->current_page];
-  if (page->offset > LONG_MAX ||
-      fseek(book->file, (long)page->offset, SEEK_SET) != 0)
-    return false;
-  uint8_t h[XTG_HEADER_SIZE];
-  if (fread(h, 1, sizeof(h), book->file) != sizeof(h)) return false;
-  uint32_t magic = le32(h), data_size = le32(h + 10);
-  if (le16(h + 4) != 480 || le16(h + 6) != 800 ||
-      page->encoded_size < XTG_HEADER_SIZE + data_size)
-    return false;
-  if (magic == XTG_MAGIC && data_size == INK_READER_PAGE_SIZE)
-    return fread(buffer, 1, data_size, book->file) == data_size;
-  if (magic == XTH_MAGIC && data_size == INK_READER_PAGE_SIZE * 2u) {
+  uint32_t data_size = 0;
+  if (!seek_page_payload(file, page, &data_size)) return false;
+  if (data_size == INK_READER_PAGE_SIZE)
+    return fread(buffer, 1, data_size, file) == data_size;
+  if (data_size == INK_READER_PAGE_SIZE * 2u) {
     uint8_t *p0 = heap_caps_malloc(INK_READER_PAGE_SIZE,
                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     uint8_t *p1 = heap_caps_malloc(INK_READER_PAGE_SIZE,
@@ -277,15 +299,31 @@ bool ink_reader_book_load_current(const ink_reader_book_t *book,
       return false;
     }
     bool ok =
-        fread(p0, 1, INK_READER_PAGE_SIZE, book->file) ==
-            INK_READER_PAGE_SIZE &&
-        fread(p1, 1, INK_READER_PAGE_SIZE, book->file) == INK_READER_PAGE_SIZE;
+        fread(p0, 1, INK_READER_PAGE_SIZE, file) == INK_READER_PAGE_SIZE &&
+        fread(p1, 1, INK_READER_PAGE_SIZE, file) == INK_READER_PAGE_SIZE;
     if (ok) xth_to_bw(p0, p1, buffer);
     free(p0);
     free(p1);
     return ok;
   }
   return false;
+}
+
+bool ink_reader_book_load_current(const ink_reader_book_t *book,
+                                  uint8_t *buffer, size_t length) {
+  if (!book || !book->pages || book->current_page >= book->page_count)
+    return false;
+  return load_page(book->file, &book->pages[book->current_page], buffer,
+                   length);
+}
+
+bool ink_reader_book_load_page(ink_reader_book_t *book, size_t page_index,
+                               uint8_t *buffer, size_t length) {
+  if (!book || !book->pages || page_index >= book->page_count ||
+      !load_page(book->file, &book->pages[page_index], buffer, length))
+    return false;
+  book->current_page = page_index;
+  return true;
 }
 
 bool ink_reader_book_next(ink_reader_book_t *book) {
@@ -324,6 +362,10 @@ bool ink_reader_core_self_test(void) {
           INK_READER_SCAN_IO_ERROR)
     return false;
   ink_reader_book_t book = {.page_count = 2, .current_page = 0};
+  uint8_t unused = 0;
+  if (ink_reader_book_load_page(&book, 1, &unused, INK_READER_PAGE_SIZE) ||
+      book.current_page != 0)
+    return false;
   return !ink_reader_book_previous(&book) && ink_reader_book_next(&book) &&
          book.current_page == 1 && !ink_reader_book_next(&book) &&
          ink_reader_book_previous(&book);
