@@ -80,20 +80,22 @@ static void reset_panel(void) {
 static esp_err_t set_native_window(uint16_t x, uint16_t y, uint16_t width,
                                    uint16_t height) {
   const uint16_t reversed_y = NATIVE_HEIGHT - y - height;
-  const uint16_t x_end = x + width - 1;
+  const uint16_t x_start_byte = x / 8;
+  const uint16_t x_end_byte = (x + width - 1) / 8;
   const uint16_t y_end = reversed_y + height - 1;
 
   ESP_RETURN_ON_ERROR(command(0x11), TAG, "entry cmd");
   ESP_RETURN_ON_ERROR(data_byte(1), TAG, "entry data");
   ESP_RETURN_ON_ERROR(command(0x44), TAG, "x cmd");
-  const uint8_t x_data[] = {x & 0xff, x >> 8, x_end & 0xff, x_end >> 8};
+  const uint8_t x_data[] = {x_start_byte & 0xff, x_start_byte >> 8,
+                            x_end_byte & 0xff, x_end_byte >> 8};
   ESP_RETURN_ON_ERROR(data(x_data, sizeof(x_data)), TAG, "x data");
   ESP_RETURN_ON_ERROR(command(0x45), TAG, "y cmd");
   const uint8_t y_data[] = {y_end & 0xff, y_end >> 8, reversed_y & 0xff,
                             reversed_y >> 8};
   ESP_RETURN_ON_ERROR(data(y_data, sizeof(y_data)), TAG, "y data");
   ESP_RETURN_ON_ERROR(command(0x4e), TAG, "xc cmd");
-  const uint8_t xc[] = {x & 0xff, x >> 8};
+  const uint8_t xc[] = {x_start_byte & 0xff, x_start_byte >> 8};
   ESP_RETURN_ON_ERROR(data(xc, sizeof(xc)), TAG, "xc data");
   ESP_RETURN_ON_ERROR(command(0x4f), TAG, "yc cmd");
   const uint8_t yc[] = {y_end & 0xff, y_end >> 8};
