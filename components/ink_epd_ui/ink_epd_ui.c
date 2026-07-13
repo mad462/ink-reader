@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "ink_fonts.h"
+#include "ink_ui_text_assets.h"
 
 static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
                                         {0, 0, 0x5f, 0, 0},
@@ -70,11 +71,11 @@ static const int kLauncherRows[2] = {
     INK_LAUNCHER_LIST_Y,
     INK_LAUNCHER_LIST_Y + INK_LAUNCHER_ROW_HEIGHT + INK_LAUNCHER_ROW_GAP,
 };
-static const int kLauncherLineX = 68;
-static const int kLauncherLineWidth = 12;
-static const int kLauncherLineHeight = 4;
-static const int kLauncherLineYOffset = 20;
-static const int kLauncherSelectionPadding = 4;
+static const int kLauncherLineX = INK_LAUNCHER_MARKER_X;
+static const int kLauncherLineWidth = INK_LAUNCHER_MARKER_WIDTH;
+static const int kLauncherLineHeight = INK_LAUNCHER_MARKER_HEIGHT;
+static const int kLauncherLineYOffset = INK_LAUNCHER_MARKER_Y_OFFSET;
+static const int kLauncherSelectionPadding = INK_LAUNCHER_MARKER_PADDING;
 static const int kPhotoListX = 24;
 static const int kPhotoListY = 50;
 static const int kPhotoListWidth = 432;
@@ -85,12 +86,19 @@ static const int kPhotoListMarkerWidth = 4;
 static const int kPhotoListMarkerInset = 8;
 static const int kPhotoListTitleYOffset = 8;
 
+static bool draw_builtin_text(uint8_t *buffer, size_t length, int x, int y,
+                              const char *text, uint8_t pixel_size);
+static uint8_t photo_body_font_scale_divisor(void);
+
 _Static_assert(INK_LAUNCHER_HEADER_GUTTER == 24, "launcher gutter");
 _Static_assert(INK_LAUNCHER_DIVIDER_Y == 38, "launcher divider");
 _Static_assert(INK_LAUNCHER_LIST_X == 24 && INK_LAUNCHER_ROW_WIDTH == 432,
                "launcher list geometry");
 _Static_assert(INK_LAUNCHER_ROW_HEIGHT == 70 && INK_LAUNCHER_ROW_GAP == 6,
                "launcher row geometry");
+_Static_assert(INK_LAUNCHER_MARKER_Y_OFFSET ==
+                   (INK_LAUNCHER_ROW_HEIGHT - INK_LAUNCHER_MARKER_HEIGHT) / 2,
+               "launcher marker vertical center");
 
 static const uint8_t *glyph_for(char ch) {
   if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
@@ -135,6 +143,39 @@ void ink_epd_ui_draw_text(uint8_t *buffer, size_t length, int x, int y,
                                scale, scale, black);
       }
   }
+}
+
+static bool draw_builtin_text(uint8_t *buffer, size_t length, int x, int y,
+                              const char *text, uint8_t pixel_size) {
+  const ink_ui_text_asset_t *asset =
+      ink_ui_text_asset_find(text, pixel_size);
+  if (!buffer || length < INK_EPD_BUFFER_SIZE || !asset) return false;
+
+  const size_t stride = ((size_t)asset->width + 7U) / 8U;
+  for (uint16_t py = 0; py < asset->height; ++py) {
+    for (uint16_t px = 0; px < asset->width; ++px) {
+      const uint8_t mask = (uint8_t)(0x80U >> (px & 7U));
+      if (asset->bitmap[(size_t)py * stride + px / 8U] & mask)
+        ink_epd_ui_set_pixel(buffer, length, x + px, y + py, true);
+    }
+  }
+  return true;
+}
+
+static uint8_t photo_body_font_scale_divisor(void) { return 2U; }
+
+static bool pixel_is_black(const uint8_t *buffer, int x, int y) {
+  const size_t index = (size_t)y * (INK_EPD_WIDTH / 8) + (size_t)x / 8;
+  const uint8_t mask = (uint8_t)(0x80U >> (x & 7));
+  return !(buffer[index] & mask);
+}
+
+static bool region_has_black(const uint8_t *buffer, int x, int y, int width,
+                             int height) {
+  for (int py = y; py < y + height; ++py)
+    for (int px = x; px < x + width; ++px)
+      if (pixel_is_black(buffer, px, py)) return true;
+  return false;
 }
 
 static bool text_is_ascii(const char *text) {
@@ -223,28 +264,30 @@ void ink_epd_ui_draw_launcher_with_fonts(
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
   if (selected < 0) selected = 0;
   if (selected > 1) selected = 1;
-  ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
-  ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
-  ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
-  const bool localized = ink_cpfont_is_loaded(body_font);
+  (void)fonts;
   ink_epd_ui_clear(buffer, length, true);
-  (void)ink_epd_ui_draw_text_font(
-      buffer, length, title_font, INK_LAUNCHER_HEADER_GUTTER, 8, 3, 1U,
-      ink_cpfont_is_loaded(title_font) ? "启动器" : "LAUNCHER", NULL);
-  (void)ink_epd_ui_draw_text_font(
-      buffer, length, footer_font, 330, 10, 1, 1U,
-      ink_cpfont_is_loaded(footer_font) ? "阅读 / 相册" : "READER / PHOTO",
-      NULL);
+  if (!draw_builtin_text(buffer, length, INK_LAUNCHER_HEADER_GUTTER, 8,
+                         "启动器", 24U))
+    ink_epd_ui_draw_text(buffer, length, INK_LAUNCHER_HEADER_GUTTER, 8, 2,
+                         "LAUNCHER", true);
+  const ink_ui_text_asset_t *meta =
+      ink_ui_text_asset_find("阅读 / 相册", 16U);
+  const int meta_x = meta ? INK_EPD_WIDTH - INK_LAUNCHER_HEADER_GUTTER -
+                                (int)meta->width
+                          : 330;
+  if (!draw_builtin_text(buffer, length, meta_x, 10, "阅读 / 相册", 16U))
+    ink_epd_ui_draw_text(buffer, length, meta_x, 10, 1, "READER / PHOTO",
+                         true);
   ink_epd_ui_fill_rect(
       buffer, length, INK_LAUNCHER_HEADER_GUTTER, INK_LAUNCHER_DIVIDER_Y,
       INK_EPD_WIDTH - 2 * INK_LAUNCHER_HEADER_GUTTER, 1, true);
 
-  const char *titles[2] = {localized ? "书库" : "READER",
-                           localized ? "相册" : "PHOTO"};
-  const char *descriptions[2] = {
-      localized ? "打开图书与最近阅读" : "OPEN BOOKS FROM TF CARD",
-      localized ? "浏览 TF 卡灰阶图片" : "BROWSE GRAYSCALE BMP",
-  };
+  const char *titles[2] = {"书库", "相册"};
+  const char *fallback_titles[2] = {"READER", "PHOTO"};
+  const char *descriptions[2] = {"打开图书与最近阅读",
+                                 "浏览 TF 卡灰阶图片"};
+  const char *fallback_descriptions[2] = {"OPEN BOOKS FROM TF CARD",
+                                          "BROWSE GRAYSCALE BMP"};
   for (int i = 0; i < 2; ++i) {
     const int row_y = kLauncherRows[i];
     if (selected == i)
@@ -257,13 +300,19 @@ void ink_epd_ui_draw_launcher_with_fonts(
     else
       draw_photo_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
                       row_y + (INK_LAUNCHER_ROW_HEIGHT - 18) / 2);
-    (void)ink_epd_ui_draw_text_font(buffer, length, body_font, 88, row_y + 10,
-                                    3, 1U, titles[i], NULL);
-    (void)ink_epd_ui_draw_text_font(buffer, length, footer_font, 88,
-                                    row_y + 40, 2, 1U, descriptions[i], NULL);
+    if (!draw_builtin_text(buffer, length, 88, row_y + 10, titles[i], 12U))
+      ink_epd_ui_draw_text(buffer, length, 88, row_y + 10, 1,
+                           fallback_titles[i], true);
+    if (!draw_builtin_text(buffer, length, 88, row_y + 40,
+                           descriptions[i], 16U))
+      ink_epd_ui_draw_text(buffer, length, 88, row_y + 40, 1,
+                           fallback_descriptions[i], true);
     draw_chevron(buffer, length,
                  INK_LAUNCHER_LIST_X + INK_LAUNCHER_ROW_WIDTH - 26,
                  row_y + 22);
+    draw_hline(buffer, length, INK_LAUNCHER_LIST_X,
+               row_y + INK_LAUNCHER_ROW_HEIGHT - 1,
+               INK_LAUNCHER_ROW_WIDTH);
   }
 }
 
@@ -325,7 +374,8 @@ static void format_photo_title(char *title, size_t title_size,
                  display_name) >= (int)title_size)
       continue;
     int width = 0;
-    if (ink_epd_ui_measure_text(font, title, 2, 1U, &width) &&
+    if (ink_epd_ui_measure_text(font, title, 2,
+                                photo_body_font_scale_divisor(), &width) &&
         width <= max_width)
       return;
   }
@@ -340,18 +390,25 @@ void ink_epd_ui_draw_photo_list_with_fonts(
   ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
   ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
   ink_epd_ui_clear(buffer, length, true);
-  (void)ink_epd_ui_draw_text_font(buffer, length, title_font, kPhotoListX, 8,
-                                  3, 1U,
-                                  ink_cpfont_is_loaded(title_font) ? "相册"
-                                                                   : "PHOTO ALBUM",
-                                  NULL);
+  if (ink_cpfont_is_loaded(title_font)) {
+    (void)ink_epd_ui_draw_text_font(buffer, length, title_font, kPhotoListX,
+                                    8, 2, 1U, "相册", NULL);
+  } else if (!draw_builtin_text(buffer, length, kPhotoListX, 8, "相册",
+                                12U)) {
+    ink_epd_ui_draw_text(buffer, length, kPhotoListX, 8, 2, "PHOTO ALBUM",
+                         true);
+  }
 
   if (!rows || count == 0) {
-    (void)ink_epd_ui_draw_text_font(
-        buffer, length, body_font, kPhotoListX + kPhotoListContentInset, 88,
-        3, 1U,
-        ink_cpfont_is_loaded(body_font) ? "未找到图片" : "NO PHOTOS FOUND",
-        NULL);
+    if (!draw_builtin_text(buffer, length,
+                           kPhotoListX + kPhotoListContentInset, 88,
+                           "未找到图片", 16U))
+      (void)ink_epd_ui_draw_text_font(
+          buffer, length, body_font,
+          kPhotoListX + kPhotoListContentInset, 88, 2,
+          photo_body_font_scale_divisor(),
+          ink_cpfont_is_loaded(body_font) ? "未找到图片" : "NO PHOTOS FOUND",
+          NULL);
     return;
   }
   if (selected >= count) selected = count - 1;
@@ -390,7 +447,8 @@ void ink_epd_ui_draw_photo_list_with_fonts(
     format_photo_title(title, sizeof(title), index, rows[index].name,
                        text_max_width, body_font);
     (void)ink_epd_ui_draw_text_font(buffer, length, body_font, text_x,
-                                    y + kPhotoListTitleYOffset, 2, 1U, title,
+                                    y + kPhotoListTitleYOffset, 2,
+                                    photo_body_font_scale_divisor(), title,
                                     NULL);
     if (index == selected) {
       ink_epd_ui_fill_rect(buffer, length, counter_x - 12, y,
@@ -453,11 +511,19 @@ void ink_epd_ui_draw_status_with_fonts(uint8_t *buffer, size_t length,
   ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
   ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
   ink_epd_ui_clear(buffer, length, true);
-  (void)ink_epd_ui_draw_text_font(buffer, length, title_font, 40, 100, 4, 1U,
-                                  title ? title : "INK", NULL);
-  ink_epd_ui_fill_rect(buffer, length, 40, 180, 400, 4, true);
-  (void)ink_epd_ui_draw_text_font(buffer, length, body_font, 40, 260, 3, 1U,
-                                  message ? message : "ERROR", NULL);
+  const char *resolved_title = title ? title : "INK";
+  const char *resolved_message = message ? message : "ERROR";
+  if (!draw_builtin_text(buffer, length, INK_LAUNCHER_HEADER_GUTTER, 8,
+                         resolved_title, 24U))
+    (void)ink_epd_ui_draw_text_font(
+        buffer, length, title_font, INK_LAUNCHER_HEADER_GUTTER, 8, 2, 1U,
+        resolved_title, NULL);
+  ink_epd_ui_fill_rect(
+      buffer, length, INK_LAUNCHER_HEADER_GUTTER, INK_LAUNCHER_DIVIDER_Y,
+      INK_EPD_WIDTH - 2 * INK_LAUNCHER_HEADER_GUTTER, 1, true);
+  if (!draw_builtin_text(buffer, length, 40, 88, resolved_message, 16U))
+    (void)ink_epd_ui_draw_text_font(buffer, length, body_font, 40, 88, 2, 2U,
+                                    resolved_message, NULL);
 }
 
 void ink_epd_ui_draw_status(uint8_t *buffer, size_t length, const char *title,
@@ -472,6 +538,17 @@ bool ink_epd_ui_self_test(void) {
     return false;
   uint8_t *buffer = malloc(INK_EPD_BUFFER_SIZE);
   if (!buffer) return false;
+
+  ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
+  if (!draw_builtin_text(buffer, INK_EPD_BUFFER_SIZE, 10, 10, "相册", 12U)) {
+    free(buffer);
+    return false;
+  }
+  const bool builtin_has_black = region_has_black(buffer, 10, 10, 40, 20);
+  if (!builtin_has_black || photo_body_font_scale_divisor() != 2U) {
+    free(buffer);
+    return false;
+  }
 
   ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
   if (ink_epd_ui_draw_text_font(buffer, INK_EPD_BUFFER_SIZE, NULL, 0, 0, 2,
@@ -506,9 +583,8 @@ bool ink_epd_ui_self_test(void) {
   }
 
   ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, NULL, 0, 0);
-  const size_t prompt_index = (size_t)88 * (INK_EPD_WIDTH / 8) + 40 / 8;
-  const uint8_t prompt_mask = (uint8_t)(0x80u >> (40 & 7));
-  const bool empty_prompt_has_black = !(buffer[prompt_index] & prompt_mask);
+  const bool empty_prompt_has_black =
+      region_has_black(buffer, 40, 88, 160, 24);
   ink_epd_photo_row_t rows[2] = {{.name = "ONE"}, {.name = "TWO"}};
   ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, rows, 2, 0);
   const size_t header_counter_index =
@@ -578,8 +654,8 @@ bool ink_epd_ui_self_test(void) {
       ink_epd_ui_launcher_selection_region(0, 0);
   const ink_epd_region_t clamped =
       ink_epd_ui_launcher_selection_region(-100, 100);
-  if (moved.x != 64 || moved.y != 66 || moved.width != 20 ||
-      moved.height != 88 || unchanged.x != 64 || unchanged.y != 66 ||
+  if (moved.x != 22 || moved.y != 79 || moved.width != 20 ||
+      moved.height != 88 || unchanged.x != 22 || unchanged.y != 79 ||
       unchanged.width != 20 || unchanged.height != 12 || clamped.x < 0 ||
       clamped.y < 0 || clamped.x + clamped.width > INK_EPD_WIDTH ||
       clamped.y + clamped.height > INK_EPD_HEIGHT) {
@@ -597,10 +673,6 @@ bool ink_epd_ui_self_test(void) {
   ink_epd_ui_draw_launcher(buffer, INK_EPD_BUFFER_SIZE, 0);
   const size_t white_index = (size_t)270 * (INK_EPD_WIDTH / 8) + 70 / 8;
   const uint8_t white_mask = (uint8_t)(0x80u >> (70 & 7));
-  const size_t reader_index = (size_t)60 * (INK_EPD_WIDTH / 8) + 88 / 8;
-  const uint8_t reader_mask = (uint8_t)(0x80u >> (88 & 7));
-  const size_t photo_index = (size_t)136 * (INK_EPD_WIDTH / 8) + 88 / 8;
-  const uint8_t photo_mask = (uint8_t)(0x80u >> (88 & 7));
   const size_t book_icon_index = (size_t)75 * (INK_EPD_WIDTH / 8) + 40 / 8;
   const uint8_t book_icon_mask = (uint8_t)(0x80u >> (40 & 7));
   const size_t photo_icon_index = (size_t)152 * (INK_EPD_WIDTH / 8) + 40 / 8;
@@ -608,11 +680,15 @@ bool ink_epd_ui_self_test(void) {
   const size_t chevron_index = (size_t)72 * (INK_EPD_WIDTH / 8) + 430 / 8;
   const uint8_t chevron_mask = (uint8_t)(0x80u >> (430 & 7));
   bool launcher_style_valid = (buffer[white_index] & white_mask) &&
-                              !(buffer[reader_index] & reader_mask) &&
-                              !(buffer[photo_index] & photo_mask) &&
+                              region_has_black(buffer, 88, 60, 32, 16) &&
+                              region_has_black(buffer, 88, 136, 32, 16) &&
+                              region_has_black(buffer, 88, 90, 180, 20) &&
+                              region_has_black(buffer, 88, 166, 180, 20) &&
                               !(buffer[book_icon_index] & book_icon_mask) &&
                               !(buffer[photo_icon_index] & photo_icon_mask) &&
-                              !(buffer[chevron_index] & chevron_mask);
+                              !(buffer[chevron_index] & chevron_mask) &&
+                              pixel_is_black(buffer, 100, 119) &&
+                              pixel_is_black(buffer, 100, 195);
   for (int y = 0; y < kLauncherLineHeight; ++y) {
     for (int x = 0; x < kLauncherLineWidth; ++x) {
       const int px = kLauncherLineX + x;
