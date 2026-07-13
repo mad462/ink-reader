@@ -17,8 +17,8 @@ CHECKED_IN_SOURCE = ROOT / "components" / "ink_epd_ui" / "ink_ui_text_assets.c"
 REQUIRED_PHRASES = (
     Phrase("启动器", 24),
     Phrase("阅读 / 相册", 16),
-    Phrase("书库", 12),
-    Phrase("相册", 12),
+    Phrase("书库", 24),
+    Phrase("相册", 24),
     Phrase("打开图书与最近阅读", 16),
     Phrase("浏览 TF 卡灰阶图片", 16),
     Phrase("正在加载", 16),
@@ -99,6 +99,29 @@ def test_generate_emits_valid_asset_for_every_phrase(tmp_path: Path) -> None:
         if width % 8:
             padding_mask = (1 << (8 - width % 8)) - 1
             assert all(bitmap[(row + 1) * stride - 1] & padding_mask == 0 for row in range(height))
+
+
+def test_launcher_titles_match_legacy_24px_bounds(tmp_path: Path) -> None:
+    output_path = tmp_path / "ink_ui_text_assets.c"
+    generate(FONT_PATH, output_path)
+
+    _, records = _parse_assets(output_path.read_text(encoding="ascii"))
+    title_bounds = {
+        text: (width, height)
+        for text, size, width, height, _ in records
+        if text in {"书库", "相册"} and size == 24
+    }
+    assert title_bounds == {"书库": (48, 23), "相册": (48, 23)}
+
+    ui_source = (ROOT / "components" / "ink_epd_ui" / "ink_epd_ui.c").read_text(
+        encoding="utf-8"
+    )
+    launcher = ui_source[
+        ui_source.index("void ink_epd_ui_draw_launcher_with_fonts") :
+        ui_source.index("void ink_epd_ui_draw_launcher(")
+    ]
+    assert "row_y + 10, titles[i], 24U" in launcher
+    assert "row_y + 10, titles[i], 12U" not in launcher
 
 
 def test_generate_matches_checked_in_source_byte_for_byte(tmp_path: Path) -> None:

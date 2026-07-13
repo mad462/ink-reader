@@ -22,8 +22,8 @@ class Phrase:
 PHRASES = (
     Phrase("启动器", 24),
     Phrase("阅读 / 相册", 16),
-    Phrase("书库", 12),
-    Phrase("相册", 12),
+    Phrase("书库", 24),
+    Phrase("相册", 24),
     Phrase("打开图书与最近阅读", 16),
     Phrase("浏览 TF 卡灰阶图片", 16),
     Phrase("正在加载", 16),

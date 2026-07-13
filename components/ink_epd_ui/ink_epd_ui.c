@@ -300,7 +300,7 @@ void ink_epd_ui_draw_launcher_with_fonts(
     else
       draw_photo_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
                       row_y + (INK_LAUNCHER_ROW_HEIGHT - 18) / 2);
-    if (!draw_builtin_text(buffer, length, 88, row_y + 10, titles[i], 12U))
+    if (!draw_builtin_text(buffer, length, 88, row_y + 10, titles[i], 24U))
       ink_epd_ui_draw_text(buffer, length, 88, row_y + 10, 1,
                            fallback_titles[i], true);
     if (!draw_builtin_text(buffer, length, 88, row_y + 40,
