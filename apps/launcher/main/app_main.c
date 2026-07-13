@@ -14,9 +14,20 @@ static const char *TAG = "launcher";
 static ink_cpfont_t s_menu_font;
 static ink_cpfont_t s_footer_font;
 
+static int launcher_committed_selection(int current, int candidate,
+                                        bool refresh_succeeded) {
+  return refresh_succeeded ? candidate : current;
+}
+
+static bool launcher_policy_self_test(void) {
+  return launcher_committed_selection(0, 1, false) == 0 &&
+         launcher_committed_selection(0, 1, true) == 1;
+}
+
 void app_main(void) {
   ESP_LOGI(TAG, "APP_START name=launcher");
-  if (!ink_epd_ui_self_test() || !ink_input_self_test()) {
+  if (!ink_epd_ui_self_test() || !ink_input_self_test() ||
+      !launcher_policy_self_test()) {
     ESP_LOGE(TAG, "component self test failed");
     return;
   }
@@ -72,11 +83,11 @@ void app_main(void) {
     if (ink_input_was_pressed(&input, INK_BUTTON_LEFT) ||
         ink_input_was_pressed(&input, INK_BUTTON_RIGHT)) {
       const int previous = selected;
-      selected = 1 - selected;
+      const int candidate = 1 - selected;
       ink_epd_ui_draw_launcher_with_fonts(framebuffer, INK_EPD_BUFFER_SIZE,
-                                          selected, &fonts);
+                                          candidate, &fonts);
       const ink_epd_region_t region =
-          ink_epd_ui_launcher_selection_region(previous, selected);
+          ink_epd_ui_launcher_selection_region(previous, candidate);
       ret = ink_hw_partial_refresh_area(
           framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)region.x,
           (uint16_t)region.y, (uint16_t)region.width, (uint16_t)region.height);
@@ -91,6 +102,11 @@ void app_main(void) {
           ESP_LOGE(TAG, "selection full refresh fallback failed error=%s",
                    esp_err_to_name(ret));
       }
+      selected = launcher_committed_selection(previous, candidate,
+                                              ret == ESP_OK);
+      if (ret != ESP_OK)
+        ink_epd_ui_draw_launcher_with_fonts(framebuffer, INK_EPD_BUFFER_SIZE,
+                                            selected, &fonts);
     }
     if (ink_input_was_pressed(&input, INK_BUTTON_CONFIRM)) {
       if (selected == 0) {
