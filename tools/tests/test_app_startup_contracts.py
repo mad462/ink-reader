@@ -7,9 +7,13 @@ def source(path: str) -> str:
 
 def test_launcher_has_no_sd_or_cpfont_startup() -> None:
     text = source("apps/launcher/main/app_main.c")
+    defaults = source("apps/launcher/sdkconfig.defaults")
+    ui = source("components/ink_epd_ui/ink_epd_ui.c")
 
     assert "ink_sd_mount(" not in text
     assert "ink_fonts_load(" not in text
+    assert "CONFIG_FATFS_" not in defaults
+    assert "ink_fonts_utf8_truncate_tail" not in ui
     assert 'APP_START name=launcher' in text
     assert 'APP_STAGE name=launcher' in text
 

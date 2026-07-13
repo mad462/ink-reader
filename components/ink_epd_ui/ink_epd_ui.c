@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ink_fonts.h"
+#include "ink_cpfont.h"
 #include "ink_ui_text_assets.h"
 
 static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
@@ -360,6 +360,52 @@ static size_t photo_list_window_start(size_t selected, size_t count) {
   return start < last_start ? start : last_start;
 }
 
+static size_t utf8_unit_size(const unsigned char *text) {
+  if (!text || text[0] == 0) return 0;
+  if (text[0] < 0x80U) return 1;
+  size_t size = 1;
+  if (text[0] >= 0xC2U && text[0] <= 0xDFU)
+    size = 2;
+  else if (text[0] >= 0xE0U && text[0] <= 0xEFU)
+    size = 3;
+  else if (text[0] >= 0xF0U && text[0] <= 0xF4U)
+    size = 4;
+  for (size_t i = 1; i < size; ++i)
+    if (text[i] == 0 || (text[i] & 0xC0U) != 0x80U) return 1;
+  return size;
+}
+
+static bool utf8_truncate_tail(const char *src, char *dst, size_t dst_size,
+                               size_t max_codepoints) {
+  if (!src || !dst || dst_size == 0 || max_codepoints == 0) return false;
+
+  size_t total = 0;
+  for (const unsigned char *p = (const unsigned char *)src; *p;
+       p += utf8_unit_size(p))
+    ++total;
+
+  const bool truncated = total > max_codepoints;
+  const size_t keep = truncated && max_codepoints > 3
+                          ? max_codepoints - 3
+                          : max_codepoints;
+  size_t used = 0;
+  const unsigned char *p = (const unsigned char *)src;
+  for (size_t index = 0; *p && index < keep; ++index) {
+    const size_t unit_size = utf8_unit_size(p);
+    if (unit_size > dst_size - used - 1U) return false;
+    memcpy(dst + used, p, unit_size);
+    used += unit_size;
+    p += unit_size;
+  }
+  if (truncated && max_codepoints > 3) {
+    if (3U > dst_size - used - 1U) return false;
+    memcpy(dst + used, "...", 3U);
+    used += 3U;
+  }
+  dst[used] = '\0';
+  return true;
+}
+
 static void format_photo_title(char *title, size_t title_size,
                                size_t index, const char *name,
                                int max_width, ink_cpfont_t *font) {
@@ -367,8 +413,8 @@ static void format_photo_title(char *title, size_t title_size,
   for (size_t max_codepoints = 24U; max_codepoints > 0U;
        --max_codepoints) {
     char display_name[128];
-    if (!ink_fonts_utf8_truncate_tail(name ? name : "", display_name,
-                                      sizeof(display_name), max_codepoints))
+    if (!utf8_truncate_tail(name ? name : "", display_name,
+                            sizeof(display_name), max_codepoints))
       continue;
     if (snprintf(title, title_size, "%02u. %s", (unsigned)(index + 1),
                  display_name) >= (int)title_size)
