@@ -64,6 +64,13 @@ static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
                                         {7, 8, 0x70, 8, 7},
                                         {0x61, 0x51, 0x49, 0x45, 0x43}};
 
+static const int kLauncherRows[2] = {300, 440};
+static const int kLauncherLineX = 96;
+static const int kLauncherLineWidth = 20;
+static const int kLauncherLineHeight = 4;
+static const int kLauncherLineYOffset = 12;
+static const int kLauncherSelectionPadding = 4;
+
 static const uint8_t *glyph_for(char ch) {
   if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
   if (ch < ' ' || ch > 'Z') ch = '?';
@@ -113,15 +120,45 @@ void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected) {
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
   ink_epd_ui_clear(buffer, length, true);
   ink_epd_ui_draw_text(buffer, length, 78, 100, 5, "INK READER", true);
-  const int rows[2] = {300, 440};
   const char *labels[2] = {"READER", "PHOTO"};
   for (int i = 0; i < 2; ++i) {
-    const bool active = selected == i;
-    ink_epd_ui_fill_rect(buffer, length, 65, rows[i] - 35, 350, 100, active);
-    ink_epd_ui_draw_text(buffer, length, 135, rows[i], 4, labels[i], !active);
+    if (selected == i)
+      ink_epd_ui_fill_rect(buffer, length, kLauncherLineX,
+                           kLauncherRows[i] + kLauncherLineYOffset,
+                           kLauncherLineWidth, kLauncherLineHeight, true);
+    ink_epd_ui_draw_text(buffer, length, 135, kLauncherRows[i], 4, labels[i],
+                         true);
   }
   ink_epd_ui_draw_text(buffer, length, 120, 690, 2, "LEFT RIGHT  CONFIRM",
                        true);
+}
+
+ink_epd_region_t ink_epd_ui_launcher_selection_region(int previous,
+                                                       int selected) {
+  if (previous < 0) previous = 0;
+  if (previous > 1) previous = 1;
+  if (selected < 0) selected = 0;
+  if (selected > 1) selected = 1;
+
+  const int first = previous < selected ? previous : selected;
+  const int last = previous > selected ? previous : selected;
+  int left = kLauncherLineX - kLauncherSelectionPadding;
+  int top = kLauncherRows[first] + kLauncherLineYOffset -
+            kLauncherSelectionPadding;
+  int right = kLauncherLineX + kLauncherLineWidth +
+              kLauncherSelectionPadding;
+  int bottom = kLauncherRows[last] + kLauncherLineYOffset +
+               kLauncherLineHeight + kLauncherSelectionPadding;
+  if (left < 0) left = 0;
+  if (top < 0) top = 0;
+  if (right > INK_EPD_WIDTH) right = INK_EPD_WIDTH;
+  if (bottom > INK_EPD_HEIGHT) bottom = INK_EPD_HEIGHT;
+  return (ink_epd_region_t){
+      .x = left,
+      .y = top,
+      .width = right - left,
+      .height = bottom - top,
+  };
 }
 
 void ink_epd_ui_draw_status(uint8_t *buffer, size_t length, const char *title,
@@ -137,6 +174,20 @@ bool ink_epd_ui_self_test(void) {
   uint8_t *buffer = malloc(INK_EPD_BUFFER_SIZE);
   if (!buffer) return false;
 
+  const ink_epd_region_t moved = ink_epd_ui_launcher_selection_region(0, 1);
+  const ink_epd_region_t unchanged =
+      ink_epd_ui_launcher_selection_region(0, 0);
+  const ink_epd_region_t clamped =
+      ink_epd_ui_launcher_selection_region(-100, 100);
+  if (moved.x != 92 || moved.y != 308 || moved.width != 28 ||
+      moved.height != 152 || unchanged.x != 92 || unchanged.y != 308 ||
+      unchanged.width != 28 || unchanged.height != 12 || clamped.x < 0 ||
+      clamped.y < 0 || clamped.x + clamped.width > INK_EPD_WIDTH ||
+      clamped.y + clamped.height > INK_EPD_HEIGHT) {
+    free(buffer);
+    return false;
+  }
+
   ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
   ink_epd_ui_set_pixel(buffer, INK_EPD_BUFFER_SIZE, 0, 0, true);
   if (buffer[0] != 0x7f) {
@@ -145,6 +196,50 @@ bool ink_epd_ui_self_test(void) {
   }
   ink_epd_ui_set_pixel(buffer, INK_EPD_BUFFER_SIZE, -1, 0, true);
   ink_epd_ui_draw_launcher(buffer, INK_EPD_BUFFER_SIZE, 0);
+  const size_t white_index = (size_t)270 * (INK_EPD_WIDTH / 8) + 70 / 8;
+  const uint8_t white_mask = (uint8_t)(0x80u >> (70 & 7));
+  const size_t reader_index = (size_t)300 * (INK_EPD_WIDTH / 8) + 135 / 8;
+  const uint8_t reader_mask = (uint8_t)(0x80u >> (135 & 7));
+  const size_t photo_index = (size_t)440 * (INK_EPD_WIDTH / 8) + 135 / 8;
+  const uint8_t photo_mask = (uint8_t)(0x80u >> (135 & 7));
+  bool launcher_style_valid = (buffer[white_index] & white_mask) &&
+                              !(buffer[reader_index] & reader_mask) &&
+                              !(buffer[photo_index] & photo_mask);
+  for (int y = 0; y < kLauncherLineHeight; ++y) {
+    for (int x = 0; x < kLauncherLineWidth; ++x) {
+      const int px = kLauncherLineX + x;
+      const size_t selected_index =
+          (size_t)(kLauncherRows[0] + kLauncherLineYOffset + y) *
+              (INK_EPD_WIDTH / 8) +
+          (size_t)px / 8;
+      const size_t unselected_index =
+          (size_t)(kLauncherRows[1] + kLauncherLineYOffset + y) *
+              (INK_EPD_WIDTH / 8) +
+          (size_t)px / 8;
+      const uint8_t mask = (uint8_t)(0x80u >> (px & 7));
+      launcher_style_valid = launcher_style_valid &&
+                             !(buffer[selected_index] & mask) &&
+                             (buffer[unselected_index] & mask);
+    }
+  }
+  const int boundary_x[4] = {kLauncherLineX - 1,
+                             kLauncherLineX + kLauncherLineWidth,
+                             kLauncherLineX, kLauncherLineX};
+  const int boundary_y[4] = {
+      kLauncherRows[0] + kLauncherLineYOffset,
+      kLauncherRows[0] + kLauncherLineYOffset,
+      kLauncherRows[0] + kLauncherLineYOffset - 1,
+      kLauncherRows[0] + kLauncherLineYOffset + kLauncherLineHeight};
+  for (int i = 0; i < 4; ++i) {
+    const size_t index =
+        (size_t)boundary_y[i] * (INK_EPD_WIDTH / 8) + boundary_x[i] / 8;
+    const uint8_t mask = (uint8_t)(0x80u >> (boundary_x[i] & 7));
+    launcher_style_valid = launcher_style_valid && (buffer[index] & mask);
+  }
+  if (!launcher_style_valid) {
+    free(buffer);
+    return false;
+  }
   bool changed = false;
   for (size_t i = 0; i < INK_EPD_BUFFER_SIZE; ++i) {
     if (buffer[i] != 0xff) {

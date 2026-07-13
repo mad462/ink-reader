@@ -48,11 +48,25 @@ void app_main(void) {
     }
     if (ink_input_was_pressed(&input, INK_BUTTON_LEFT) ||
         ink_input_was_pressed(&input, INK_BUTTON_RIGHT)) {
+      const int previous = selected;
       selected = 1 - selected;
       ink_epd_ui_draw_launcher(framebuffer, INK_EPD_BUFFER_SIZE, selected);
-      ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
-      if (ret != ESP_OK)
-        ESP_LOGE(TAG, "selection refresh failed err=%s", esp_err_to_name(ret));
+      const ink_epd_region_t region =
+          ink_epd_ui_launcher_selection_region(previous, selected);
+      ret = ink_hw_partial_refresh_area(
+          framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)region.x,
+          (uint16_t)region.y, (uint16_t)region.width, (uint16_t)region.height);
+      if (ret != ESP_OK) {
+        ESP_LOGE(TAG,
+                 "selection partial refresh failed x=%d y=%d w=%d h=%d "
+                 "error=%s",
+                 region.x, region.y, region.width, region.height,
+                 esp_err_to_name(ret));
+        ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
+        if (ret != ESP_OK)
+          ESP_LOGE(TAG, "selection full refresh fallback failed error=%s",
+                   esp_err_to_name(ret));
+      }
     }
     if (ink_input_was_pressed(&input, INK_BUTTON_CONFIRM)) {
       if (selected == 0) {
