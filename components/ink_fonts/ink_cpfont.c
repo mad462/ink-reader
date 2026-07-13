@@ -547,22 +547,28 @@ bool ink_cpfont_self_test(void) {
       .top = 4, .data_length = 4U, .data_offset = 0U};
   const uint8_t source[4] = {0xCCU, 0x00U, 0xCCU, 0x00U};
   uint8_t decoded[2];
-  uint8_t render_buffer[(INK_CPFONT_FB_WIDTH / 8) * 12];
+  const size_t render_size = (INK_CPFONT_FB_WIDTH / 8) * 12U;
+  uint8_t *render_buffer = cpfont_malloc(render_size);
+  if (render_buffer == NULL) return false;
   decode_glyph_2bit(&glyph, source, decoded);
-  memset(render_buffer, 0xFF, sizeof(render_buffer));
+  memset(render_buffer, 0xFF, render_size);
   draw_glyph_scaled(render_buffer, 10, 10, &glyph, decoded, 2U);
   int pixel_count = 0;
-  for (size_t i = 0; i < sizeof(render_buffer); ++i)
+  for (size_t i = 0; i < render_size; ++i)
     for (uint8_t mask = 0x80U; mask != 0U; mask >>= 1)
       if ((render_buffer[i] & mask) == 0U) ++pixel_count;
-  if (pixel_count != 4) return false;
+  if (pixel_count != 4) {
+    free(render_buffer);
+    return false;
+  }
 
   const char invalid[] = {(char)0xED, (char)0xA0, (char)0x80, 'A', '\0'};
   const char *cursor = invalid;
-  if (utf8_next_codepoint(&cursor) != 0xFFFDU || cursor != invalid + 1 ||
-      utf8_next_codepoint(&cursor) != 0xFFFDU || cursor != invalid + 2 ||
-      utf8_next_codepoint(&cursor) != 0xFFFDU || cursor != invalid + 3 ||
-      utf8_next_codepoint(&cursor) != 'A')
-    return false;
-  return true;
+  const bool utf8_ok =
+      utf8_next_codepoint(&cursor) == 0xFFFDU && cursor == invalid + 1 &&
+      utf8_next_codepoint(&cursor) == 0xFFFDU && cursor == invalid + 2 &&
+      utf8_next_codepoint(&cursor) == 0xFFFDU && cursor == invalid + 3 &&
+      utf8_next_codepoint(&cursor) == 'A';
+  free(render_buffer);
+  return utf8_ok;
 }
