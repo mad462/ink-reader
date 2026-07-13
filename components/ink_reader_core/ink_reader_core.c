@@ -286,8 +286,15 @@ static bool load_page(FILE *file, const ink_reader_page_t *page,
     return false;
   uint32_t data_size = 0;
   if (!seek_page_payload(file, page, &data_size)) return false;
-  if (data_size == INK_READER_PAGE_SIZE)
-    return fread(buffer, 1, data_size, file) == data_size;
+  if (data_size == INK_READER_PAGE_SIZE) {
+    uint8_t *page_data = heap_caps_malloc(
+        INK_READER_PAGE_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!page_data) return false;
+    const bool ok = fread(page_data, 1, data_size, file) == data_size;
+    if (ok) memcpy(buffer, page_data, data_size);
+    free(page_data);
+    return ok;
+  }
   if (data_size == INK_READER_PAGE_SIZE * 2u) {
     uint8_t *p0 = heap_caps_malloc(INK_READER_PAGE_SIZE,
                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
