@@ -1,6 +1,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "ink_boot_switch.h"
@@ -12,6 +13,57 @@
 
 static const char *TAG = "reader";
 
+enum { READER_PARTIAL_REFRESH_LIMIT = 50 };
+
+static bool find_changed_region(const uint8_t *previous,
+                                const uint8_t *current, uint16_t width,
+                                uint16_t height, ink_epd_region_t *region) {
+  if (!previous || !current || !region || width == 0 || height == 0 ||
+      (width & 7U) != 0)
+    return false;
+
+  int min_x = width;
+  int min_y = height;
+  int max_x = -1;
+  int max_y = -1;
+  const size_t stride = width / 8U;
+  for (uint16_t y = 0; y < height; ++y) {
+    for (uint16_t byte_x = 0; byte_x < stride; ++byte_x) {
+      const uint8_t changed =
+          previous[(size_t)y * stride + byte_x] ^
+          current[(size_t)y * stride + byte_x];
+      if (changed == 0) continue;
+      for (uint8_t bit = 0; bit < 8U; ++bit) {
+        if ((changed & (uint8_t)(0x80U >> bit)) == 0) continue;
+        const int x = (int)byte_x * 8 + bit;
+        if (x < min_x) min_x = x;
+        if (x > max_x) max_x = x;
+        if ((int)y < min_y) min_y = y;
+        if ((int)y > max_y) max_y = y;
+      }
+    }
+  }
+  if (max_x < min_x || max_y < min_y) return false;
+  *region = (ink_epd_region_t){.x = min_x,
+                              .y = min_y,
+                              .width = max_x - min_x + 1,
+                              .height = max_y - min_y + 1};
+  return true;
+}
+
+static bool reader_refresh_policy_self_test(void) {
+  const uint8_t previous[4] = {0xff, 0xff, 0xff, 0xff};
+  uint8_t current[4];
+  memcpy(current, previous, sizeof(current));
+  ink_epd_region_t region = {0};
+  if (find_changed_region(previous, current, 16, 2, &region)) return false;
+  current[0] &= (uint8_t)~(0x80U >> 3);
+  current[3] &= (uint8_t)~(0x80U >> 7);
+  return find_changed_region(previous, current, 16, 2, &region) &&
+         region.x == 3 && region.y == 0 && region.width == 13 &&
+         region.height == 2;
+}
+
 static void log_stage(const char *stage, int64_t started_us) {
   ESP_LOGI(TAG, "APP_STAGE name=reader stage=%s elapsed_ms=%lld", stage,
            (long long)((esp_timer_get_time() - started_us) / 1000));
@@ -20,14 +72,19 @@ static void log_stage(const char *stage, int64_t started_us) {
 void app_main(void) {
   const int64_t started_us = esp_timer_get_time();
   ESP_LOGI(TAG, "APP_START name=reader");
-  if (!ink_reader_core_self_test()) {
+  if (!ink_reader_core_self_test() || !reader_refresh_policy_self_test()) {
     ESP_LOGE(TAG, "reader component self test failed");
     return;
   }
   uint8_t *framebuffer = heap_caps_malloc(INK_EPD_BUFFER_SIZE,
                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!framebuffer) {
-    ESP_LOGE(TAG, "framebuffer allocation failed");
+  uint8_t *previous_framebuffer = heap_caps_malloc(
+      INK_EPD_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!framebuffer || !previous_framebuffer) {
+    ESP_LOGE(TAG, "framebuffer allocation failed current=%p previous=%p",
+             framebuffer, previous_framebuffer);
+    heap_caps_free(previous_framebuffer);
+    heap_caps_free(framebuffer);
     return;
   }
 
@@ -92,6 +149,7 @@ void app_main(void) {
              (unsigned)book.page_count);
   }
   if (display_ret == ESP_OK) {
+    ESP_LOGI(TAG, "FIRST_REFRESH mode=full");
     esp_err_t ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
     if (ret != ESP_OK)
       ESP_LOGE(TAG, "status refresh failed err=%s", esp_err_to_name(ret));
@@ -99,6 +157,7 @@ void app_main(void) {
       log_stage("first_refresh_done", started_us);
   }
 
+  unsigned successful_page_turns = 0;
   while (true) {
     ink_input_snapshot_t input = {0};
     const uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
@@ -111,11 +170,41 @@ void app_main(void) {
           target_page + 1 < book.page_count)
         ++target_page;
       if (target_page != book.current_page) {
+        const size_t previous_page = book.current_page;
+        memcpy(previous_framebuffer, framebuffer, INK_EPD_BUFFER_SIZE);
         if (ink_reader_book_load_page(&book, target_page, framebuffer,
                                       INK_EPD_BUFFER_SIZE)) {
-          esp_err_t ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
-          if (ret != ESP_OK)
+          ink_epd_region_t region = {0};
+          const bool changed = find_changed_region(
+              previous_framebuffer, framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
+              &region);
+          const bool cleanup =
+              successful_page_turns + 1 >= READER_PARTIAL_REFRESH_LIMIT;
+          esp_err_t ret = ESP_OK;
+          if (cleanup) {
+            ESP_LOGI(TAG, "PAGE_REFRESH mode=cleanup_full page=%u",
+                     (unsigned)target_page);
+            ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
+          } else if (changed) {
+            ESP_LOGI(TAG,
+                     "PAGE_REFRESH mode=partial page=%u x=%d y=%d w=%d h=%d",
+                     (unsigned)target_page, region.x, region.y, region.width,
+                     region.height);
+            ret = ink_hw_partial_refresh_area(
+                framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)region.x,
+                (uint16_t)region.y, (uint16_t)region.width,
+                (uint16_t)region.height);
+          } else {
+            ESP_LOGI(TAG, "PAGE_REFRESH mode=none page=%u",
+                     (unsigned)target_page);
+          }
+          if (ret != ESP_OK) {
             ESP_LOGE(TAG, "page refresh failed err=%s", esp_err_to_name(ret));
+            book.current_page = previous_page;
+            memcpy(framebuffer, previous_framebuffer, INK_EPD_BUFFER_SIZE);
+          } else {
+            successful_page_turns = cleanup ? 0 : successful_page_turns + 1;
+          }
         } else {
           ESP_LOGE(TAG, "page load failed page=%u",
                    (unsigned)target_page);

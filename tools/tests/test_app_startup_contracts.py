@@ -26,6 +26,21 @@ def test_reader_does_not_load_fonts_for_prerendered_pages() -> None:
     assert 'APP_STAGE name=reader' in text
 
 
+def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> None:
+    text = source("apps/reader/main/app_main.c")
+    page_turn = text[
+        text.index("if (target_page != book.current_page)") :
+        text.index("if (ink_input_was_pressed(&input, INK_BUTTON_BACK))")
+    ]
+
+    assert "READER_PARTIAL_REFRESH_LIMIT = 50" in text
+    assert "ink_hw_partial_refresh_area(" in page_turn
+    assert 'PAGE_REFRESH mode=partial' in page_turn
+    assert 'PAGE_REFRESH mode=cleanup_full' in page_turn
+    assert "book.current_page = previous_page;" in page_turn
+    assert "memcpy(framebuffer, previous_framebuffer" in page_turn
+
+
 def test_photo_starts_in_preview_and_font_task_never_touches_epd() -> None:
     text = source("apps/photo/main/app_main.c")
 
