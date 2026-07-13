@@ -5,6 +5,15 @@ the fixed phrases in `tools/generate_ui_text_bitmaps.py`. Its primary font names
 are changed to `Ink UI Test Font` / `InkUITestFont-Regular` so the modified,
 installable font does not use LXGW WenKai's Reserved Font Names.
 
+Install the exact generator and test dependencies from the repository root:
+
+```powershell
+python -m pip install -r tools/requirements-ui-fonts.txt
+```
+
+Pillow 12.2.0, pytest 9.0.3, and fontTools 4.62.1 are the pinned versions used
+to generate and verify the checked-in `ink_ui_text_assets.c` bytes.
+
 Source:
 
 - Project: https://github.com/lxgw/LxgwWenKai
@@ -45,3 +54,10 @@ subset.main([
 
 After subsetting, fontTools was used with `recalcTimestamp=False` to replace name
 IDs 1, 3, 4, 6, 16, and 21 with the non-reserved names above.
+
+At the fixed phrase sizes, FreeType autohinting of this subset can produce glyph
+bounding boxes that differ by up to approximately one pixel from rasterizing the
+approximately 25 MB original font. The checked-in assets intentionally treat the
+pinned repository subset output as authoritative so regeneration is local and
+reproducible. The requested pixel sizes and glyph designs still originate from
+LXGW WenKai.

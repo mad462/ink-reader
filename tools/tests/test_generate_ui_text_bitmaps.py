@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fontTools.ttLib import TTFont
+from PIL import Image
 
 import tools.generate_ui_text_bitmaps as generator
 from tools.generate_ui_text_bitmaps import DEFAULT_FONT_PATH, PHRASES, Phrase, generate
@@ -127,6 +128,40 @@ def test_cli_uses_repository_font_by_default(tmp_path: Path) -> None:
 
 def test_c_string_encodes_all_utf8_bytes_as_hex_escapes() -> None:
     assert generator._c_string('A\n"\0中') == r"\x41\x0A\x22\x00\xE4\xB8\xAD"
+
+
+def test_pack_1bpp_uses_threshold_and_row_msb_first_padding() -> None:
+    image = Image.new("L", (10, 2), 255)
+    image.putdata(
+        [
+            0,
+            127,
+            128,
+            255,
+            255,
+            255,
+            255,
+            0,
+            127,
+            128,
+            255,
+            255,
+            64,
+            255,
+            0,
+            255,
+            255,
+            255,
+            255,
+            127,
+        ]
+    )
+
+    packed = generator._pack_1bpp(image)
+
+    assert packed == bytes((0xC1, 0x80, 0x28, 0x40))
+    assert packed[1] & 0x3F == 0
+    assert packed[3] & 0x3F == 0
 
 
 @pytest.mark.parametrize("pixel_size", [0, 256])

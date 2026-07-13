@@ -36,6 +36,18 @@ PHRASES = (
 )
 
 
+def _pack_1bpp(image: Image.Image, threshold: int = 128) -> bytes:
+    width, height = image.size
+    stride = (width + 7) // 8
+    bitmap = bytearray(stride * height)
+    pixels = image.load()
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y] < threshold:
+                bitmap[y * stride + x // 8] |= 0x80 >> (x % 8)
+    return bytes(bitmap)
+
+
 def _render(phrase: Phrase, font_path: Path) -> tuple[int, int, bytes]:
     font = ImageFont.truetype(str(font_path), phrase.pixel_size)
     probe = Image.new("L", (1, 1), 255)
@@ -46,15 +58,7 @@ def _render(phrase: Phrase, font_path: Path) -> tuple[int, int, bytes]:
 
     image = Image.new("L", (width, height), 255)
     ImageDraw.Draw(image).text((-left, -top), phrase.text, font=font, fill=0)
-
-    stride = (width + 7) // 8
-    bitmap = bytearray(stride * height)
-    pixels = image.load()
-    for y in range(height):
-        for x in range(width):
-            if pixels[x, y] < 128:
-                bitmap[y * stride + x // 8] |= 0x80 >> (x % 8)
-    return width, height, bytes(bitmap)
+    return width, height, _pack_1bpp(image)
 
 
 def _format_bitmap(name: str, bitmap: bytes) -> str:
