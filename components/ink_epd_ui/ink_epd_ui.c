@@ -66,11 +66,14 @@ static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
                                         {7, 8, 0x70, 8, 7},
                                         {0x61, 0x51, 0x49, 0x45, 0x43}};
 
-static const int kLauncherRows[2] = {300, 440};
-static const int kLauncherLineX = 96;
-static const int kLauncherLineWidth = 20;
+static const int kLauncherRows[2] = {
+    INK_LAUNCHER_LIST_Y,
+    INK_LAUNCHER_LIST_Y + INK_LAUNCHER_ROW_HEIGHT + INK_LAUNCHER_ROW_GAP,
+};
+static const int kLauncherLineX = 68;
+static const int kLauncherLineWidth = 12;
 static const int kLauncherLineHeight = 4;
-static const int kLauncherLineYOffset = 12;
+static const int kLauncherLineYOffset = 20;
 static const int kLauncherSelectionPadding = 4;
 static const int kPhotoListX = 24;
 static const int kPhotoListY = 50;
@@ -81,6 +84,13 @@ static const int kPhotoListMarkerXInset = 2;
 static const int kPhotoListMarkerWidth = 4;
 static const int kPhotoListMarkerInset = 8;
 static const int kPhotoListTitleYOffset = 8;
+
+_Static_assert(INK_LAUNCHER_HEADER_GUTTER == 24, "launcher gutter");
+_Static_assert(INK_LAUNCHER_DIVIDER_Y == 38, "launcher divider");
+_Static_assert(INK_LAUNCHER_LIST_X == 24 && INK_LAUNCHER_ROW_WIDTH == 432,
+               "launcher list geometry");
+_Static_assert(INK_LAUNCHER_ROW_HEIGHT == 70 && INK_LAUNCHER_ROW_GAP == 6,
+               "launcher row geometry");
 
 static const uint8_t *glyph_for(char ch) {
   if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
@@ -166,21 +176,99 @@ bool ink_epd_ui_draw_text_font(uint8_t *buffer, size_t length,
   return true;
 }
 
-void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected) {
+static void draw_hline(uint8_t *buffer, size_t length, int x, int y,
+                       int width) {
+  ink_epd_ui_fill_rect(buffer, length, x, y, width, 1, true);
+}
+
+static void draw_vline(uint8_t *buffer, size_t length, int x, int y,
+                       int height) {
+  ink_epd_ui_fill_rect(buffer, length, x, y, 1, height, true);
+}
+
+static void draw_rect_outline(uint8_t *buffer, size_t length, int x, int y,
+                              int width, int height) {
+  draw_hline(buffer, length, x, y, width);
+  draw_hline(buffer, length, x, y + height - 1, width);
+  draw_vline(buffer, length, x, y, height);
+  draw_vline(buffer, length, x + width - 1, y, height);
+}
+
+static void draw_book_icon(uint8_t *buffer, size_t length, int x, int y) {
+  draw_rect_outline(buffer, length, x, y, 18, 20);
+  draw_vline(buffer, length, x + 4, y + 2, 16);
+  draw_hline(buffer, length, x + 7, y + 5, 8);
+  draw_hline(buffer, length, x + 7, y + 9, 8);
+  draw_hline(buffer, length, x + 7, y + 13, 6);
+}
+
+static void draw_photo_icon(uint8_t *buffer, size_t length, int x, int y) {
+  draw_rect_outline(buffer, length, x, y, 20, 18);
+  ink_epd_ui_fill_rect(buffer, length, x + 4, y + 11, 5, 3, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 9, y + 9, 6, 5, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 14, y + 7, 3, 7, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 13, y + 3, 3, 3, true);
+}
+
+static void draw_chevron(uint8_t *buffer, size_t length, int x, int y) {
+  for (int i = 0; i < 4; ++i)
+    ink_epd_ui_set_pixel(buffer, length, x + i, y + i, true);
+  for (int i = 1; i < 4; ++i)
+    ink_epd_ui_set_pixel(buffer, length, x + 3 - i, y + 3 + i, true);
+}
+
+void ink_epd_ui_draw_launcher_with_fonts(
+    uint8_t *buffer, size_t length, int selected,
+    const ink_epd_ui_fonts_t *fonts) {
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
+  if (selected < 0) selected = 0;
+  if (selected > 1) selected = 1;
+  ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
+  ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
+  ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
+  const bool localized = ink_cpfont_is_loaded(body_font);
   ink_epd_ui_clear(buffer, length, true);
-  ink_epd_ui_draw_text(buffer, length, 78, 100, 5, "INK READER", true);
-  const char *labels[2] = {"READER", "PHOTO"};
+  (void)ink_epd_ui_draw_text_font(
+      buffer, length, title_font, INK_LAUNCHER_HEADER_GUTTER, 8, 3, 1U,
+      ink_cpfont_is_loaded(title_font) ? "启动器" : "LAUNCHER", NULL);
+  (void)ink_epd_ui_draw_text_font(
+      buffer, length, footer_font, 330, 10, 1, 1U,
+      ink_cpfont_is_loaded(footer_font) ? "阅读 / 相册" : "READER / PHOTO",
+      NULL);
+  ink_epd_ui_fill_rect(
+      buffer, length, INK_LAUNCHER_HEADER_GUTTER, INK_LAUNCHER_DIVIDER_Y,
+      INK_EPD_WIDTH - 2 * INK_LAUNCHER_HEADER_GUTTER, 1, true);
+
+  const char *titles[2] = {localized ? "书库" : "READER",
+                           localized ? "相册" : "PHOTO"};
+  const char *descriptions[2] = {
+      localized ? "打开图书与最近阅读" : "OPEN BOOKS FROM TF CARD",
+      localized ? "浏览 TF 卡灰阶图片" : "BROWSE GRAYSCALE BMP",
+  };
   for (int i = 0; i < 2; ++i) {
+    const int row_y = kLauncherRows[i];
     if (selected == i)
       ink_epd_ui_fill_rect(buffer, length, kLauncherLineX,
-                           kLauncherRows[i] + kLauncherLineYOffset,
+                           row_y + kLauncherLineYOffset,
                            kLauncherLineWidth, kLauncherLineHeight, true);
-    ink_epd_ui_draw_text(buffer, length, 135, kLauncherRows[i], 4, labels[i],
-                         true);
+    if (i == 0)
+      draw_book_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
+                     row_y + (INK_LAUNCHER_ROW_HEIGHT - 20) / 2);
+    else
+      draw_photo_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
+                      row_y + (INK_LAUNCHER_ROW_HEIGHT - 18) / 2);
+    (void)ink_epd_ui_draw_text_font(buffer, length, body_font, 88, row_y + 10,
+                                    3, 1U, titles[i], NULL);
+    (void)ink_epd_ui_draw_text_font(buffer, length, footer_font, 88,
+                                    row_y + 40, 2, 1U, descriptions[i], NULL);
+    draw_chevron(buffer, length,
+                 INK_LAUNCHER_LIST_X + INK_LAUNCHER_ROW_WIDTH - 26,
+                 row_y + 22);
   }
-  ink_epd_ui_draw_text(buffer, length, 120, 690, 2, "LEFT RIGHT  CONFIRM",
-                       true);
+}
+
+void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected) {
+  ink_epd_ui_draw_launcher_with_fonts(buffer, length, selected, NULL);
 }
 
 ink_epd_region_t ink_epd_ui_launcher_selection_region(int previous,
@@ -485,9 +573,9 @@ bool ink_epd_ui_self_test(void) {
       ink_epd_ui_launcher_selection_region(0, 0);
   const ink_epd_region_t clamped =
       ink_epd_ui_launcher_selection_region(-100, 100);
-  if (moved.x != 92 || moved.y != 308 || moved.width != 28 ||
-      moved.height != 152 || unchanged.x != 92 || unchanged.y != 308 ||
-      unchanged.width != 28 || unchanged.height != 12 || clamped.x < 0 ||
+  if (moved.x != 64 || moved.y != 66 || moved.width != 20 ||
+      moved.height != 88 || unchanged.x != 64 || unchanged.y != 66 ||
+      unchanged.width != 20 || unchanged.height != 12 || clamped.x < 0 ||
       clamped.y < 0 || clamped.x + clamped.width > INK_EPD_WIDTH ||
       clamped.y + clamped.height > INK_EPD_HEIGHT) {
     free(buffer);
@@ -504,13 +592,22 @@ bool ink_epd_ui_self_test(void) {
   ink_epd_ui_draw_launcher(buffer, INK_EPD_BUFFER_SIZE, 0);
   const size_t white_index = (size_t)270 * (INK_EPD_WIDTH / 8) + 70 / 8;
   const uint8_t white_mask = (uint8_t)(0x80u >> (70 & 7));
-  const size_t reader_index = (size_t)300 * (INK_EPD_WIDTH / 8) + 135 / 8;
-  const uint8_t reader_mask = (uint8_t)(0x80u >> (135 & 7));
-  const size_t photo_index = (size_t)440 * (INK_EPD_WIDTH / 8) + 135 / 8;
-  const uint8_t photo_mask = (uint8_t)(0x80u >> (135 & 7));
+  const size_t reader_index = (size_t)60 * (INK_EPD_WIDTH / 8) + 88 / 8;
+  const uint8_t reader_mask = (uint8_t)(0x80u >> (88 & 7));
+  const size_t photo_index = (size_t)136 * (INK_EPD_WIDTH / 8) + 88 / 8;
+  const uint8_t photo_mask = (uint8_t)(0x80u >> (88 & 7));
+  const size_t book_icon_index = (size_t)75 * (INK_EPD_WIDTH / 8) + 40 / 8;
+  const uint8_t book_icon_mask = (uint8_t)(0x80u >> (40 & 7));
+  const size_t photo_icon_index = (size_t)152 * (INK_EPD_WIDTH / 8) + 40 / 8;
+  const uint8_t photo_icon_mask = (uint8_t)(0x80u >> (40 & 7));
+  const size_t chevron_index = (size_t)72 * (INK_EPD_WIDTH / 8) + 430 / 8;
+  const uint8_t chevron_mask = (uint8_t)(0x80u >> (430 & 7));
   bool launcher_style_valid = (buffer[white_index] & white_mask) &&
                               !(buffer[reader_index] & reader_mask) &&
-                              !(buffer[photo_index] & photo_mask);
+                              !(buffer[photo_index] & photo_mask) &&
+                              !(buffer[book_icon_index] & book_icon_mask) &&
+                              !(buffer[photo_icon_index] & photo_icon_mask) &&
+                              !(buffer[chevron_index] & chevron_mask);
   for (int y = 0; y < kLauncherLineHeight; ++y) {
     for (int x = 0; x < kLauncherLineWidth; ++x) {
       const int px = kLauncherLineX + x;

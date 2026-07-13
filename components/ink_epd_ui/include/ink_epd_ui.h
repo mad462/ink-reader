@@ -12,6 +12,13 @@
 #define INK_PHOTO_LIST_ROW_HEIGHT 42
 #define INK_PHOTO_LIST_ROW_GAP 2
 #define INK_PHOTO_LIST_VISIBLE_ROWS 14
+#define INK_LAUNCHER_HEADER_GUTTER 24
+#define INK_LAUNCHER_DIVIDER_Y 38
+#define INK_LAUNCHER_LIST_X 24
+#define INK_LAUNCHER_LIST_Y 50
+#define INK_LAUNCHER_ROW_WIDTH 432
+#define INK_LAUNCHER_ROW_HEIGHT 70
+#define INK_LAUNCHER_ROW_GAP 6
 
 typedef struct {
   int x;
@@ -45,6 +52,9 @@ bool ink_epd_ui_draw_text_font(uint8_t *buffer, size_t length,
                                int ascii_scale, uint8_t font_scale_divisor,
                                const char *text, int *out_width);
 void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected);
+void ink_epd_ui_draw_launcher_with_fonts(
+    uint8_t *buffer, size_t length, int selected,
+    const ink_epd_ui_fonts_t *fonts);
 ink_epd_region_t ink_epd_ui_launcher_selection_region(int previous,
                                                        int selected);
 void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
