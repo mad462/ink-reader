@@ -248,3 +248,33 @@ CONFIG_FATFS_API_ENCODING_UTF_8=y
 ### 仍待实体确认
 
 本轮新固件尚未收到 photo Confirm、左右切图或 Back 按键事件，因此不把以下项目写成 PASS：中文 BMP 实际打开后的灰阶全刷、预览左右切图，以及 reader/photo 短按 Back 返回 launcher。launcher 卡片尺寸、图标、chevron、左侧横线和屏幕灰阶效果也需要以实体屏幕观察确认。旧固件首轮已验证对应切换路径，但最终验收仍以本轮镜像为准。
+
+## Task 13：最终审查修复与回归测试
+
+最终全量审查发现并修复以下状态一致性问题：
+
+- reader 扫描候选时不仅验证 XTC/XTCH header 和 page index，还预验证首屏 XTG/XTH payload 完整性；首个候选首屏损坏时继续尝试后续书籍。
+- reader 新增事务式目标页加载：XTG 和 XTH 都先完整读入 PSRAM/heap 临时缓冲，成功后才更新 framebuffer 与 `current_page`；短读、分配或格式失败保持原页码和原 framebuffer。
+- photo 对 4 到 16 项 palette 的每个 index 按亮度量化到四灰阶，不再把中间 palette index 全部映射为白色；四项等间隔 palette 仍保持黑、深灰、浅灰、白编码。
+- launcher 选择变化只在局刷或 fallback 全刷成功后提交；两种刷新均失败时，Confirm 仍指向屏幕可见的旧选择，并恢复 framebuffer 中的旧横线状态。
+
+新增两个不进入固件镜像的 host test runner：
+
+```powershell
+components/ink_reader_core/test/run_host_tests.ps1
+components/ink_photo_core/test/run_host_tests.ps1
+```
+
+reader 测试使用每次 GUID 隔离的 TEMP fixture/build/tool root，覆盖坏 XTG/XTH 首屏候选回退、XTG/XTH 目标页截断及页码/framebuffer 事务性；photo 测试覆盖 16 色 palette 到四灰阶的完整映射。两个 runner 最终均输出 PASS，未创建或修改实体 `/sdcard` 文件。
+
+最终执行 `tools/build_all.ps1`，退出码为 0：
+
+| app | 镜像大小 | 分区大小 | build |
+| --- | ---: | ---: | --- |
+| launcher | 526,896 bytes | 1,048,576 bytes | PASS |
+| reader | 526,224 bytes | 4,194,304 bytes | PASS |
+| photo | 532,672 bytes | 4,194,304 bytes | PASS |
+
+禁止模块源码扫描为 0 命中；objdump 栈帧保持 launcher `app_main=128B`、reader `app_main=768B`、photo `app_main=128B`。最终三镜像再次写入 COM9，launcher 完整布局、reader `0x120000`、photo `0x520000` 均出现 `Hash of data verified`。
+
+本轮最终镜像仍需要实体按键完成 photo Confirm/左右/Back 和 reader Back，并观察 launcher 卡片、横线局刷及 photo 四灰阶全刷效果；在这些屏幕/按键项目完成前仍不合并 master。
