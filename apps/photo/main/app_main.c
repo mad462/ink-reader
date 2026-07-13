@@ -25,9 +25,24 @@ static bool photo_should_full_refresh(unsigned successful_partial_count) {
   return successful_partial_count >= PHOTO_PARTIAL_REFRESH_LIMIT;
 }
 
+static enum photo_view photo_committed_view(enum photo_view current,
+                                            enum photo_view candidate,
+                                            bool refresh_succeeded) {
+  return refresh_succeeded ? candidate : current;
+}
+
+static size_t photo_committed_index(size_t current, size_t candidate,
+                                    bool refresh_succeeded) {
+  return refresh_succeeded ? candidate : current;
+}
+
 static bool photo_policy_self_test(void) {
   return !photo_should_full_refresh(PHOTO_PARTIAL_REFRESH_LIMIT - 1) &&
-         photo_should_full_refresh(PHOTO_PARTIAL_REFRESH_LIMIT);
+         photo_should_full_refresh(PHOTO_PARTIAL_REFRESH_LIMIT) &&
+         photo_committed_view(PREVIEW, LIST, false) == PREVIEW &&
+         photo_committed_view(PREVIEW, LIST, true) == LIST &&
+         photo_committed_index(3, 4, false) == 3 &&
+         photo_committed_index(3, 4, true) == 4;
 }
 
 static size_t photo_catalog_count(const ink_photo_catalog_t *catalog,
@@ -65,14 +80,15 @@ static bool full_refresh_photo_list(const uint8_t *lsb,
   return true;
 }
 
-static void refresh_photo_list(const uint8_t *lsb, size_t previous,
+static bool refresh_photo_list(const uint8_t *lsb, size_t previous,
                                size_t selected, size_t count,
-                               unsigned *successful_partial_count) {
-  if (!lsb || !successful_partial_count || count == 0) return;
+                               unsigned *successful_partial_count,
+                               bool force_full) {
+  if (!lsb || !successful_partial_count || count == 0) return false;
 
-  if (photo_should_full_refresh(*successful_partial_count)) {
-    (void)full_refresh_photo_list(lsb, successful_partial_count, "selection");
-    return;
+  if (force_full || photo_should_full_refresh(*successful_partial_count)) {
+    return full_refresh_photo_list(lsb, successful_partial_count,
+                                   "selection");
   }
 
   const ink_epd_region_t region =
@@ -82,15 +98,28 @@ static void refresh_photo_list(const uint8_t *lsb, size_t previous,
       (uint16_t)region.width, (uint16_t)region.height);
   if (ret == ESP_OK) {
     ++*successful_partial_count;
-    return;
+    return true;
   }
 
   ESP_LOGE(TAG,
            "selection partial refresh failed x=%d y=%d w=%d h=%d error=%s",
            region.x, region.y, region.width, region.height,
            esp_err_to_name(ret));
-  (void)full_refresh_photo_list(lsb, successful_partial_count,
-                                "selection fallback");
+  return full_refresh_photo_list(lsb, successful_partial_count,
+                                 "selection fallback");
+}
+
+static bool show_status_page(uint8_t *lsb, const char *message,
+                             const char *context) {
+  if (!lsb) return false;
+  ink_epd_ui_draw_status(lsb, INK_PHOTO_PLANE_SIZE, "PHOTO", message);
+  esp_err_t ret = ink_hw_full_refresh(lsb, INK_PHOTO_PLANE_SIZE);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "%s status refresh failed error=%s", context,
+             esp_err_to_name(ret));
+    return false;
+  }
+  return true;
 }
 
 static bool show_photo(const ink_photo_catalog_t *catalog, size_t index,
@@ -116,7 +145,9 @@ static bool show_photo(const ink_photo_catalog_t *catalog, size_t index,
 
 void app_main(void) {
   ESP_LOGI(TAG, "APP_START name=photo");
-  if (!ink_photo_core_self_test() || !photo_policy_self_test()) {
+  const bool core_ready =
+      ink_photo_core_self_test() && photo_policy_self_test();
+  if (!core_ready) {
     ESP_LOGE(TAG, "photo self test failed");
   }
 
@@ -139,23 +170,39 @@ void app_main(void) {
     ESP_LOGE(TAG, "photo buffers allocation failed");
   }
 
-  esp_err_t sd_ret = catalog ? ink_sd_mount() : ESP_ERR_NO_MEM;
-  bool catalog_ready =
-      sd_ret == ESP_OK && catalog && ink_photo_catalog_load(catalog);
+  const bool resources_ready = lsb && msb && catalog;
+  esp_err_t sd_ret = ESP_ERR_INVALID_STATE;
+  bool catalog_ready = false;
+  if (core_ready && resources_ready) {
+    sd_ret = ink_sd_mount();
+    if (sd_ret == ESP_OK) {
+      catalog_ready = ink_photo_catalog_load(catalog);
+      if (!catalog_ready) {
+        ESP_LOGE(TAG, "catalog load failed path=%s", INK_PHOTO_DIR);
+      }
+    }
+  }
   const size_t count = photo_catalog_count(catalog, catalog_ready);
   build_photo_rows(catalog, count);
 
   enum photo_view view = LIST;
   size_t current = 0;
   unsigned successful_partial_count = 0;
+  bool force_full_next = false;
   if (display_ret == ESP_OK && lsb) {
-    if (sd_ret != ESP_OK) {
-      ink_epd_ui_draw_status(lsb, INK_PHOTO_PLANE_SIZE, "PHOTO",
-                             "SD CARD ERROR");
-      (void)full_refresh_photo_list(lsb, &successful_partial_count, "status");
+    if (!core_ready) {
+      (void)show_status_page(lsb, "COMPONENT ERROR", "component");
+    } else if (!resources_ready) {
+      (void)show_status_page(lsb, "MEMORY ERROR", "memory");
+    } else if (sd_ret != ESP_OK) {
+      ESP_LOGE(TAG, "SD mount failed error=%s", esp_err_to_name(sd_ret));
+      (void)show_status_page(lsb, "SD CARD ERROR", "SD mount");
+    } else if (!catalog_ready) {
+      (void)show_status_page(lsb, "CATALOG ERROR", "catalog");
     } else {
       draw_photo_list(catalog, catalog_ready, current, lsb);
-      (void)full_refresh_photo_list(lsb, &successful_partial_count, "initial");
+      force_full_next = !full_refresh_photo_list(
+          lsb, &successful_partial_count, "initial");
     }
   }
 
@@ -174,6 +221,12 @@ void app_main(void) {
         continue;
       }
 
+      if (!core_ready || display_ret != ESP_OK || !resources_ready ||
+          sd_ret != ESP_OK || !catalog_ready) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+        continue;
+      }
+
       const bool previous_pressed =
           ink_input_was_pressed(&input, INK_BUTTON_LEFT);
       const bool next_pressed =
@@ -184,21 +237,28 @@ void app_main(void) {
       if (view == LIST) {
         if (count > 0 && (previous_pressed || next_pressed)) {
           const size_t previous = current;
-          current = previous_pressed
-                        ? (current == 0 ? count - 1 : current - 1)
-                        : (current + 1) % count;
-          draw_photo_list(catalog, catalog_ready, current, lsb);
-          refresh_photo_list(lsb, previous, current, count,
-                             &successful_partial_count);
+          const size_t candidate =
+              previous_pressed ? (current == 0 ? count - 1 : current - 1)
+                               : (current + 1) % count;
+          if (candidate != current) {
+            draw_photo_list(catalog, catalog_ready, candidate, lsb);
+            const bool refreshed = refresh_photo_list(
+                lsb, previous, candidate, count, &successful_partial_count,
+                force_full_next);
+            current = photo_committed_index(current, candidate, refreshed);
+            force_full_next = !refreshed;
+            if (!refreshed) {
+              draw_photo_list(catalog, catalog_ready, current, lsb);
+            }
+          }
         }
 
         if (count > 0 && confirm_pressed) {
-          if (show_photo(catalog, current, lsb, msb)) {
-            view = PREVIEW;
-          } else {
-            draw_photo_list(catalog, catalog_ready, current, lsb);
-            (void)full_refresh_photo_list(
-                lsb, &successful_partial_count, "list restore");
+          const bool shown = show_photo(catalog, current, lsb, msb);
+          view = photo_committed_view(view, PREVIEW, shown);
+          if (!shown) {
+            (void)show_status_page(lsb, "IMAGE ERROR", "image open");
+            force_full_next = true;
           }
         }
       } else {
@@ -206,23 +266,22 @@ void app_main(void) {
           const size_t candidate =
               previous_pressed ? (current == 0 ? count - 1 : current - 1)
                                : (current + 1) % count;
-          if (show_photo(catalog, candidate, lsb, msb)) {
-            current = candidate;
-          } else {
+          const bool shown = show_photo(catalog, candidate, lsb, msb);
+          current = photo_committed_index(current, candidate, shown);
+          if (!shown) {
             ESP_LOGE(TAG, "keeping current photo index=%u",
                      (unsigned)current);
-            if (!show_photo(catalog, current, lsb, msb)) {
-              ESP_LOGE(TAG, "current photo restore failed index=%u",
-                       (unsigned)current);
-            }
+            (void)show_status_page(lsb, "IMAGE ERROR", "image switch");
+            force_full_next = true;
           }
         }
 
         if (confirm_pressed) {
-          view = LIST;
           draw_photo_list(catalog, catalog_ready, current, lsb);
-          (void)full_refresh_photo_list(lsb, &successful_partial_count,
-                                        "preview return");
+          const bool refreshed = full_refresh_photo_list(
+              lsb, &successful_partial_count, "preview return");
+          view = photo_committed_view(view, LIST, refreshed);
+          force_full_next = !refreshed;
         }
       }
     }
