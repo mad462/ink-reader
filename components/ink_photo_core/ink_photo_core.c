@@ -41,8 +41,11 @@ static void copy_photo_name(char *destination, size_t destination_size,
 }
 
 static int compare_items(const void *a, const void *b) {
-  return strcasecmp(((const ink_photo_item_t *)a)->path,
-                    ((const ink_photo_item_t *)b)->path);
+  const char *a_path = ((const ink_photo_item_t *)a)->path;
+  const char *b_path = ((const ink_photo_item_t *)b)->path;
+  const int case_insensitive_order = strcasecmp(a_path, b_path);
+  return case_insensitive_order != 0 ? case_insensitive_order
+                                     : strcmp(a_path, b_path);
 }
 
 bool ink_photo_catalog_load(ink_photo_catalog_t *catalog) {
@@ -181,6 +184,8 @@ bool ink_photo_core_self_test(void) {
   char hidden_name[INK_PHOTO_PATH_MAX];
   char hidden_without_extension[INK_PHOTO_PATH_MAX];
   char boundary_name[4];
+  ink_photo_item_t lowercase_item = {.path = INK_PHOTO_DIR "/a.bmp"};
+  ink_photo_item_t uppercase_item = {.path = INK_PHOTO_DIR "/A.bmp"};
   copy_photo_name(bmp_name, sizeof(bmp_name), "holiday.bmp");
   copy_photo_name(extensionless_name, sizeof(extensionless_name), "README");
   copy_photo_name(hidden_name, sizeof(hidden_name), ".hidden.bmp");
@@ -192,6 +197,8 @@ bool ink_photo_core_self_test(void) {
       strcmp(hidden_name, ".hidden") != 0 || strcmp(boundary_name, "abc") != 0 ||
       strcmp(hidden_without_extension, ".hidden") != 0 ||
       boundary_name[sizeof(boundary_name) - 1] != '\0' ||
+      compare_items(&lowercase_item, &uppercase_item) <= 0 ||
+      compare_items(&uppercase_item, &lowercase_item) >= 0 ||
       !parse_headers(fh, dib, &info) || !classify(palette, 4, map) ||
       map[0] != 3 || map[3] != 0)
     return false;

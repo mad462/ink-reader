@@ -79,7 +79,6 @@ static const int kPhotoListMarkerXInset = 2;
 static const int kPhotoListMarkerWidth = 4;
 static const int kPhotoListMarkerInset = 8;
 static const int kPhotoListTitleYOffset = 8;
-static const int kPhotoListSelectionPadding = 4;
 
 static const uint8_t *glyph_for(char ch) {
   if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
@@ -202,9 +201,8 @@ void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
   snprintf(counter, sizeof(counter), "%u/%u", (unsigned)(selected + 1),
            (unsigned)count);
   const int counter_width = (int)strlen(counter) * 12;
-  ink_epd_ui_draw_text(buffer, length,
-                       kPhotoListX + kPhotoListWidth - counter_width, 10, 2,
-                       counter, true);
+  const int counter_x = kPhotoListX + kPhotoListWidth -
+                        kPhotoListContentInset - counter_width;
 
   const size_t start = photo_list_window_start(selected, count);
   size_t visible = count - start;
@@ -229,6 +227,13 @@ void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
     ink_epd_ui_draw_text(buffer, length,
                          kPhotoListX + kPhotoListContentInset,
                          y + kPhotoListTitleYOffset, 2, title, true);
+    if (index == selected) {
+      ink_epd_ui_fill_rect(buffer, length, counter_x - 12, y,
+                           counter_width + 12, INK_PHOTO_LIST_ROW_HEIGHT,
+                           false);
+      ink_epd_ui_draw_text(buffer, length, counter_x,
+                           y + kPhotoListTitleYOffset, 2, counter, true);
+    }
   }
 }
 
@@ -253,23 +258,17 @@ ink_epd_region_t ink_epd_ui_photo_list_selection_region(size_t previous,
 
   const size_t first = previous < selected ? previous : selected;
   const size_t last = previous > selected ? previous : selected;
-  int top = kPhotoListY +
-            (int)(first - previous_start) *
-                (INK_PHOTO_LIST_ROW_HEIGHT + INK_PHOTO_LIST_ROW_GAP) -
-            kPhotoListSelectionPadding;
-  int bottom = kPhotoListY +
-               (int)(last - previous_start) *
-                   (INK_PHOTO_LIST_ROW_HEIGHT + INK_PHOTO_LIST_ROW_GAP) +
-               INK_PHOTO_LIST_ROW_HEIGHT + kPhotoListSelectionPadding;
-  if (top < 0) top = 0;
-  if (bottom > INK_EPD_HEIGHT) bottom = INK_EPD_HEIGHT;
-  int left = kPhotoListX - kPhotoListSelectionPadding;
-  int right = kPhotoListX + kPhotoListWidth + kPhotoListSelectionPadding;
-  if (left < 0) left = 0;
-  if (right > INK_EPD_WIDTH) right = INK_EPD_WIDTH;
-  return (ink_epd_region_t){.x = left,
+  const int top = kPhotoListY +
+                  (int)(first - previous_start) *
+                      (INK_PHOTO_LIST_ROW_HEIGHT + INK_PHOTO_LIST_ROW_GAP);
+  const int bottom =
+      kPhotoListY +
+      (int)(last - previous_start) *
+          (INK_PHOTO_LIST_ROW_HEIGHT + INK_PHOTO_LIST_ROW_GAP) +
+      INK_PHOTO_LIST_ROW_HEIGHT;
+  return (ink_epd_region_t){.x = kPhotoListX,
                             .y = top,
-                            .width = right - left,
+                            .width = kPhotoListWidth,
                             .height = bottom - top};
 }
 
@@ -294,8 +293,8 @@ bool ink_epd_ui_self_test(void) {
       ink_epd_ui_photo_list_selection_region(1, 2, 0);
   const ink_epd_region_t clamped_photo =
       ink_epd_ui_photo_list_selection_region(99, 99, 3);
-  if (same_window.x != 20 || same_window.y != 46 ||
-      same_window.width != 440 || same_window.height != 92 ||
+  if (same_window.x != 24 || same_window.y != 50 ||
+      same_window.width != 432 || same_window.height != 86 ||
       scrolled.x != 24 || scrolled.y != 50 || scrolled.width != 432 ||
       scrolled.height != 614 || empty.width != 0 || empty.height != 0 ||
       clamped_photo.x < 0 || clamped_photo.y < 0 ||
@@ -311,6 +310,14 @@ bool ink_epd_ui_self_test(void) {
   const bool empty_prompt_has_black = !(buffer[prompt_index] & prompt_mask);
   ink_epd_photo_row_t rows[2] = {{.name = "ONE"}, {.name = "TWO"}};
   ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, rows, 2, 0);
+  const size_t header_counter_index =
+      (size_t)12 * (INK_EPD_WIDTH / 8) + 422 / 8;
+  const uint8_t header_counter_mask = (uint8_t)(0x80u >> (422 & 7));
+  const size_t first_counter_index =
+      (size_t)60 * (INK_EPD_WIDTH / 8) + 406 / 8;
+  const uint8_t first_counter_mask = (uint8_t)(0x80u >> (406 & 7));
+  const bool first_counter_in_selected_row =
+      !(buffer[first_counter_index] & first_counter_mask);
   const size_t marker_index = (size_t)58 * (INK_EPD_WIDTH / 8) + 26 / 8;
   const uint8_t marker_mask = (uint8_t)(0x80u >> (26 & 7));
   const size_t marker_end_index =
@@ -324,11 +331,34 @@ bool ink_epd_ui_self_test(void) {
   const size_t text_index = (size_t)60 * (INK_EPD_WIDTH / 8) + 40 / 8;
   const uint8_t text_mask = (uint8_t)(0x80u >> (40 & 7));
   if (!empty_prompt_has_black ||
+      !(buffer[header_counter_index] & header_counter_mask) ||
+      !first_counter_in_selected_row ||
       (buffer[marker_index] & marker_mask) ||
       (buffer[marker_end_index] & marker_end_mask) ||
       !(buffer[marker_boundary_index] & marker_boundary_mask) ||
       !(buffer[row_white_index] & row_white_mask) ||
       (buffer[text_index] & text_mask)) {
+    free(buffer);
+    return false;
+  }
+
+  ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, rows, 2, 1);
+  const size_t second_counter_index =
+      (size_t)104 * (INK_EPD_WIDTH / 8) + 404 / 8;
+  const uint8_t second_counter_mask = (uint8_t)(0x80u >> (404 & 7));
+  if (!(buffer[first_counter_index] & first_counter_mask) ||
+      (buffer[second_counter_index] & second_counter_mask)) {
+    free(buffer);
+    return false;
+  }
+
+  ink_epd_photo_row_t long_row = {
+      .name = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"};
+  ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, &long_row, 1, 0);
+  const size_t counter_gap_index =
+      (size_t)60 * (INK_EPD_WIDTH / 8) + 396 / 8;
+  const uint8_t counter_gap_mask = (uint8_t)(0x80u >> (396 & 7));
+  if (!(buffer[counter_gap_index] & counter_gap_mask)) {
     free(buffer);
     return false;
   }
