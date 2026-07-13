@@ -9,6 +9,18 @@ typedef struct {
   size_t calls;
 } decode_policy_fixture_t;
 
+static int test_catalog_stores_candidates_without_opening_files(void) {
+  ink_photo_catalog_t catalog = {0};
+  if (!catalog_store_candidate(&catalog, "broken.bmp") ||
+      catalog.count != 1 || strcmp(catalog.items[0].name, "broken") != 0 ||
+      strcmp(catalog.items[0].path, INK_PHOTO_DIR "/broken.bmp") != 0)
+    return 1;
+  if (catalog_store_candidate(&catalog, ".hidden.bmp") ||
+      catalog_store_candidate(&catalog, "notes.txt") || catalog.count != 1)
+    return 2;
+  return 0;
+}
+
 static bool fixture_try_item(const ink_photo_item_t *item, void *context) {
   decode_policy_fixture_t *fixture = context;
   const size_t index = (size_t)(item - fixture->catalog->items);
@@ -62,6 +74,13 @@ int main(void) {
   uint8_t map[16] = {0};
   if (!ink_photo_core_self_test()) {
     fputs("FAIL: photo core self test\n", stderr);
+    return 1;
+  }
+  const int catalog_result =
+      test_catalog_stores_candidates_without_opening_files();
+  if (catalog_result != 0) {
+    fprintf(stderr, "FAIL: catalog candidate policy case=%d\n",
+            catalog_result);
     return 1;
   }
   const int policy_result = test_decodable_catalog_policy();

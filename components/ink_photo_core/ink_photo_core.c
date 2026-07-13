@@ -7,10 +7,6 @@
 #include <string.h>
 #include <strings.h>
 
-#include "esp_log.h"
-
-static const char *TAG = "ink_photo_core";
-
 typedef struct {
   uint32_t image_offset;
   uint32_t width;
@@ -102,6 +98,24 @@ static int compare_items(const void *a, const void *b) {
                                      : strcmp(a_path, b_path);
 }
 
+static bool catalog_store_candidate(ink_photo_catalog_t *catalog,
+                                    const char *filename) {
+  if (!catalog || !filename || filename[0] == '.' ||
+      !extension_ok(filename) || catalog->count >= INK_PHOTO_MAX_ITEMS)
+    return false;
+
+  ink_photo_item_t *item = &catalog->items[catalog->count];
+  const int path_length = snprintf(item->path, sizeof(item->path), "%s/%s",
+                                   INK_PHOTO_DIR, filename);
+  if (path_length < 0 || path_length >= (int)sizeof(item->path)) {
+    memset(item, 0, sizeof(*item));
+    return false;
+  }
+  copy_photo_name(item->name, sizeof(item->name), filename);
+  ++catalog->count;
+  return true;
+}
+
 bool ink_photo_catalog_load(ink_photo_catalog_t *catalog) {
   if (!catalog) return false;
   memset(catalog, 0, sizeof(*catalog));
@@ -110,20 +124,7 @@ bool ink_photo_catalog_load(ink_photo_catalog_t *catalog) {
   struct dirent *entry;
   while (catalog->count < INK_PHOTO_MAX_ITEMS &&
          (entry = readdir(dir)) != NULL) {
-    if (entry->d_name[0] == '.' || !extension_ok(entry->d_name)) continue;
-    ink_photo_item_t *item = &catalog->items[catalog->count];
-    if (snprintf(item->path, sizeof(item->path), "%s/%s", INK_PHOTO_DIR,
-                 entry->d_name) < (int)sizeof(item->path)) {
-      const char *reason = NULL;
-      if (!probe_bmp_file(item->path, &reason)) {
-        ESP_LOGW(TAG, "catalog skip path=%s supported=false reason=%s",
-                 item->path, reason ? reason : "unknown");
-        memset(item, 0, sizeof(*item));
-        continue;
-      }
-      copy_photo_name(item->name, sizeof(item->name), entry->d_name);
-      ++catalog->count;
-    }
+    (void)catalog_store_candidate(catalog, entry->d_name);
   }
   closedir(dir);
   qsort(catalog->items, catalog->count, sizeof(catalog->items[0]),
