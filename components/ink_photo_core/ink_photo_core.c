@@ -7,6 +7,10 @@
 #include <string.h>
 #include <strings.h>
 
+#include "esp_log.h"
+
+static const char *TAG = "ink_photo_core";
+
 typedef struct {
   uint32_t image_offset;
   uint32_t width;
@@ -19,6 +23,67 @@ static uint16_t le16(const uint8_t *p) {
 static uint32_t le32(const uint8_t *p) {
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
          ((uint32_t)p[3] << 24);
+}
+
+static bool parse_headers(const uint8_t file_h[14], const uint8_t dib[40],
+                          bmp_info_t *out);
+static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[4]);
+
+static bool probe_bmp_file(const char *path, const char **reason) {
+  uint8_t file_h[14], dib[40], palette[64], map[4];
+  bmp_info_t info;
+  FILE *file = NULL;
+  bool supported = false;
+
+  if (reason) *reason = "invalid_path";
+  if (!path || path[0] == '\0') return false;
+  file = fopen(path, "rb");
+  if (!file) {
+    if (reason) *reason = "open_failed";
+    return false;
+  }
+  if (fread(file_h, 1, sizeof(file_h), file) != sizeof(file_h) ||
+      fread(dib, 1, sizeof(dib), file) != sizeof(dib)) {
+    if (reason) *reason = "short_header";
+    goto done;
+  }
+  if (!parse_headers(file_h, dib, &info)) {
+    if (reason) *reason = "unsupported_header";
+    goto done;
+  }
+
+  const uint32_t dib_size = le32(dib);
+  if (dib_size > (uint32_t)(LONG_MAX - 14L)) {
+    if (reason) *reason = "invalid_dib_size";
+    goto done;
+  }
+  const long palette_offset = 14L + (long)dib_size;
+  const uint32_t palette_size = info.colors * 4U;
+  if (info.image_offset > (uint32_t)LONG_MAX ||
+      (uint64_t)info.image_offset <
+          (uint64_t)palette_offset + palette_size) {
+    if (reason) *reason = "invalid_palette_offset";
+    goto done;
+  }
+  if (fseek(file, palette_offset, SEEK_SET) != 0 ||
+      fread(palette, 1, palette_size, file) != palette_size) {
+    if (reason) *reason = "short_palette";
+    goto done;
+  }
+  if (!classify(palette, info.colors, map)) {
+    if (reason) *reason = "invalid_palette";
+    goto done;
+  }
+
+  supported = true;
+  if (reason) *reason = "supported";
+done:
+  fclose(file);
+  return supported;
+}
+
+bool ink_photo_bmp_file_looks_supported(const char *path) {
+  return probe_bmp_file(path, NULL);
 }
 
 static bool extension_ok(const char *name) {
@@ -60,6 +125,13 @@ bool ink_photo_catalog_load(ink_photo_catalog_t *catalog) {
     ink_photo_item_t *item = &catalog->items[catalog->count];
     if (snprintf(item->path, sizeof(item->path), "%s/%s", INK_PHOTO_DIR,
                  entry->d_name) < (int)sizeof(item->path)) {
+      const char *reason = NULL;
+      if (!probe_bmp_file(item->path, &reason)) {
+        ESP_LOGW(TAG, "catalog skip path=%s supported=false reason=%s",
+                 item->path, reason ? reason : "unknown");
+        memset(item, 0, sizeof(*item));
+        continue;
+      }
       copy_photo_name(item->name, sizeof(item->name), entry->d_name);
       ++catalog->count;
     }
@@ -194,7 +266,8 @@ bool ink_photo_core_self_test(void) {
   copy_photo_name(hidden_without_extension, sizeof(hidden_without_extension),
                   ".hidden");
   copy_photo_name(boundary_name, sizeof(boundary_name), "abcdef.bmp");
-  if (strcmp(bmp_name, "holiday") != 0 ||
+  if (ink_photo_bmp_file_looks_supported(NULL) ||
+      strcmp(bmp_name, "holiday") != 0 ||
       strcmp(extensionless_name, "README") != 0 ||
       strcmp(hidden_name, ".hidden") != 0 || strcmp(boundary_name, "abc") != 0 ||
       strcmp(hidden_without_extension, ".hidden") != 0 ||
