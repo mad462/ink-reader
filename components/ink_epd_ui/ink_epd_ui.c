@@ -434,7 +434,6 @@ void ink_epd_ui_draw_photo_list_with_fonts(
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
   ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
   ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
-  ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
   ink_epd_ui_clear(buffer, length, true);
   if (ink_cpfont_is_loaded(title_font)) {
     (void)ink_epd_ui_draw_text_font(buffer, length, title_font, kPhotoListX,
@@ -459,15 +458,6 @@ void ink_epd_ui_draw_photo_list_with_fonts(
   }
   if (selected >= count) selected = count - 1;
 
-  char counter[32];
-  snprintf(counter, sizeof(counter), "%u/%u", (unsigned)(selected + 1),
-           (unsigned)count);
-  int counter_width = 0;
-  (void)ink_epd_ui_measure_text(footer_font, counter, 2, 1U,
-                                &counter_width);
-  const int counter_x = kPhotoListX + kPhotoListWidth -
-                        kPhotoListContentInset - counter_width;
-
   const size_t start = photo_list_window_start(selected, count);
   size_t visible = count - start;
   if (visible > INK_PHOTO_LIST_VISIBLE_ROWS)
@@ -487,24 +477,13 @@ void ink_epd_ui_draw_photo_list_with_fonts(
 
     char title[160];
     const int text_x = kPhotoListX + kPhotoListContentInset;
-    const int text_max_width = index == selected
-                                   ? counter_x - text_x - 12
-                                   : kPhotoListWidth - 2 * kPhotoListContentInset;
+    const int text_max_width = kPhotoListWidth - 2 * kPhotoListContentInset;
     format_photo_title(title, sizeof(title), index, rows[index].name,
                        text_max_width, body_font);
     (void)ink_epd_ui_draw_text_font(buffer, length, body_font, text_x,
                                     y + kPhotoListTitleYOffset, 2,
                                     photo_body_font_scale_divisor(), title,
                                     NULL);
-    if (index == selected) {
-      ink_epd_ui_fill_rect(buffer, length, counter_x - 12, y,
-                           kPhotoListX + kPhotoListWidth - (counter_x - 12),
-                           INK_PHOTO_LIST_ROW_HEIGHT,
-                           false);
-      (void)ink_epd_ui_draw_text_font(
-          buffer, length, footer_font, counter_x,
-          y + kPhotoListTitleYOffset, 2, 1U, counter, NULL);
-    }
   }
 }
 
@@ -633,14 +612,12 @@ bool ink_epd_ui_self_test(void) {
       region_has_black(buffer, 40, 88, 160, 24);
   ink_epd_photo_row_t rows[2] = {{.name = "ONE"}, {.name = "TWO"}};
   ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, rows, 2, 0);
-  const size_t header_counter_index =
+  const size_t header_clear_index =
       (size_t)12 * (INK_EPD_WIDTH / 8) + 422 / 8;
-  const uint8_t header_counter_mask = (uint8_t)(0x80u >> (422 & 7));
-  const size_t first_counter_index =
+  const uint8_t header_clear_mask = (uint8_t)(0x80u >> (422 & 7));
+  const size_t selected_right_index =
       (size_t)60 * (INK_EPD_WIDTH / 8) + 406 / 8;
-  const uint8_t first_counter_mask = (uint8_t)(0x80u >> (406 & 7));
-  const bool first_counter_in_selected_row =
-      !(buffer[first_counter_index] & first_counter_mask);
+  const uint8_t selected_right_mask = (uint8_t)(0x80u >> (406 & 7));
   const size_t marker_index = (size_t)58 * (INK_EPD_WIDTH / 8) + 26 / 8;
   const uint8_t marker_mask = (uint8_t)(0x80u >> (26 & 7));
   const size_t marker_end_index =
@@ -654,8 +631,8 @@ bool ink_epd_ui_self_test(void) {
   const size_t text_index = (size_t)60 * (INK_EPD_WIDTH / 8) + 40 / 8;
   const uint8_t text_mask = (uint8_t)(0x80u >> (40 & 7));
   if (!empty_prompt_has_black ||
-      !(buffer[header_counter_index] & header_counter_mask) ||
-      !first_counter_in_selected_row ||
+      !(buffer[header_clear_index] & header_clear_mask) ||
+      !(buffer[selected_right_index] & selected_right_mask) ||
       (buffer[marker_index] & marker_mask) ||
       (buffer[marker_end_index] & marker_end_mask) ||
       !(buffer[marker_boundary_index] & marker_boundary_mask) ||
@@ -666,31 +643,11 @@ bool ink_epd_ui_self_test(void) {
   }
 
   ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, rows, 2, 1);
-  const size_t second_counter_index =
-      (size_t)104 * (INK_EPD_WIDTH / 8) + 404 / 8;
-  const uint8_t second_counter_mask = (uint8_t)(0x80u >> (404 & 7));
-  if (!(buffer[first_counter_index] & first_counter_mask) ||
-      (buffer[second_counter_index] & second_counter_mask)) {
-    free(buffer);
-    return false;
-  }
-
-  ink_epd_photo_row_t long_row = {
-      .name = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"};
-  ink_epd_ui_draw_photo_list(buffer, INK_EPD_BUFFER_SIZE, &long_row, 1, 0);
-  const size_t counter_gap_index =
-      (size_t)60 * (INK_EPD_WIDTH / 8) + 396 / 8;
-  const uint8_t counter_gap_mask = (uint8_t)(0x80u >> (396 & 7));
-  bool counter_right_edge_is_clear = true;
-  for (int x = 440; x < kPhotoListX + kPhotoListWidth; ++x) {
-    const size_t index = (size_t)60 * (INK_EPD_WIDTH / 8) + (size_t)x / 8;
-    const uint8_t mask = (uint8_t)(0x80u >> (x & 7));
-    counter_right_edge_is_clear =
-        counter_right_edge_is_clear && (buffer[index] & mask);
-  }
-  if (!(buffer[counter_gap_index] & counter_gap_mask) ||
-      !counter_right_edge_is_clear ||
-      (buffer[first_counter_index] & first_counter_mask)) {
+  const size_t second_marker_index =
+      (size_t)102 * (INK_EPD_WIDTH / 8) + 26 / 8;
+  const uint8_t second_marker_mask = (uint8_t)(0x80u >> (26 & 7));
+  if (!(buffer[marker_index] & marker_mask) ||
+      (buffer[second_marker_index] & second_marker_mask)) {
     free(buffer);
     return false;
   }

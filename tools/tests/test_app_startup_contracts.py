@@ -73,5 +73,37 @@ def test_photo_starts_in_preview_and_font_task_never_touches_epd() -> None:
 
     main = text[text.index("void app_main") :]
     assert main.index("xTaskCreate") < main.index(
-        "photo_ready = refresh_decoded_photo"
+        "first_result = refresh_decoded_photo"
     )
+
+
+def test_photo_gray_refresh_coalesces_navigation_without_busy_abort() -> None:
+    photo = source("apps/photo/main/app_main.c")
+    hw_header = source("components/ink_hw/include/ink_hw.h")
+    hw = source("components/ink_hw/ink_hw.c")
+
+    assert "ink_hw_gray_refresh_with_poll(" in hw_header
+    assert "ink_hw_gray_refresh_with_poll(" in photo
+    assert "photo_navigation_poll" in photo
+    assert "photo_navigation_self_test()" in photo
+    assert "photo_navigation_commit_displayed" in photo
+    assert "ESP_ERR_NOT_FINISHED" in photo
+    assert "wait_ready(" in hw
+    assert "poll(context)" in hw
+    assert 'wait_ready("gray_update", poll, context, false)' in hw
+    assert hw.count(
+        "if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;"
+    ) >= 4
+    assert "aggressive" not in hw.lower()
+    assert "busy_wait aborted" not in hw
+
+
+def test_photo_list_omits_position_counter() -> None:
+    ui = source("components/ink_epd_ui/ink_epd_ui.c")
+    draw_list = ui[
+        ui.index("void ink_epd_ui_draw_photo_list_with_fonts") :
+        ui.index("void ink_epd_ui_draw_photo_list(")
+    ]
+
+    assert "snprintf(counter" not in draw_list
+    assert "counter_x" not in draw_list

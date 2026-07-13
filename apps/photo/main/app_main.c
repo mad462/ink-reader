@@ -38,6 +38,21 @@ typedef struct {
   uint8_t *msb;
 } photo_decode_context_t;
 
+typedef struct {
+  size_t count;
+  size_t target_index;
+  int direction;
+  uint32_t generation;
+  uint32_t active_generation;
+  bool input_ready;
+} photo_navigation_t;
+
+typedef enum {
+  PHOTO_REFRESH_FAILED,
+  PHOTO_REFRESH_SHOWN,
+  PHOTO_REFRESH_SUPERSEDED,
+} photo_refresh_result_t;
+
 static int64_t elapsed_ms(void) {
   return (esp_timer_get_time() - s_started_us) / 1000;
 }
@@ -60,6 +75,91 @@ static enum photo_view photo_committed_view(enum photo_view current,
 static size_t photo_committed_index(size_t current, size_t candidate,
                                     bool refresh_succeeded) {
   return refresh_succeeded ? candidate : current;
+}
+
+static bool photo_navigation_apply(photo_navigation_t *navigation,
+                                   bool previous_pressed,
+                                   bool next_pressed) {
+  if (!navigation || navigation->count == 0 ||
+      (!previous_pressed && !next_pressed))
+    return false;
+  navigation->direction = previous_pressed ? -1 : 1;
+  navigation->target_index =
+      previous_pressed
+          ? (navigation->target_index == 0 ? navigation->count - 1
+                                           : navigation->target_index - 1)
+          : (navigation->target_index + 1) % navigation->count;
+  ++navigation->generation;
+  return true;
+}
+
+static void photo_navigation_follow(photo_navigation_t *navigation,
+                                    size_t index, int direction) {
+  if (!navigation || navigation->count == 0) return;
+  navigation->target_index = index < navigation->count ? index : 0;
+  navigation->direction = direction < 0 ? -1 : 1;
+}
+
+static bool photo_navigation_commit_displayed(
+    photo_navigation_t *navigation, size_t displayed_index,
+    uint32_t displayed_generation) {
+  if (!navigation || displayed_index >= navigation->count) return false;
+  if (navigation->generation == displayed_generation)
+    photo_navigation_follow(navigation, displayed_index,
+                            navigation->direction);
+  return navigation->target_index == displayed_index;
+}
+
+static bool photo_navigation_poll(void *context) {
+  photo_navigation_t *navigation = context;
+  if (!navigation) return false;
+  if (navigation->input_ready) {
+    ink_input_snapshot_t input = {0};
+    const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    if (ink_input_poll(now, &input) == ESP_OK) {
+      const bool previous_pressed =
+          ink_input_was_pressed(&input, INK_BUTTON_LEFT);
+      const bool next_pressed =
+          ink_input_was_pressed(&input, INK_BUTTON_RIGHT);
+      if (photo_navigation_apply(navigation, previous_pressed, next_pressed))
+        ESP_LOGI(TAG, "PHOTO_NAV target=%u generation=%u direction=%s",
+                 (unsigned)navigation->target_index,
+                 (unsigned)navigation->generation,
+                 navigation->direction < 0 ? "left" : "right");
+    }
+  }
+  return navigation->generation != navigation->active_generation;
+}
+
+static bool photo_navigation_self_test(void) {
+  photo_navigation_t navigation = {
+      .count = 3, .target_index = 0, .direction = 1};
+  if (!photo_navigation_apply(&navigation, true, false) ||
+      navigation.target_index != 2 || navigation.direction != -1 ||
+      navigation.generation != 1)
+    return false;
+  navigation.active_generation = navigation.generation;
+  if (!photo_navigation_apply(&navigation, false, true) ||
+      navigation.target_index != 0 || navigation.direction != 1 ||
+      navigation.generation != 2 ||
+      navigation.generation == navigation.active_generation)
+    return false;
+  photo_navigation_follow(&navigation, 1, -1);
+  if (navigation.target_index != 1 || navigation.direction != -1)
+    return false;
+
+  photo_navigation_t skipped = {
+      .count = 3, .target_index = 1, .direction = 1, .generation = 4};
+  if (!photo_navigation_commit_displayed(&skipped, 2, 4) ||
+      skipped.target_index != 2 ||
+      !photo_navigation_apply(&skipped, false, true) ||
+      skipped.target_index != 0)
+    return false;
+
+  photo_navigation_t newer = {
+      .count = 3, .target_index = 0, .direction = 1, .generation = 5};
+  return !photo_navigation_commit_displayed(&newer, 2, 4) &&
+         newer.target_index == 0;
 }
 
 static bool photo_policy_self_test(void) {
@@ -160,35 +260,64 @@ static bool try_decode_item(const ink_photo_item_t *item, void *context) {
   return true;
 }
 
-static bool refresh_decoded_photo(const ink_photo_catalog_t *catalog,
-                                  size_t index, const uint8_t *lsb,
-                                  const uint8_t *msb) {
-  if (!catalog || !lsb || !msb || index >= catalog->count) return false;
-  ESP_LOGI(TAG, "PHOTO_REFRESH mode=full_gray");
-  esp_err_t ret =
-      ink_hw_gray_refresh(lsb, INK_PHOTO_PLANE_SIZE, msb, INK_PHOTO_PLANE_SIZE);
+static photo_refresh_result_t refresh_decoded_photo(
+    const ink_photo_catalog_t *catalog, size_t index, const uint8_t *lsb,
+    const uint8_t *msb, photo_navigation_t *navigation) {
+  if (!catalog || !lsb || !msb || !navigation || index >= catalog->count)
+    return PHOTO_REFRESH_FAILED;
+  navigation->active_generation = navigation->generation;
+  ESP_LOGI(TAG, "PHOTO_REFRESH_START index=%u generation=%u",
+           (unsigned)index, (unsigned)navigation->active_generation);
+  esp_err_t ret = ink_hw_gray_refresh_with_poll(
+      lsb, INK_PHOTO_PLANE_SIZE, msb, INK_PHOTO_PLANE_SIZE,
+      photo_navigation_poll, navigation);
+  if (ret == ESP_ERR_NOT_FINISHED) {
+    ESP_LOGI(TAG, "PHOTO_REFRESH_SUPERSEDED index=%u latest=%u",
+             (unsigned)index, (unsigned)navigation->target_index);
+    return PHOTO_REFRESH_SUPERSEDED;
+  }
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "photo refresh failed path=%s error=%s",
              catalog->items[index].path, esp_err_to_name(ret));
-    return false;
+    return PHOTO_REFRESH_FAILED;
   }
-  ESP_LOGI(TAG, "photo shown path=%s", catalog->items[index].path);
-  return true;
+  ESP_LOGI(TAG, "PHOTO_REFRESH_DONE index=%u generation=%u pending=%u",
+           (unsigned)index, (unsigned)navigation->active_generation,
+           (unsigned)navigation->target_index);
+  return PHOTO_REFRESH_SHOWN;
 }
 
 static bool show_decodable_photo(const ink_photo_catalog_t *catalog,
-                                 size_t first_index, int direction,
                                  uint8_t *lsb, uint8_t *msb,
+                                 photo_navigation_t *navigation,
                                  size_t *out_index) {
+  if (!catalog || !navigation || !out_index) return false;
   photo_decode_context_t decode = {.lsb = lsb, .msb = msb};
-  size_t decoded_index;
-  if (!ink_photo_catalog_find_decodable(catalog, first_index, direction,
-                                        try_decode_item, &decode,
-                                        &decoded_index) ||
-      !refresh_decoded_photo(catalog, decoded_index, lsb, msb))
-    return false;
-  *out_index = decoded_index;
-  return true;
+  bool shown = false;
+  while (true) {
+    const size_t target_index = navigation->target_index;
+    const uint32_t generation = navigation->generation;
+    const int direction = navigation->direction;
+    size_t decoded_index;
+    if (!ink_photo_catalog_find_decodable(
+            catalog, target_index, direction, try_decode_item, &decode,
+            &decoded_index))
+      return shown;
+
+    const photo_refresh_result_t result = refresh_decoded_photo(
+        catalog, decoded_index, lsb, msb, navigation);
+    if (result == PHOTO_REFRESH_FAILED) return shown;
+    if (result == PHOTO_REFRESH_SHOWN) {
+      *out_index = decoded_index;
+      shown = true;
+      if (photo_navigation_commit_displayed(navigation, decoded_index,
+                                            generation))
+        return true;
+    }
+    if (navigation->generation == generation) return shown;
+    ESP_LOGI(TAG, "PHOTO_COALESCE replaced=%u latest=%u",
+             (unsigned)target_index, (unsigned)navigation->target_index);
+  }
 }
 
 static EventBits_t photo_font_state(void) {
@@ -239,7 +368,8 @@ void app_main(void) {
   ESP_LOGI(TAG, "APP_START name=photo");
   const bool core_ready = ink_fonts_self_test() && ink_hw_self_test() &&
                           ink_photo_core_self_test() &&
-                          photo_policy_self_test();
+                          photo_policy_self_test() &&
+                          photo_navigation_self_test();
   if (!core_ready) {
     ESP_LOGE(TAG, "photo self test failed");
   }
@@ -279,6 +409,12 @@ void app_main(void) {
   }
   const size_t count = photo_catalog_count(catalog, catalog_ready);
   build_photo_rows(catalog, count);
+  photo_navigation_t navigation = {
+      .count = count,
+      .target_index = 0,
+      .direction = 1,
+      .input_ready = input_ret == ESP_OK,
+  };
 
   enum photo_view view = PREVIEW;
   size_t current = 0;
@@ -303,6 +439,7 @@ void app_main(void) {
                                             &decode, &current)) {
         (void)show_status_page(lsb, "未找到可显示图片", "decode catalog");
       } else {
+        photo_navigation_follow(&navigation, current, 1);
         log_stage("first_photo_decoded");
         s_font_events = xEventGroupCreate();
         const bool font_task_started =
@@ -312,7 +449,18 @@ void app_main(void) {
         if (!font_task_started)
           ESP_LOGW(TAG, "font task unavailable; loading after first refresh");
 
-        photo_ready = refresh_decoded_photo(catalog, current, lsb, msb);
+        const photo_refresh_result_t first_result = refresh_decoded_photo(
+            catalog, current, lsb, msb, &navigation);
+        photo_ready = first_result == PHOTO_REFRESH_SHOWN;
+        if (first_result == PHOTO_REFRESH_SUPERSEDED ||
+            navigation.generation != navigation.active_generation) {
+          size_t shown_index = current;
+          if (show_decodable_photo(catalog, lsb, msb, &navigation,
+                                   &shown_index)) {
+            current = shown_index;
+            photo_ready = true;
+          }
+        }
         if (photo_ready)
           log_stage("first_refresh_done");
         else
@@ -366,6 +514,8 @@ void app_main(void) {
                 lsb, previous, candidate, count, &successful_partial_count,
                 force_full_next);
             current = photo_committed_index(current, candidate, refreshed);
+            photo_navigation_follow(
+                &navigation, current, previous_pressed ? -1 : 1);
             force_full_next = !refreshed;
             if (!refreshed) {
               draw_photo_list(catalog, catalog_ready, current, lsb);
@@ -374,9 +524,10 @@ void app_main(void) {
         }
 
         if (count > 0 && confirm_pressed) {
+          photo_navigation_follow(&navigation, current, 1);
           size_t shown_index = current;
           const bool shown = show_decodable_photo(
-              catalog, current, 1, lsb, msb, &shown_index);
+              catalog, lsb, msb, &navigation, &shown_index);
           if (!shown) {
             (void)show_status_page(lsb, "未找到可显示图片", "image open");
             force_full_next = true;
@@ -408,13 +559,11 @@ void app_main(void) {
         }
 
         if (count > 0 && (previous_pressed || next_pressed)) {
-          const int direction = previous_pressed ? -1 : 1;
-          const size_t first_index =
-              previous_pressed ? (current == 0 ? count - 1 : current - 1)
-                               : (current + 1) % count;
+          (void)photo_navigation_apply(&navigation, previous_pressed,
+                                       next_pressed);
           size_t shown_index = current;
           const bool shown = show_decodable_photo(
-              catalog, first_index, direction, lsb, msb, &shown_index);
+              catalog, lsb, msb, &navigation, &shown_index);
           if (!shown) {
             ESP_LOGW(TAG, "no decodable photo; keeping index=%u",
                      (unsigned)current);

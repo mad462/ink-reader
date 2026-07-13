@@ -68,16 +68,20 @@ static esp_err_t data(const uint8_t *src, size_t length) {
   }
   return ESP_OK;
 }
-static esp_err_t wait_ready(const char *stage) {
+static esp_err_t wait_ready(const char *stage, ink_hw_refresh_poll_fn poll,
+                            void *context, bool cancel_when_ready) {
   TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(BUSY_TIMEOUT_MS);
-  while (gpio_get_level(GPIO_NUM_16)) {
+  bool superseded = false;
+  while (true) {
+    if (poll && poll(context)) superseded = true;
+    if (!gpio_get_level(GPIO_NUM_16))
+      return cancel_when_ready && superseded ? ESP_ERR_NOT_FINISHED : ESP_OK;
     if ((int32_t)(deadline - xTaskGetTickCount()) <= 0) {
       ESP_LOGE(TAG, "busy timeout stage=%s", stage);
       return ESP_ERR_TIMEOUT;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
-  return ESP_OK;
 }
 static void reset_panel(void) {
   gpio_set_level(GPIO_NUM_15, 0);
@@ -110,11 +114,15 @@ static esp_err_t set_native_window(uint16_t x, uint16_t y, uint16_t width,
 static esp_err_t window(void) {
   return set_native_window(0, 0, NATIVE_WIDTH, NATIVE_HEIGHT);
 }
-static esp_err_t init_sequence(bool gray) {
+static esp_err_t init_sequence(bool gray, ink_hw_refresh_poll_fn poll,
+                               void *context) {
+  esp_err_t ret;
   reset_panel();
-  ESP_RETURN_ON_ERROR(wait_ready("reset"), TAG, "panel reset timeout");
+  ret = wait_ready("reset", poll, context, poll != NULL);
+  if (ret != ESP_OK) return ret;
   ESP_RETURN_ON_ERROR(command(0x12), TAG, "sw reset");
-  ESP_RETURN_ON_ERROR(wait_ready("sw_reset"), TAG, "panel sw reset timeout");
+  ret = wait_ready("sw_reset", poll, context, poll != NULL);
+  if (ret != ESP_OK) return ret;
   if (!gray) {
     ESP_RETURN_ON_ERROR(command(0x18), TAG, "temp cmd");
     ESP_RETURN_ON_ERROR(data_byte(0x80), TAG, "temp data");
@@ -144,7 +152,7 @@ static esp_err_t init_sequence(bool gray) {
     ESP_RETURN_ON_ERROR(command(0x2c), TAG, "vcom cmd");
     ESP_RETURN_ON_ERROR(data_byte(kGrayLut[109]), TAG, "vcom data");
   }
-  return wait_ready("init");
+  return wait_ready("init", poll, context, poll != NULL);
 }
 static void convert(const uint8_t *portrait) {
   memset(s_native, 0xff, NATIVE_SIZE);
@@ -182,7 +190,8 @@ static void copy_native_area(uint8_t *dst, const uint8_t *src, uint16_t x,
     memcpy(dst + offset, src + offset, row_bytes);
   }
 }
-static esp_err_t update(uint8_t mode, bool gray) {
+static esp_err_t update(uint8_t mode, bool gray, ink_hw_refresh_poll_fn poll,
+                        void *context) {
   if (gray) {
     ESP_RETURN_ON_ERROR(command(0x21), TAG, "gray option");
     const uint8_t options[] = {0, 0};
@@ -195,7 +204,9 @@ static esp_err_t update(uint8_t mode, bool gray) {
   ESP_RETURN_ON_ERROR(command(0x22), TAG, "update cmd");
   ESP_RETURN_ON_ERROR(data_byte(mode), TAG, "update mode");
   ESP_RETURN_ON_ERROR(command(0x20), TAG, "activate");
-  return wait_ready(gray ? "gray_update" : "full_update");
+  if (gray)
+    return wait_ready("gray_update", poll, context, false);
+  return wait_ready("full_update", NULL, NULL, false);
 }
 
 esp_err_t ink_hw_init(void) {
@@ -243,7 +254,7 @@ esp_err_t ink_hw_init(void) {
   }
   memset(s_native, 0xff, NATIVE_SIZE);
   memset(s_shadow, 0xff, NATIVE_SIZE);
-  ret = init_sequence(false);
+  ret = init_sequence(false, NULL, NULL);
   if (ret != ESP_OK) goto fail;
   s_initialized = true;
   return ESP_OK;
@@ -266,9 +277,9 @@ fail:
 esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length) {
   if (!s_initialized || !buffer || length < INK_HW_BUFFER_SIZE)
     return ESP_ERR_INVALID_ARG;
-  ESP_RETURN_ON_ERROR(init_sequence(false), TAG, "full init");
+  ESP_RETURN_ON_ERROR(init_sequence(false, NULL, NULL), TAG, "full init");
   ESP_RETURN_ON_ERROR(write_plane(buffer, 0x24), TAG, "full plane");
-  ESP_RETURN_ON_ERROR(update(0xf7, false), TAG, "full update");
+  ESP_RETURN_ON_ERROR(update(0xf7, false, NULL, NULL), TAG, "full update");
   memcpy(s_shadow, s_native, NATIVE_SIZE);
   return ESP_OK;
 }
@@ -294,7 +305,7 @@ esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
   const uint16_t native_height = portrait_x_end - portrait_x;
 
   convert(buffer);
-  ESP_RETURN_ON_ERROR(init_sequence(false), TAG, "partial init");
+  ESP_RETURN_ON_ERROR(init_sequence(false, NULL, NULL), TAG, "partial init");
   ESP_RETURN_ON_ERROR(command(0x18), TAG, "partial temp cmd");
   ESP_RETURN_ON_ERROR(data_byte(0x80), TAG, "partial temp data");
   ESP_RETURN_ON_ERROR(command(0x3c), TAG, "partial border cmd");
@@ -313,7 +324,7 @@ esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
   ESP_RETURN_ON_ERROR(command(0x22), TAG, "partial update cmd");
   ESP_RETURN_ON_ERROR(data_byte(0xff), TAG, "partial update mode");
   ESP_RETURN_ON_ERROR(command(0x20), TAG, "partial activate");
-  ESP_RETURN_ON_ERROR(wait_ready("partial_update"), TAG,
+  ESP_RETURN_ON_ERROR(wait_ready("partial_update", NULL, NULL, false), TAG,
                       "partial update timeout");
   copy_native_area(s_shadow, s_native, native_x, native_y, native_width,
                    native_height);
@@ -321,13 +332,25 @@ esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
 }
 esp_err_t ink_hw_gray_refresh(const uint8_t *lsb, size_t ll, const uint8_t *msb,
                               size_t ml) {
+  return ink_hw_gray_refresh_with_poll(lsb, ll, msb, ml, NULL, NULL);
+}
+
+esp_err_t ink_hw_gray_refresh_with_poll(
+    const uint8_t *lsb, size_t ll, const uint8_t *msb, size_t ml,
+    ink_hw_refresh_poll_fn poll, void *context) {
   if (!s_initialized || !lsb || !msb || ll < INK_HW_BUFFER_SIZE ||
       ml < INK_HW_BUFFER_SIZE)
     return ESP_ERR_INVALID_ARG;
-  ESP_RETURN_ON_ERROR(init_sequence(true), TAG, "gray init");
+  if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;
+  esp_err_t ret = init_sequence(true, poll, context);
+  if (ret != ESP_OK) return ret;
+  if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;
   ESP_RETURN_ON_ERROR(write_plane(msb, 0x26), TAG, "gray msb");
+  if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;
   ESP_RETURN_ON_ERROR(write_plane(lsb, 0x24), TAG, "gray lsb");
-  ESP_RETURN_ON_ERROR(update(kGrayUpdateMode, true), TAG, "gray update");
+  if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;
+  ESP_RETURN_ON_ERROR(update(kGrayUpdateMode, true, poll, context), TAG,
+                      "gray update");
   memcpy(s_shadow, s_native, NATIVE_SIZE);
   return ESP_OK;
 }

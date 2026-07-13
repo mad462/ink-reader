@@ -10,6 +10,8 @@
 #define INK_HW_HEIGHT 800
 #define INK_HW_BUFFER_SIZE (INK_HW_WIDTH * INK_HW_HEIGHT / 8)
 
+typedef bool (*ink_hw_refresh_poll_fn)(void *context);
+
 esp_err_t ink_hw_init(void);
 esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length);
 esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
@@ -17,5 +19,8 @@ esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
                                       uint16_t width, uint16_t height);
 esp_err_t ink_hw_gray_refresh(const uint8_t *lsb, size_t lsb_length,
                               const uint8_t *msb, size_t msb_length);
+esp_err_t ink_hw_gray_refresh_with_poll(
+    const uint8_t *lsb, size_t lsb_length, const uint8_t *msb,
+    size_t msb_length, ink_hw_refresh_poll_fn poll, void *context);
 esp_err_t ink_hw_sleep(void);
 bool ink_hw_self_test(void);
