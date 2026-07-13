@@ -10,6 +10,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 
+DEFAULT_FONT_PATH = Path(__file__).resolve().parent / "testdata" / "LXGWWenKai-ui-subset.ttf"
+
+
 @dataclass(frozen=True)
 class Phrase:
     text: str
@@ -64,11 +67,22 @@ def _format_bitmap(name: str, bitmap: bytes) -> str:
 
 
 def _c_string(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return "".join(f"\\x{byte:02X}" for byte in value.encode("utf-8"))
+
+
+def _validate_range(field: str, value: int, maximum: int) -> None:
+    if not 1 <= value <= maximum:
+        raise ValueError(f"{field} must be between 1 and {maximum}, got {value}")
 
 
 def generate(font_path: Path, output_path: Path) -> None:
-    rendered = [_render(phrase, font_path) for phrase in PHRASES]
+    rendered = []
+    for phrase in PHRASES:
+        _validate_range("pixel_size", phrase.pixel_size, 0xFF)
+        width, height, bitmap = _render(phrase, font_path)
+        _validate_range("width", width, 0xFFFF)
+        _validate_range("height", height, 0xFFFF)
+        rendered.append((width, height, bitmap))
     bitmaps = [
         _format_bitmap(f"s_bitmap_{index}", bitmap)
         for index, (_, _, bitmap) in enumerate(rendered)
@@ -116,7 +130,7 @@ def generate(font_path: Path, output_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--font", required=True, type=Path)
+    parser.add_argument("--font", default=DEFAULT_FONT_PATH, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     generate(args.font, args.output)
