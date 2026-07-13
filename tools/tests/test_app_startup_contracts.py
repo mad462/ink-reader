@@ -20,3 +20,23 @@ def test_reader_does_not_load_fonts_for_prerendered_pages() -> None:
     assert "ink_fonts_load(" not in text
     assert 'APP_START name=reader' in text
     assert 'APP_STAGE name=reader' in text
+
+
+def test_photo_starts_in_preview_and_font_task_never_touches_epd() -> None:
+    text = source("apps/photo/main/app_main.c")
+
+    assert "enum photo_view view = PREVIEW;" in text
+    assert "xTaskCreate" in text
+    assert "xEventGroupSetBits" in text
+    assert "PHOTO_FONT_DONE" in text
+    task = text[text.index("static void photo_font_task") : text.index("void app_main")]
+    assert "ink_hw_" not in task
+
+    status = text[text.index("static bool show_status_page") :
+                  text.index("static bool try_decode_item")]
+    assert "s_photo_fonts" not in status
+
+    main = text[text.index("void app_main") :]
+    assert main.index("xTaskCreate") < main.index(
+        "photo_ready = refresh_decoded_photo"
+    )
