@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ink_fonts.h"
+
 static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
                                         {0, 0, 0x5f, 0, 0},
                                         {0, 7, 0, 7, 0},
@@ -125,6 +127,45 @@ void ink_epd_ui_draw_text(uint8_t *buffer, size_t length, int x, int y,
   }
 }
 
+static bool text_is_ascii(const char *text) {
+  if (!text) return false;
+  for (const unsigned char *p = (const unsigned char *)text; *p; ++p)
+    if (*p >= 0x80U) return false;
+  return true;
+}
+
+bool ink_epd_ui_measure_text(ink_cpfont_t *font, const char *text,
+                             int ascii_scale, uint8_t font_scale_divisor,
+                             int *out_width) {
+  if (out_width) *out_width = 0;
+  if (!text || ascii_scale < 1 || font_scale_divisor == 0U) return false;
+  if (ink_cpfont_is_loaded(font))
+    return ink_cpfont_draw_text_bw_scaled(font, NULL, 0, 0, text,
+                                          font_scale_divisor,
+                                          out_width) == ESP_OK;
+  if (!text_is_ascii(text)) return false;
+  if (out_width) *out_width = (int)strlen(text) * 6 * ascii_scale;
+  return true;
+}
+
+bool ink_epd_ui_draw_text_font(uint8_t *buffer, size_t length,
+                               ink_cpfont_t *font, int x, int y,
+                               int ascii_scale, uint8_t font_scale_divisor,
+                               const char *text, int *out_width) {
+  if (out_width) *out_width = 0;
+  if (!buffer || length < INK_EPD_BUFFER_SIZE || !text || ascii_scale < 1 ||
+      font_scale_divisor == 0U)
+    return false;
+  if (ink_cpfont_is_loaded(font))
+    return ink_cpfont_draw_text_bw_scaled(font, buffer, x, y, text,
+                                          font_scale_divisor,
+                                          out_width) == ESP_OK;
+  if (!text_is_ascii(text)) return false;
+  ink_epd_ui_draw_text(buffer, length, x, y, ascii_scale, text, true);
+  if (out_width) *out_width = (int)strlen(text) * 6 * ascii_scale;
+  return true;
+}
+
 void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected) {
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
   ink_epd_ui_clear(buffer, length, true);
@@ -182,17 +223,42 @@ static size_t photo_list_window_start(size_t selected, size_t count) {
   return start < last_start ? start : last_start;
 }
 
-void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
-                                const ink_epd_photo_row_t *rows, size_t count,
-                                size_t selected) {
+static void format_photo_title(char *title, size_t title_size,
+                               size_t index, const char *name,
+                               int max_width, ink_cpfont_t *font) {
+  title[0] = 0;
+  for (size_t max_codepoints = 24U; max_codepoints > 0U;
+       --max_codepoints) {
+    char display_name[128];
+    if (!ink_fonts_utf8_truncate_tail(name ? name : "", display_name,
+                                      sizeof(display_name), max_codepoints))
+      continue;
+    if (snprintf(title, title_size, "%02u. %s", (unsigned)(index + 1),
+                 display_name) >= (int)title_size)
+      continue;
+    int width = 0;
+    if (ink_epd_ui_measure_text(font, title, 2, 1U, &width) &&
+        width <= max_width)
+      return;
+  }
+  snprintf(title, title_size, "%02u.", (unsigned)(index + 1));
+}
+
+void ink_epd_ui_draw_photo_list_with_fonts(
+    uint8_t *buffer, size_t length, const ink_epd_photo_row_t *rows,
+    size_t count, size_t selected, const ink_epd_ui_fonts_t *fonts) {
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
+  ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
+  ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
+  ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
   ink_epd_ui_clear(buffer, length, true);
-  ink_epd_ui_draw_text(buffer, length, kPhotoListX, 8, 3, "PHOTO ALBUM",
-                       true);
+  (void)ink_epd_ui_draw_text_font(buffer, length, title_font, kPhotoListX, 8,
+                                  3, 1U, "PHOTO ALBUM", NULL);
 
   if (!rows || count == 0) {
-    ink_epd_ui_draw_text(buffer, length, kPhotoListX + kPhotoListContentInset,
-                         88, 3, "NO PHOTOS FOUND", true);
+    (void)ink_epd_ui_draw_text_font(
+        buffer, length, body_font, kPhotoListX + kPhotoListContentInset, 88,
+        3, 1U, "NO PHOTOS FOUND", NULL);
     return;
   }
   if (selected >= count) selected = count - 1;
@@ -200,7 +266,9 @@ void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
   char counter[32];
   snprintf(counter, sizeof(counter), "%u/%u", (unsigned)(selected + 1),
            (unsigned)count);
-  const int counter_width = (int)strlen(counter) * 12;
+  int counter_width = 0;
+  (void)ink_epd_ui_measure_text(footer_font, counter, 2, 1U,
+                                &counter_width);
   const int counter_x = kPhotoListX + kPhotoListWidth -
                         kPhotoListContentInset - counter_width;
 
@@ -221,21 +289,33 @@ void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
           y + kPhotoListMarkerInset, kPhotoListMarkerWidth,
           INK_PHOTO_LIST_ROW_HEIGHT - 2 * kPhotoListMarkerInset, true);
 
-    char title[35];
-    snprintf(title, sizeof(title), "%02u. %s", (unsigned)(index + 1),
-             rows[index].name ? rows[index].name : "");
-    ink_epd_ui_draw_text(buffer, length,
-                         kPhotoListX + kPhotoListContentInset,
-                         y + kPhotoListTitleYOffset, 2, title, true);
+    char title[160];
+    const int text_x = kPhotoListX + kPhotoListContentInset;
+    const int text_max_width = index == selected
+                                   ? counter_x - text_x - 12
+                                   : kPhotoListWidth - 2 * kPhotoListContentInset;
+    format_photo_title(title, sizeof(title), index, rows[index].name,
+                       text_max_width, body_font);
+    (void)ink_epd_ui_draw_text_font(buffer, length, body_font, text_x,
+                                    y + kPhotoListTitleYOffset, 2, 1U, title,
+                                    NULL);
     if (index == selected) {
       ink_epd_ui_fill_rect(buffer, length, counter_x - 12, y,
                            kPhotoListX + kPhotoListWidth - (counter_x - 12),
                            INK_PHOTO_LIST_ROW_HEIGHT,
                            false);
-      ink_epd_ui_draw_text(buffer, length, counter_x,
-                           y + kPhotoListTitleYOffset, 2, counter, true);
+      (void)ink_epd_ui_draw_text_font(
+          buffer, length, footer_font, counter_x,
+          y + kPhotoListTitleYOffset, 2, 1U, counter, NULL);
     }
   }
+}
+
+void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
+                                const ink_epd_photo_row_t *rows, size_t count,
+                                size_t selected) {
+  ink_epd_ui_draw_photo_list_with_fonts(buffer, length, rows, count, selected,
+                                        NULL);
 }
 
 ink_epd_region_t ink_epd_ui_photo_list_selection_region(size_t previous,
@@ -273,18 +353,45 @@ ink_epd_region_t ink_epd_ui_photo_list_selection_region(size_t previous,
                             .height = bottom - top};
 }
 
+void ink_epd_ui_draw_status_with_fonts(uint8_t *buffer, size_t length,
+                                       const char *title,
+                                       const char *message,
+                                       const ink_epd_ui_fonts_t *fonts) {
+  ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
+  ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
+  ink_epd_ui_clear(buffer, length, true);
+  (void)ink_epd_ui_draw_text_font(buffer, length, title_font, 40, 100, 4, 1U,
+                                  title ? title : "INK", NULL);
+  ink_epd_ui_fill_rect(buffer, length, 40, 180, 400, 4, true);
+  (void)ink_epd_ui_draw_text_font(buffer, length, body_font, 40, 260, 3, 1U,
+                                  message ? message : "ERROR", NULL);
+}
+
 void ink_epd_ui_draw_status(uint8_t *buffer, size_t length, const char *title,
                             const char *message) {
-  ink_epd_ui_clear(buffer, length, true);
-  ink_epd_ui_draw_text(buffer, length, 40, 100, 4, title ? title : "INK", true);
-  ink_epd_ui_fill_rect(buffer, length, 40, 180, 400, 4, true);
-  ink_epd_ui_draw_text(buffer, length, 40, 260, 3, message ? message : "ERROR",
-                       true);
+  ink_epd_ui_draw_status_with_fonts(buffer, length, title, message, NULL);
 }
 
 bool ink_epd_ui_self_test(void) {
+  int measured_width = 0;
+  if (!ink_epd_ui_measure_text(NULL, "ABC", 2, 1U, &measured_width) ||
+      measured_width != 36)
+    return false;
   uint8_t *buffer = malloc(INK_EPD_BUFFER_SIZE);
   if (!buffer) return false;
+
+  ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
+  if (ink_epd_ui_draw_text_font(buffer, INK_EPD_BUFFER_SIZE, NULL, 0, 0, 2,
+                                1U, "相册", NULL)) {
+    free(buffer);
+    return false;
+  }
+  for (size_t i = 0; i < INK_EPD_BUFFER_SIZE; ++i) {
+    if (buffer[i] != 0xFFU) {
+      free(buffer);
+      return false;
+    }
+  }
 
   const ink_epd_region_t same_window =
       ink_epd_ui_photo_list_selection_region(0, 1, 14);
