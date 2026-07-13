@@ -220,6 +220,11 @@ static bool collect_directory_names(const char *directory, bool directories,
 }
 
 static bool try_load_path(ink_cpfont_t *font, const char *path) {
+  struct stat st;
+  if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+    ESP_LOGD(TAG, "font candidate missing path=%s", path);
+    return false;
+  }
   const esp_err_t result = ink_cpfont_load(font, path);
   if (result == ESP_OK) {
     ESP_LOGI(TAG, "font loaded path=%s", path);
