@@ -341,12 +341,17 @@ void ink_epd_ui_draw_photo_list_with_fonts(
   ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
   ink_epd_ui_clear(buffer, length, true);
   (void)ink_epd_ui_draw_text_font(buffer, length, title_font, kPhotoListX, 8,
-                                  3, 1U, "PHOTO ALBUM", NULL);
+                                  3, 1U,
+                                  ink_cpfont_is_loaded(title_font) ? "相册"
+                                                                   : "PHOTO ALBUM",
+                                  NULL);
 
   if (!rows || count == 0) {
     (void)ink_epd_ui_draw_text_font(
         buffer, length, body_font, kPhotoListX + kPhotoListContentInset, 88,
-        3, 1U, "NO PHOTOS FOUND", NULL);
+        3, 1U,
+        ink_cpfont_is_loaded(body_font) ? "未找到图片" : "NO PHOTOS FOUND",
+        NULL);
     return;
   }
   if (selected >= count) selected = count - 1;

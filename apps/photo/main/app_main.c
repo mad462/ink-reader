@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "ink_boot_switch.h"
 #include "ink_epd_ui.h"
+#include "ink_fonts.h"
 #include "ink_hw.h"
 #include "ink_input.h"
 #include "ink_photo_core.h"
@@ -20,6 +21,9 @@ enum photo_view {
 };
 
 static ink_epd_photo_row_t photo_rows[INK_PHOTO_MAX_ITEMS];
+static ink_cpfont_t s_menu_font;
+static ink_cpfont_t s_footer_font;
+static ink_epd_ui_fonts_t s_photo_fonts;
 
 static bool photo_should_full_refresh(unsigned successful_partial_count) {
   return successful_partial_count >= PHOTO_PARTIAL_REFRESH_LIMIT;
@@ -62,8 +66,9 @@ static void draw_photo_list(const ink_photo_catalog_t *catalog,
                             bool catalog_ready, size_t selected, uint8_t *lsb) {
   if (!lsb) return;
   const size_t count = photo_catalog_count(catalog, catalog_ready);
-  ink_epd_ui_draw_photo_list(lsb, INK_PHOTO_PLANE_SIZE,
-                             count > 0 ? photo_rows : NULL, count, selected);
+  ink_epd_ui_draw_photo_list_with_fonts(
+      lsb, INK_PHOTO_PLANE_SIZE, count > 0 ? photo_rows : NULL, count,
+      selected, &s_photo_fonts);
 }
 
 static bool full_refresh_photo_list(const uint8_t *lsb,
@@ -112,7 +117,10 @@ static bool refresh_photo_list(const uint8_t *lsb, size_t previous,
 static bool show_status_page(uint8_t *lsb, const char *message,
                              const char *context) {
   if (!lsb) return false;
-  ink_epd_ui_draw_status(lsb, INK_PHOTO_PLANE_SIZE, "PHOTO", message);
+  ink_epd_ui_draw_status_with_fonts(
+      lsb, INK_PHOTO_PLANE_SIZE,
+      ink_cpfont_is_loaded(s_photo_fonts.title) ? "相册" : "PHOTO", message,
+      &s_photo_fonts);
   esp_err_t ret = ink_hw_full_refresh(lsb, INK_PHOTO_PLANE_SIZE);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "%s status refresh failed error=%s", context,
@@ -132,6 +140,7 @@ static bool show_photo(const ink_photo_catalog_t *catalog, size_t index,
     return false;
   }
 
+  ESP_LOGI(TAG, "PHOTO_REFRESH mode=full_gray");
   esp_err_t ret =
       ink_hw_gray_refresh(lsb, INK_PHOTO_PLANE_SIZE, msb, INK_PHOTO_PLANE_SIZE);
   if (ret != ESP_OK) {
@@ -145,8 +154,9 @@ static bool show_photo(const ink_photo_catalog_t *catalog, size_t index,
 
 void app_main(void) {
   ESP_LOGI(TAG, "APP_START name=photo");
-  const bool core_ready =
-      ink_photo_core_self_test() && photo_policy_self_test();
+  const bool core_ready = ink_fonts_self_test() && ink_hw_self_test() &&
+                          ink_photo_core_self_test() &&
+                          photo_policy_self_test();
   if (!core_ready) {
     ESP_LOGE(TAG, "photo self test failed");
   }
@@ -176,6 +186,19 @@ void app_main(void) {
   if (core_ready && resources_ready) {
     sd_ret = ink_sd_mount();
     if (sd_ret == ESP_OK) {
+      if (ink_fonts_load(&s_menu_font, INK_FONT_MENU)) {
+        s_photo_fonts.title = &s_menu_font;
+        s_photo_fonts.body = &s_menu_font;
+        ESP_LOGI(TAG, "menu font loaded path=%s", s_menu_font.path);
+      } else {
+        ESP_LOGW(TAG, "menu font not found; using ASCII photo UI");
+      }
+      if (ink_fonts_load(&s_footer_font, INK_FONT_FOOTER)) {
+        s_photo_fonts.footer = &s_footer_font;
+        ESP_LOGI(TAG, "footer font loaded path=%s", s_footer_font.path);
+      } else {
+        ESP_LOGW(TAG, "footer font not found; using ASCII photo metadata");
+      }
       catalog_ready = ink_photo_catalog_load(catalog);
       if (!catalog_ready) {
         ESP_LOGE(TAG, "catalog load failed path=%s", INK_PHOTO_DIR);

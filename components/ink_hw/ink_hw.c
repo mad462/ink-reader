@@ -23,15 +23,23 @@ static uint8_t *s_native;
 static uint8_t *s_shadow;
 static uint8_t *s_dma;
 static bool s_initialized;
-static const uint8_t kGrayLut[110] = {
-    0, 0, 0,    0,    0,    0,    0,    0,    0,    0,    0x54, 0x54, 0x40, 0,
-    0, 0, 0,    0,    0,    0,    0xaa, 0xa0, 0xa8, 0,    0,    0,    0,    0,
-    0, 0, 0xa2, 0x22, 0x20, 0,    0,    0,    0,    0,    0,    0,    0,    0,
-    0, 0, 0,    0,    0,    0,    0,    0,    1,    1,    1,    1,    0,    1,
-    1, 1, 1,    0,    1,    1,    1,    1,    0,    0,    0,    0,    0,    0,
-    0, 0, 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
-    0, 0, 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
-    0, 0, 0x8f, 0x8f, 0x8f, 0x8f, 0x8f, 0x17, 0x41, 0xa8, 0x32, 0x30, 0,    0};
+static const uint8_t kGrayLut[] = {
+    0x80, 0x48, 0x4A, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x0A, 0x48, 0x68, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x88, 0x48, 0x60, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xA8, 0x48, 0x45, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x07, 0x1E, 0x1C, 0x02, 0x00, 0x05, 0x01, 0x05, 0x01, 0x02,
+    0x08, 0x01, 0x01, 0x04, 0x04, 0x00, 0x02, 0x01, 0x02, 0x02,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    0x22, 0x22, 0x22, 0x22, 0x22, 0x17, 0x41, 0xA8, 0x32, 0x30,
+    0x00, 0x00,
+};
+static const uint8_t kGrayTemperatureCommand = 0x18;
+static const uint8_t kGrayTemperatureValue = 0x80;
+static const uint8_t kGrayUpdateMode = 0xC7;
 
 static esp_err_t command(uint8_t value) {
   gpio_set_level(GPIO_NUM_7, 0);
@@ -119,6 +127,12 @@ static esp_err_t init_sequence(bool gray) {
   ESP_RETURN_ON_ERROR(data(gate, sizeof(gate)), TAG, "gate data");
   ESP_RETURN_ON_ERROR(command(0x3c), TAG, "border cmd");
   ESP_RETURN_ON_ERROR(data_byte(gray ? 0 : 1), TAG, "border data");
+  if (gray) {
+    ESP_RETURN_ON_ERROR(command(kGrayTemperatureCommand), TAG,
+                        "gray temp cmd");
+    ESP_RETURN_ON_ERROR(data_byte(kGrayTemperatureValue), TAG,
+                        "gray temp data");
+  }
   ESP_RETURN_ON_ERROR(window(), TAG, "window");
   if (gray) {
     ESP_RETURN_ON_ERROR(command(0x32), TAG, "lut cmd");
@@ -313,7 +327,7 @@ esp_err_t ink_hw_gray_refresh(const uint8_t *lsb, size_t ll, const uint8_t *msb,
   ESP_RETURN_ON_ERROR(init_sequence(true), TAG, "gray init");
   ESP_RETURN_ON_ERROR(write_plane(msb, 0x26), TAG, "gray msb");
   ESP_RETURN_ON_ERROR(write_plane(lsb, 0x24), TAG, "gray lsb");
-  ESP_RETURN_ON_ERROR(update(0xc7, true), TAG, "gray update");
+  ESP_RETURN_ON_ERROR(update(kGrayUpdateMode, true), TAG, "gray update");
   memcpy(s_shadow, s_native, NATIVE_SIZE);
   return ESP_OK;
 }
@@ -321,4 +335,13 @@ esp_err_t ink_hw_sleep(void) {
   if (!s_initialized) return ESP_ERR_INVALID_STATE;
   ESP_RETURN_ON_ERROR(command(0x10), TAG, "sleep");
   return data_byte(1);
+}
+
+bool ink_hw_self_test(void) {
+  return sizeof(kGrayLut) == 112U && kGrayLut[0] == 0x80U &&
+         kGrayLut[1] == 0x48U && kGrayLut[2] == 0x4AU &&
+         kGrayLut[105] == 0x17U && kGrayLut[106] == 0x41U &&
+         kGrayLut[107] == 0xA8U && kGrayLut[108] == 0x32U &&
+         kGrayLut[109] == 0x30U && kGrayTemperatureCommand == 0x18U &&
+         kGrayTemperatureValue == 0x80U && kGrayUpdateMode == 0xC7U;
 }

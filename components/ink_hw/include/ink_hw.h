@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -17,3 +18,4 @@ esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
 esp_err_t ink_hw_gray_refresh(const uint8_t *lsb, size_t lsb_length,
                               const uint8_t *msb, size_t msb_length);
 esp_err_t ink_hw_sleep(void);
+bool ink_hw_self_test(void);
