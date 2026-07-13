@@ -65,7 +65,6 @@ void app_main(void) {
       ESP_LOGE(TAG, "status refresh failed err=%s", esp_err_to_name(ret));
   }
 
-  bool back_latched = false;
   while (true) {
     ink_input_snapshot_t input = {0};
     const uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
@@ -86,8 +85,7 @@ void app_main(void) {
                    (unsigned)book.current_page);
         }
       }
-      if (!back_latched && ink_input_held_ms(&input, INK_BUTTON_BACK) >= 1200) {
-        back_latched = true;
+      if (ink_input_was_pressed(&input, INK_BUTTON_BACK)) {
         ESP_LOGI(TAG, "BOOT_SWITCH from=reader to=launcher");
         esp_err_t ret = ink_boot_switch_to_launcher();
         if (ret != ESP_OK)

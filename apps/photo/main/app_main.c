@@ -75,7 +75,6 @@ void app_main(void) {
     }
   }
 
-  bool back_latched = false;
   while (true) {
     ink_input_snapshot_t input = {0};
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
@@ -90,8 +89,7 @@ void app_main(void) {
                    catalog->items[current].path);
         }
       }
-      if (!back_latched && ink_input_held_ms(&input, INK_BUTTON_BACK) >= 1200) {
-        back_latched = true;
+      if (ink_input_was_pressed(&input, INK_BUTTON_BACK)) {
         ESP_LOGI(TAG, "BOOT_SWITCH from=photo to=launcher");
         esp_err_t ret = ink_boot_switch_to_launcher();
         if (ret != ESP_OK) {
