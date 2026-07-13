@@ -18,6 +18,8 @@
 #define PAGE_FAIL_BOOK TEST_BOOKS "/page_fail.bin"
 #define XTH_GOOD_BOOK TEST_BOOKS "/xth_good.bin"
 #define XTH_FAIL_BOOK TEST_BOOKS "/xth_fail.bin"
+#define XTH_SCAN_BAD_BOOK TEST_BOOKS "/a_xth_bad.xtch"
+#define XTH_SCAN_GOOD_BOOK TEST_BOOKS "/b_xth_good.xtch"
 
 static void put16(uint8_t *p, uint16_t value) {
   p[0] = (uint8_t)value;
@@ -113,7 +115,7 @@ static int write_page_failure_book(void) {
   return fclose(file) == 0 && ok;
 }
 
-static int write_single_page_xth(const char *path) {
+static int write_single_page_xth(const char *path, size_t payload_bytes) {
   uint8_t container[72] = {0};
   uint8_t page_header[22];
   FILE *file = fopen(path, "wb");
@@ -134,7 +136,7 @@ static int write_single_page_xth(const char *path) {
       fwrite(container, 1, sizeof(container), file) == sizeof(container) &&
       fwrite(page_header, 1, sizeof(page_header), file) ==
           sizeof(page_header) &&
-      write_bytes(file, INK_READER_PAGE_SIZE * 2u, 0x00);
+      write_bytes(file, payload_bytes, 0x00);
   return fclose(file) == 0 && ok;
 }
 
@@ -179,6 +181,8 @@ static void cleanup_fixture(void) {
   remove(PAGE_FAIL_BOOK);
   remove(XTH_GOOD_BOOK);
   remove(XTH_FAIL_BOOK);
+  remove(XTH_SCAN_BAD_BOOK);
+  remove(XTH_SCAN_GOOD_BOOK);
   _rmdir(TEST_BOOKS);
   _rmdir(TEST_ROOT);
 }
@@ -206,7 +210,8 @@ int main(void) {
   }
   if (!write_single_page_book(BAD_BOOK, 127) ||
       !write_single_page_book(GOOD_BOOK, INK_READER_PAGE_SIZE) ||
-      !write_page_failure_book() || !write_single_page_xth(XTH_GOOD_BOOK) ||
+      !write_page_failure_book() ||
+      !write_single_page_xth(XTH_GOOD_BOOK, INK_READER_PAGE_SIZE * 2u) ||
       !write_xth_page_failure_book()) {
     fprintf(stderr, "fixture file setup failed\n");
     goto cleanup;
@@ -253,6 +258,26 @@ int main(void) {
   }
   if (!ink_reader_book_load_current(&book, framebuffer, INK_READER_PAGE_SIZE)) {
     fprintf(stderr, "valid fallback book did not load\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  ink_reader_book_close(&book);
+
+  remove(BAD_BOOK);
+  remove(GOOD_BOOK);
+  if (!write_single_page_xth(XTH_SCAN_BAD_BOOK, INK_READER_PAGE_SIZE) ||
+      !write_single_page_xth(XTH_SCAN_GOOD_BOOK,
+                             INK_READER_PAGE_SIZE * 2u)) {
+    fprintf(stderr, "XTH scanner fixture setup failed\n");
+    goto cleanup;
+  }
+  ink_reader_book_init(&book);
+  if (ink_reader_open_first_book(&book, path, sizeof(path)) !=
+          INK_READER_SCAN_OK ||
+      strcmp(path, XTH_SCAN_GOOD_BOOK) != 0 ||
+      strcmp(book.path, XTH_SCAN_GOOD_BOOK) != 0) {
+    fprintf(stderr, "scanner did not skip truncated XTH first page: path=%s\n",
+            path);
     ink_reader_book_close(&book);
     goto cleanup;
   }

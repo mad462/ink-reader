@@ -5,23 +5,26 @@ param(
 $ErrorActionPreference = 'Stop'
 $testDir = $PSScriptRoot
 $componentDir = Split-Path $testDir -Parent
-$toolsDir = Join-Path $env:TEMP 'ink-reader-host-tools'
 $runRoot = Join-Path $env:TEMP `
     ('ink-reader-core-host-' + [guid]::NewGuid().ToString('N'))
 $buildDir = Join-Path $runRoot 'build'
 $scanRoot = Join-Path $runRoot 'sdcard'
 
 if (-not $TccPath) {
-    $TccPath = Join-Path $toolsDir 'tcc\tcc.exe'
+    $cachedTcc = Join-Path $env:TEMP 'ink-reader-host-tools\tcc\tcc.exe'
+    if (Test-Path -LiteralPath $cachedTcc) {
+        $TccPath = $cachedTcc
+    } else {
+        $TccPath = Join-Path $runRoot 'tools\tcc\tcc.exe'
+    }
 }
 if (-not (Test-Path -LiteralPath $TccPath)) {
+    $toolsDir = Split-Path (Split-Path $TccPath -Parent) -Parent
     New-Item -ItemType Directory -Force $toolsDir | Out-Null
     $archive = Join-Path $toolsDir 'tcc.zip'
-    if (-not (Test-Path -LiteralPath $archive)) {
-        Invoke-WebRequest `
-            -Uri 'https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip' `
-            -OutFile $archive
-    }
+    Invoke-WebRequest `
+        -Uri 'https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip' `
+        -OutFile $archive
     Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
 }
 
