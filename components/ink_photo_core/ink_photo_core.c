@@ -179,13 +179,15 @@ bool ink_photo_core_self_test(void) {
   dib[12] = 1;
   dib[14] = 4;
   dib[32] = 4;
-  char bmp_name[INK_PHOTO_PATH_MAX];
-  char extensionless_name[INK_PHOTO_PATH_MAX];
-  char hidden_name[INK_PHOTO_PATH_MAX];
-  char hidden_without_extension[INK_PHOTO_PATH_MAX];
+  char bmp_name[sizeof("holiday")];
+  char extensionless_name[sizeof("README")];
+  char hidden_name[sizeof(".hidden")];
+  char hidden_without_extension[sizeof(".hidden")];
   char boundary_name[4];
-  ink_photo_item_t lowercase_item = {.path = INK_PHOTO_DIR "/a.bmp"};
-  ink_photo_item_t uppercase_item = {.path = INK_PHOTO_DIR "/A.bmp"};
+  static const ink_photo_item_t lowercase_item = {
+      .path = INK_PHOTO_DIR "/a.bmp"};
+  static const ink_photo_item_t uppercase_item = {
+      .path = INK_PHOTO_DIR "/A.bmp"};
   copy_photo_name(bmp_name, sizeof(bmp_name), "holiday.bmp");
   copy_photo_name(extensionless_name, sizeof(extensionless_name), "README");
   copy_photo_name(hidden_name, sizeof(hidden_name), ".hidden.bmp");
