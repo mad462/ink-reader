@@ -80,22 +80,20 @@ static void reset_panel(void) {
 static esp_err_t set_native_window(uint16_t x, uint16_t y, uint16_t width,
                                    uint16_t height) {
   const uint16_t reversed_y = NATIVE_HEIGHT - y - height;
-  const uint16_t x_start_byte = x / 8;
-  const uint16_t x_end_byte = (x + width - 1) / 8;
+  const uint16_t x_end = x + width - 1;
   const uint16_t y_end = reversed_y + height - 1;
 
   ESP_RETURN_ON_ERROR(command(0x11), TAG, "entry cmd");
   ESP_RETURN_ON_ERROR(data_byte(1), TAG, "entry data");
   ESP_RETURN_ON_ERROR(command(0x44), TAG, "x cmd");
-  const uint8_t x_data[] = {x_start_byte & 0xff, x_start_byte >> 8,
-                            x_end_byte & 0xff, x_end_byte >> 8};
+  const uint8_t x_data[] = {x & 0xff, x >> 8, x_end & 0xff, x_end >> 8};
   ESP_RETURN_ON_ERROR(data(x_data, sizeof(x_data)), TAG, "x data");
   ESP_RETURN_ON_ERROR(command(0x45), TAG, "y cmd");
   const uint8_t y_data[] = {y_end & 0xff, y_end >> 8, reversed_y & 0xff,
                             reversed_y >> 8};
   ESP_RETURN_ON_ERROR(data(y_data, sizeof(y_data)), TAG, "y data");
   ESP_RETURN_ON_ERROR(command(0x4e), TAG, "xc cmd");
-  const uint8_t xc[] = {x_start_byte & 0xff, x_start_byte >> 8};
+  const uint8_t xc[] = {x & 0xff, x >> 8};
   ESP_RETURN_ON_ERROR(data(xc, sizeof(xc)), TAG, "xc data");
   ESP_RETURN_ON_ERROR(command(0x4f), TAG, "yc cmd");
   const uint8_t yc[] = {y_end & 0xff, y_end >> 8};
@@ -187,6 +185,10 @@ static esp_err_t update(uint8_t mode, bool gray) {
 }
 
 esp_err_t ink_hw_init(void) {
+  if (s_initialized) return ESP_OK;
+
+  esp_err_t ret;
+  bool bus_initialized = false;
   gpio_config_t out = {
       .pin_bit_mask = (1ULL << GPIO_NUM_7) | (1ULL << GPIO_NUM_15),
       .mode = GPIO_MODE_OUTPUT,
@@ -202,14 +204,15 @@ esp_err_t ink_hw_init(void) {
                           .quadwp_io_num = -1,
                           .quadhd_io_num = -1,
                           .max_transfer_sz = SPI_CHUNK};
-  ESP_RETURN_ON_ERROR(spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO), TAG,
-                      "spi bus");
+  ret = spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO);
+  if (ret != ESP_OK) return ret;
+  bus_initialized = true;
   spi_device_interface_config_t dev = {.clock_speed_hz = 10 * 1000 * 1000,
                                        .mode = 0,
                                        .spics_io_num = 6,
                                        .queue_size = 1};
-  ESP_RETURN_ON_ERROR(spi_bus_add_device(SPI2_HOST, &dev, &s_spi), TAG,
-                      "spi device");
+  ret = spi_bus_add_device(SPI2_HOST, &dev, &s_spi);
+  if (ret != ESP_OK) goto fail;
   s_native = heap_caps_malloc(NATIVE_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!s_native)
     s_native =
@@ -220,13 +223,31 @@ esp_err_t ink_hw_init(void) {
         heap_caps_malloc(NATIVE_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   s_dma = heap_caps_malloc(
       SPI_CHUNK, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (!s_native || !s_shadow || !s_dma) return ESP_ERR_NO_MEM;
+  if (!s_native || !s_shadow || !s_dma) {
+    ret = ESP_ERR_NO_MEM;
+    goto fail;
+  }
   memset(s_native, 0xff, NATIVE_SIZE);
   memset(s_shadow, 0xff, NATIVE_SIZE);
-  esp_err_t ret = init_sequence(false);
-  if (ret != ESP_OK) return ret;
+  ret = init_sequence(false);
+  if (ret != ESP_OK) goto fail;
   s_initialized = true;
   return ESP_OK;
+
+fail:
+  heap_caps_free(s_dma);
+  s_dma = NULL;
+  heap_caps_free(s_shadow);
+  s_shadow = NULL;
+  heap_caps_free(s_native);
+  s_native = NULL;
+  if (s_spi) {
+    (void)spi_bus_remove_device(s_spi);
+    s_spi = NULL;
+  }
+  if (bus_initialized) (void)spi_bus_free(SPI2_HOST);
+  s_initialized = false;
+  return ret;
 }
 esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length) {
   if (!s_initialized || !buffer || length < INK_HW_BUFFER_SIZE)
