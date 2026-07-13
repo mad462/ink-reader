@@ -53,7 +53,7 @@ bool ink_fonts_utf8_truncate_tail(const char *src, char *dst,
                                   size_t dst_size, size_t max_codepoints);
 ```
 
-在 `ink_fonts_self_test()` 增加 `"相册A"` 为 3 个 codepoint、截为 `"相..."` 且输出保持合法 UTF-8 的断言。此时不实现 helper，运行：
+在 `ink_fonts_self_test()` 增加 `"相册A"` 为 3 个 codepoint 的断言，并用 5 个 codepoint 的 `"相册ABC"` 验证 `max_codepoints=4` 时截为 `"相..."` 且输出保持合法 UTF-8。此时不实现 helper，运行：
 
 ```powershell
 . .\tools\idf_env.ps1
