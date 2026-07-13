@@ -30,6 +30,9 @@ static bool parse_headers(const uint8_t file_h[14], const uint8_t dib[40],
 static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[4]);
 typedef enum {
   BMP_PROBE_SUPPORTED,
+  BMP_PROBE_SHORT_HEADER,
+  BMP_PROBE_INVALID_DIB_SIZE,
+  BMP_PROBE_PALETTE_SEEK_FAILED,
   BMP_PROBE_UNSUPPORTED_HEADER,
   BMP_PROBE_INVALID_PALETTE_OFFSET,
   BMP_PROBE_SHORT_PALETTE,
@@ -38,55 +41,34 @@ typedef enum {
 static bmp_probe_result_t probe_bmp_parts(const uint8_t file_h[14],
                                           const uint8_t dib[40],
                                           const uint8_t *palette,
-                                          size_t palette_size);
+                                          size_t palette_size,
+                                          bmp_info_t *out_info,
+                                          uint8_t out_map[4]);
+static bmp_probe_result_t read_bmp_metadata(FILE *file, bmp_info_t *out_info,
+                                            uint8_t out_map[4]);
 
 static bool probe_bmp_file(const char *path, const char **reason) {
-  uint8_t file_h[14], dib[40], palette[64];
-  FILE *file = NULL;
-  bool supported = false;
-
   if (reason) *reason = "invalid_path";
   if (!path || path[0] == '\0') return false;
-  file = fopen(path, "rb");
+  FILE *file = fopen(path, "rb");
   if (!file) {
     if (reason) *reason = "open_failed";
     return false;
   }
-  if (fread(file_h, 1, sizeof(file_h), file) != sizeof(file_h) ||
-      fread(dib, 1, sizeof(dib), file) != sizeof(dib)) {
-    if (reason) *reason = "short_header";
-    goto done;
-  }
-  const uint32_t dib_size = le32(dib);
-  if (dib_size > (uint32_t)(LONG_MAX - 14L)) {
-    if (reason) *reason = "invalid_dib_size";
-    goto done;
-  }
-  const long palette_offset = 14L + (long)dib_size;
-  const uint32_t raw_colors = le32(dib + 32);
-  const size_t palette_read_size = raw_colors == 0 || raw_colors > 16
-                                       ? sizeof(palette)
-                                       : (size_t)raw_colors * 4U;
-  if (fseek(file, palette_offset, SEEK_SET) != 0) {
-    if (reason) *reason = "palette_seek_failed";
-    goto done;
-  }
-  const size_t palette_size =
-      fread(palette, 1, palette_read_size, file);
-  const bmp_probe_result_t result =
-      probe_bmp_parts(file_h, dib, palette, palette_size);
+  const bmp_probe_result_t result = read_bmp_metadata(file, NULL, NULL);
+  fclose(file);
   static const char *const result_reasons[] = {
       [BMP_PROBE_SUPPORTED] = "supported",
+      [BMP_PROBE_SHORT_HEADER] = "short_header",
+      [BMP_PROBE_INVALID_DIB_SIZE] = "invalid_dib_size",
+      [BMP_PROBE_PALETTE_SEEK_FAILED] = "palette_seek_failed",
       [BMP_PROBE_UNSUPPORTED_HEADER] = "unsupported_header",
       [BMP_PROBE_INVALID_PALETTE_OFFSET] = "invalid_palette_offset",
       [BMP_PROBE_SHORT_PALETTE] = "short_palette",
       [BMP_PROBE_INVALID_PALETTE] = "invalid_palette",
   };
-  supported = result == BMP_PROBE_SUPPORTED;
   if (reason) *reason = result_reasons[result];
-done:
-  fclose(file);
-  return supported;
+  return result == BMP_PROBE_SUPPORTED;
 }
 
 bool ink_photo_bmp_file_looks_supported(const char *path) {
@@ -187,25 +169,60 @@ static bool classify(const uint8_t *palette, uint32_t count, uint8_t map[4]) {
   return true;
 }
 
+static bool palette_file_offset(const uint8_t dib[40], long *out_offset) {
+  if (!dib || !out_offset) return false;
+  const uintmax_t offset = 14U + (uintmax_t)le32(dib);
+  if (offset > (uintmax_t)LONG_MAX) return false;
+  *out_offset = (long)offset;
+  return true;
+}
+
 static bmp_probe_result_t probe_bmp_parts(const uint8_t file_h[14],
                                           const uint8_t dib[40],
                                           const uint8_t *palette,
-                                          size_t palette_size) {
+                                          size_t palette_size,
+                                          bmp_info_t *out_info,
+                                          uint8_t out_map[4]) {
   bmp_info_t info;
   uint8_t map[4];
   if (!parse_headers(file_h, dib, &info))
     return BMP_PROBE_UNSUPPORTED_HEADER;
 
-  const uint64_t palette_offset = 14ULL + le32(dib);
+  long palette_offset;
+  if (!palette_file_offset(dib, &palette_offset))
+    return BMP_PROBE_INVALID_DIB_SIZE;
   const size_t required_palette_size = (size_t)info.colors * 4U;
-  if (info.image_offset > (uint32_t)LONG_MAX ||
-      (uint64_t)info.image_offset <
-      palette_offset + required_palette_size)
+  if ((uintmax_t)info.image_offset > (uintmax_t)LONG_MAX ||
+      (uintmax_t)info.image_offset <
+          (uintmax_t)palette_offset + required_palette_size)
     return BMP_PROBE_INVALID_PALETTE_OFFSET;
   if (palette_size < required_palette_size) return BMP_PROBE_SHORT_PALETTE;
   if (!palette || !classify(palette, info.colors, map))
     return BMP_PROBE_INVALID_PALETTE;
+  if (out_info) *out_info = info;
+  if (out_map) memcpy(out_map, map, sizeof(map));
   return BMP_PROBE_SUPPORTED;
+}
+
+static bmp_probe_result_t read_bmp_metadata(FILE *file, bmp_info_t *out_info,
+                                            uint8_t out_map[4]) {
+  uint8_t file_h[14], dib[40], palette[64];
+  if (!file || fread(file_h, 1, sizeof(file_h), file) != sizeof(file_h) ||
+      fread(dib, 1, sizeof(dib), file) != sizeof(dib))
+    return BMP_PROBE_SHORT_HEADER;
+
+  long palette_offset;
+  if (!palette_file_offset(dib, &palette_offset))
+    return BMP_PROBE_INVALID_DIB_SIZE;
+  const uint32_t raw_colors = le32(dib + 32);
+  const size_t palette_read_size = raw_colors == 0 || raw_colors > 16
+                                       ? sizeof(palette)
+                                       : (size_t)raw_colors * 4U;
+  if (fseek(file, palette_offset, SEEK_SET) != 0)
+    return BMP_PROBE_PALETTE_SEEK_FAILED;
+  const size_t palette_size = fread(palette, 1, palette_read_size, file);
+  return probe_bmp_parts(file_h, dib, palette, palette_size, out_info,
+                         out_map);
 }
 static uint8_t gray_for(uint8_t index, const uint8_t map[4]) {
   for (uint8_t gray = 0; gray < 4; ++gray)
@@ -235,18 +252,10 @@ bool ink_photo_decode_bmp(const char *path, uint8_t *lsb, size_t ll,
   memset(msb, 0, INK_PHOTO_PLANE_SIZE);
   FILE *f = fopen(path, "rb");
   if (!f) return false;
-  uint8_t fh[14], dib[40], palette[64], map[4], row[240];
+  uint8_t map[4], row[240];
   bmp_info_t info;
   bool ok = false;
-  if (fread(fh, 1, sizeof(fh), f) != sizeof(fh) ||
-      fread(dib, 1, sizeof(dib), f) != sizeof(dib) ||
-      !parse_headers(fh, dib, &info))
-    goto done;
-  const uint32_t dib_size = le32(dib);
-  if (dib_size > LONG_MAX - 14 || fseek(f, 14 + (long)dib_size, SEEK_SET) != 0)
-    goto done;
-  if (fread(palette, 4, info.colors, f) != info.colors ||
-      !classify(palette, info.colors, map) ||
+  if (read_bmp_metadata(f, &info, map) != BMP_PROBE_SUPPORTED ||
       fseek(f, (long)info.image_offset, SEEK_SET) != 0)
     goto done;
   for (uint32_t src_y = 0; src_y < 800; ++src_y) {
@@ -300,26 +309,30 @@ bool ink_photo_core_self_test(void) {
   probe_dib[14] = 4;
   probe_dib[32] = 4;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_SUPPORTED)
+                      sizeof(probe_palette), NULL, NULL) != BMP_PROBE_SUPPORTED)
     return false;
   probe_dib[4] = 0xdf;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[4] = 0xe0;
   probe_dib[8] = 0x1f;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[8] = 0x20;
   probe_dib[14] = 8;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[14] = 4;
   probe_dib[16] = 1;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[16] = 0;
   probe_dib[8] = 0xe0;
@@ -327,7 +340,8 @@ bool ink_photo_core_self_test(void) {
   probe_dib[10] = 0xff;
   probe_dib[11] = 0xff;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[8] = 0x20;
   probe_dib[9] = 3;
@@ -335,30 +349,35 @@ bool ink_photo_core_self_test(void) {
   probe_dib[11] = 0;
   probe_dib[32] = 3;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[32] = 17;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) != BMP_PROBE_UNSUPPORTED_HEADER)
+                      sizeof(probe_palette), NULL, NULL) !=
+      BMP_PROBE_UNSUPPORTED_HEADER)
     return false;
   probe_dib[32] = 4;
   probe_fh[10] = 69;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) !=
+                      sizeof(probe_palette), NULL, NULL) !=
       BMP_PROBE_INVALID_PALETTE_OFFSET)
     return false;
   probe_fh[10] = 70;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette) - 1) != BMP_PROBE_SHORT_PALETTE)
+                      sizeof(probe_palette) - 1, NULL, NULL) !=
+      BMP_PROBE_SHORT_PALETTE)
     return false;
-  probe_fh[10] = 0;
-  probe_fh[11] = 0;
-  probe_fh[12] = 0;
-  probe_fh[13] = 0x80;
-  if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
-                      sizeof(probe_palette)) !=
-      BMP_PROBE_INVALID_PALETTE_OFFSET)
-    return false;
+  if ((uintmax_t)LONG_MAX < (uintmax_t)UINT32_MAX) {
+    probe_fh[10] = 0;
+    probe_fh[11] = 0;
+    probe_fh[12] = 0;
+    probe_fh[13] = 0x80;
+    if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
+                        sizeof(probe_palette), NULL, NULL) !=
+        BMP_PROBE_INVALID_PALETTE_OFFSET)
+      return false;
+  }
   copy_photo_name(bmp_name, sizeof(bmp_name), "holiday.bmp");
   copy_photo_name(extensionless_name, sizeof(extensionless_name), "README");
   copy_photo_name(hidden_name, sizeof(hidden_name), ".hidden.bmp");
