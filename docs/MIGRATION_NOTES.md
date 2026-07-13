@@ -277,4 +277,47 @@ reader 测试使用每次 GUID 隔离的 TEMP fixture/build/tool root，覆盖�
 
 禁止模块源码扫描为 0 命中；objdump 栈帧保持 launcher `app_main=128B`、reader `app_main=768B`、photo `app_main=128B`。最终三镜像再次写入 COM9，launcher 完整布局、reader `0x120000`、photo `0x520000` 均出现 `Hash of data verified`。
 
-本轮最终镜像仍需要实体按键完成 photo Confirm/左右/Back 和 reader Back，并观察 launcher 卡片、横线局刷及 photo 四灰阶全刷效果；在这些屏幕/按键项目完成前仍不合并 master。
+本轮留下的 photo 左右/Back、reader 翻页/Back 和三 app 往返确认，已在下一节
+的新镜像实机验证中完成。
+
+## 2026-07-14：Reader 快刷、Photo 启动与 Launcher 字号实机验证
+
+- Launcher 的“书库/相册”增加 24px flash 固化短语，生成尺寸均为
+  `48x23`；Photo 无 cpfont header 继续保留独立的 12px“相册”资产。
+- Reader 首屏继续全刷。普通翻页保存上一帧、计算最小变化矩形并调用区域
+  快刷；前 49 次使用 partial，第 50 次使用维护性 full。首次全刷或后续刷新
+  失败会标记屏幕未同步，下一次翻页只允许 `recovery_full`；失败事务回滚页码和
+  framebuffer。
+- Photo catalog 只收集和排序 `.bmp` 候选，不再逐文件预读 header/palette；
+  实际解码失败仍按原策略向后尝试，最多扫描一圈。
+
+ESP-IDF 5.5.4 全量构建成功：
+
+- launcher：`0x3f430`，app 分区剩余约 75%。
+- reader：`0x80990`，app 分区剩余约 50%。
+- photo：`0x83ad0`，app 分区剩余约 49%。
+
+三张镜像写入 COM9，launcher/reader/photo 分区均由 esptool 完成写入并通过
+hash 校验。实机串口观察：
+
+- Launcher：`APP_START` 后 `hardware_ready=92ms`、`frame_drawn=96ms`、
+  `first_refresh_done=1923ms`；没有 `component self test failed`。
+- Photo：`sd_mount_done=75ms`、`catalog_loaded=121ms`、
+  `first_photo_decoded=645ms`、`font_done=3421ms`、
+  `first_refresh_done=4906ms`。旧日志对应值为 75ms、1811ms、2337ms、
+  5116ms、6596ms；目录阶段减少约 1690ms，首图全刷完成提前约 1690ms。
+- Photo 首屏显示 `/sdcard/photos/read.bmp`，随后左右切换实际显示
+  `世界地图.bmp`、`书桌.bmp`、`地图.bmp`；每次均记录
+  `PHOTO_REFRESH mode=full_gray`，Back 记录
+  `BOOT_SWITCH from=photo to=launcher`。
+- Reader：`sd_mount_done=75ms`、`book_scan_done=136ms`、
+  `first_page_decoded=233ms`、`first_refresh_done=2076ms`；打开
+  `/sdcard/books/作家榜经典：磨坊信札.xtc`，共 1071 页。
+- Reader 普通翻到下一页记录
+  `PAGE_REFRESH mode=partial page=1 x=26 y=36 w=425 h=698`，没有执行普通
+  `0xF7` 全刷路径；Back 记录 `BOOT_SWITCH from=reader to=launcher`。
+
+本轮观察窗口未出现 panic、assert failed、Guru Meditation、
+`sdmmc_read_sectors: not enough mem`、`panel not ready after sw reset`、
+`epd busy_wait aborted`，也没有 WiFi、voice note、I2S、ASR 或 USB MSC 初始化
+日志。
