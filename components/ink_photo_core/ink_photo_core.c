@@ -25,6 +25,21 @@ static bool extension_ok(const char *name) {
   const char *dot = name ? strrchr(name, '.') : NULL;
   return dot && !strcasecmp(dot, ".bmp");
 }
+
+static void copy_photo_name(char *destination, size_t destination_size,
+                            const char *filename) {
+  if (!destination || destination_size == 0) return;
+  destination[0] = '\0';
+  if (!filename) return;
+
+  const char *dot = strrchr(filename, '.');
+  size_t length = (dot && dot != filename) ? (size_t)(dot - filename)
+                                           : strlen(filename);
+  if (length >= destination_size) length = destination_size - 1;
+  memcpy(destination, filename, length);
+  destination[length] = '\0';
+}
+
 static int compare_items(const void *a, const void *b) {
   return strcasecmp(((const ink_photo_item_t *)a)->path,
                     ((const ink_photo_item_t *)b)->path);
@@ -41,8 +56,10 @@ bool ink_photo_catalog_load(ink_photo_catalog_t *catalog) {
     if (entry->d_name[0] == '.' || !extension_ok(entry->d_name)) continue;
     ink_photo_item_t *item = &catalog->items[catalog->count];
     if (snprintf(item->path, sizeof(item->path), "%s/%s", INK_PHOTO_DIR,
-                 entry->d_name) < (int)sizeof(item->path))
+                 entry->d_name) < (int)sizeof(item->path)) {
+      copy_photo_name(item->name, sizeof(item->name), entry->d_name);
       ++catalog->count;
+    }
   }
   closedir(dir);
   qsort(catalog->items, catalog->count, sizeof(catalog->items[0]),
@@ -159,7 +176,23 @@ bool ink_photo_core_self_test(void) {
   dib[12] = 1;
   dib[14] = 4;
   dib[32] = 4;
-  if (!parse_headers(fh, dib, &info) || !classify(palette, 4, map) ||
+  char bmp_name[INK_PHOTO_PATH_MAX];
+  char extensionless_name[INK_PHOTO_PATH_MAX];
+  char hidden_name[INK_PHOTO_PATH_MAX];
+  char hidden_without_extension[INK_PHOTO_PATH_MAX];
+  char boundary_name[4];
+  copy_photo_name(bmp_name, sizeof(bmp_name), "holiday.bmp");
+  copy_photo_name(extensionless_name, sizeof(extensionless_name), "README");
+  copy_photo_name(hidden_name, sizeof(hidden_name), ".hidden.bmp");
+  copy_photo_name(hidden_without_extension, sizeof(hidden_without_extension),
+                  ".hidden");
+  copy_photo_name(boundary_name, sizeof(boundary_name), "abcdef.bmp");
+  if (strcmp(bmp_name, "holiday") != 0 ||
+      strcmp(extensionless_name, "README") != 0 ||
+      strcmp(hidden_name, ".hidden") != 0 || strcmp(boundary_name, "abc") != 0 ||
+      strcmp(hidden_without_extension, ".hidden") != 0 ||
+      boundary_name[sizeof(boundary_name) - 1] != '\0' ||
+      !parse_headers(fh, dib, &info) || !classify(palette, 4, map) ||
       map[0] != 3 || map[3] != 0)
     return false;
   uint8_t lsb[60] = {0}, msb[60] = {0};

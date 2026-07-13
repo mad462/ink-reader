@@ -11,6 +11,7 @@
 
 typedef struct {
   char path[INK_PHOTO_PATH_MAX];
+  char name[INK_PHOTO_PATH_MAX];
 } ink_photo_item_t;
 typedef struct {
   size_t count;
