@@ -12,6 +12,8 @@
 #include "ink_sd.h"
 
 static const char *TAG = "reader";
+static ink_cpfont_t s_reader_font;
+static ink_cpfont_t s_menu_font;
 
 void app_main(void) {
   ESP_LOGI(TAG, "APP_START name=reader");
@@ -34,27 +36,66 @@ void app_main(void) {
     ESP_LOGE(TAG, "input init failed err=%s", esp_err_to_name(input_ret));
   esp_err_t sd_ret = ink_sd_mount();
 
-  ink_font_info_t font;
-  if (sd_ret == ESP_OK && ink_fonts_load_default(&font)) {
-    ESP_LOGI(TAG, "font loaded path=%s version=%u", font.path,
-             (unsigned)font.version);
-  } else {
-    ESP_LOGW(TAG, "font not found; using built-in status font");
+  ink_epd_ui_fonts_t fonts = {0};
+  if (sd_ret == ESP_OK && ink_fonts_load(&s_menu_font, INK_FONT_MENU)) {
+    fonts.title = &s_menu_font;
+    ESP_LOGI(TAG, "menu font loaded path=%s", s_menu_font.path);
   }
+  if (sd_ret == ESP_OK && ink_fonts_load(&s_reader_font, INK_FONT_READER)) {
+    fonts.body = &s_reader_font;
+    ESP_LOGI(TAG, "reader font loaded path=%s", s_reader_font.path);
+  }
+  if (!fonts.title && !fonts.body)
+    ESP_LOGW(TAG, "font not found; using ASCII status page");
 
   ink_reader_book_t book;
   ink_reader_book_init(&book);
   char book_path[INK_READER_PATH_MAX];
-  bool book_ready =
-      sd_ret == ESP_OK &&
-      ink_reader_find_first_book(book_path, sizeof(book_path)) &&
-      ink_reader_book_open(&book, book_path) &&
-      ink_reader_book_load_current(&book, framebuffer, INK_EPD_BUFFER_SIZE);
+  ink_reader_scan_result_t scan_result = INK_READER_SCAN_IO_ERROR;
+  if (sd_ret == ESP_OK) {
+    scan_result =
+        ink_reader_open_first_book(&book, book_path, sizeof(book_path));
+    switch (scan_result) {
+      case INK_READER_SCAN_OK:
+        ESP_LOGI(TAG, "book candidate opened path=%s pages=%u", book.path,
+                 (unsigned)book.page_count);
+        break;
+      case INK_READER_SCAN_DIR_MISSING:
+        ESP_LOGW(TAG, "books directory missing path=/sdcard/books");
+        break;
+      case INK_READER_SCAN_EMPTY:
+        ESP_LOGW(TAG, "book scan empty formats=.xtc,.xtch");
+        break;
+      case INK_READER_SCAN_FORMAT_ERROR:
+        ESP_LOGE(TAG, "book format invalid first_candidate=%s", book_path);
+        break;
+      case INK_READER_SCAN_IO_ERROR:
+      default:
+        ESP_LOGE(TAG, "book scan I/O error");
+        break;
+    }
+  } else {
+    ESP_LOGE(TAG, "SD mount failed err=%s", esp_err_to_name(sd_ret));
+  }
+  bool book_ready = scan_result == INK_READER_SCAN_OK &&
+                    ink_reader_book_load_current(
+                        &book, framebuffer, INK_EPD_BUFFER_SIZE);
+  if (scan_result == INK_READER_SCAN_OK && !book_ready)
+    ESP_LOGE(TAG, "book first page invalid path=%s", book.path);
 
   if (!book_ready) {
-    ink_epd_ui_draw_status(
-        framebuffer, INK_EPD_BUFFER_SIZE, "READER",
-        sd_ret == ESP_OK ? "NO BOOKS FOUND" : "SD CARD ERROR");
+    const char *message = "BOOK SCAN ERROR";
+    if (sd_ret != ESP_OK)
+      message = "SD CARD ERROR";
+    else if (scan_result == INK_READER_SCAN_DIR_MISSING)
+      message = "BOOKS DIRECTORY MISSING";
+    else if (scan_result == INK_READER_SCAN_EMPTY)
+      message = "NO BOOKS FOUND";
+    else if (scan_result == INK_READER_SCAN_FORMAT_ERROR ||
+             scan_result == INK_READER_SCAN_OK)
+      message = "BOOK FORMAT ERROR";
+    ink_epd_ui_draw_status_with_fonts(framebuffer, INK_EPD_BUFFER_SIZE,
+                                      "READER", message, &fonts);
   } else {
     ESP_LOGI(TAG, "book opened path=%s pages=%u", book.path,
              (unsigned)book.page_count);

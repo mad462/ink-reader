@@ -52,6 +52,77 @@ static bool extension_ok(const char *name) {
   return dot && (!strcasecmp(dot, ".xtc") || !strcasecmp(dot, ".xtch"));
 }
 
+typedef struct {
+  char (*paths)[INK_READER_PATH_MAX];
+  size_t count;
+  size_t capacity;
+} reader_candidate_list_t;
+
+typedef enum {
+  READER_DIR_OK,
+  READER_DIR_MISSING,
+  READER_DIR_IO_ERROR,
+} reader_dir_result_t;
+
+static bool candidate_add(reader_candidate_list_t *list, const char *path) {
+  if (list->count == list->capacity) {
+    const size_t capacity = list->capacity == 0U ? 8U : list->capacity * 2U;
+    if (capacity < list->capacity ||
+        capacity > SIZE_MAX / sizeof(*list->paths))
+      return false;
+    void *resized = heap_caps_realloc_prefer(
+        list->paths, capacity * sizeof(*list->paths), 2,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM,
+        MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
+    if (!resized) return false;
+    list->paths = resized;
+    list->capacity = capacity;
+  }
+  if (snprintf(list->paths[list->count], INK_READER_PATH_MAX, "%s", path) >=
+      INK_READER_PATH_MAX)
+    return false;
+  ++list->count;
+  return true;
+}
+
+static int compare_candidates(const void *left, const void *right) {
+  return strcasecmp((const char *)left, (const char *)right);
+}
+
+static reader_dir_result_t collect_candidates(
+    const char *dir_path, reader_candidate_list_t *list) {
+  errno = 0;
+  DIR *dir = opendir(dir_path);
+  if (!dir)
+    return errno == ENOENT ? READER_DIR_MISSING : READER_DIR_IO_ERROR;
+  reader_dir_result_t result = READER_DIR_OK;
+  struct dirent *entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (entry->d_name[0] == '.' || !extension_ok(entry->d_name)) continue;
+    char path[INK_READER_PATH_MAX];
+    if (snprintf(path, sizeof(path), "%s/%s", dir_path, entry->d_name) >=
+            (int)sizeof(path) ||
+        !candidate_add(list, path)) {
+      result = READER_DIR_IO_ERROR;
+      break;
+    }
+  }
+  closedir(dir);
+  return result;
+}
+
+static ink_reader_scan_result_t classify_scan(
+    size_t candidate_count, reader_dir_result_t books_result,
+    reader_dir_result_t root_result) {
+  if (books_result == READER_DIR_IO_ERROR ||
+      root_result == READER_DIR_IO_ERROR)
+    return INK_READER_SCAN_IO_ERROR;
+  if (candidate_count > 0U) return INK_READER_SCAN_FORMAT_ERROR;
+  if (books_result == READER_DIR_MISSING)
+    return INK_READER_SCAN_DIR_MISSING;
+  return INK_READER_SCAN_EMPTY;
+}
+
 static bool find_in(const char *dir_path, char *path, size_t path_size) {
   DIR *dir = opendir(dir_path);
   if (!dir) return false;
@@ -80,6 +151,40 @@ bool ink_reader_find_first_book(char *path, size_t size) {
   if (!path || !size) return false;
   path[0] = 0;
   return find_in("/sdcard/books", path, size) || find_in("/sdcard", path, size);
+}
+
+ink_reader_scan_result_t ink_reader_open_first_book(
+    ink_reader_book_t *book, char *candidate_path, size_t path_size) {
+  if (!book || !candidate_path || path_size == 0U)
+    return INK_READER_SCAN_IO_ERROR;
+  candidate_path[0] = 0;
+  reader_candidate_list_t candidates = {0};
+  const reader_dir_result_t books_result =
+      collect_candidates("/sdcard/books", &candidates);
+  const size_t books_count = candidates.count;
+  const reader_dir_result_t root_result =
+      collect_candidates("/sdcard", &candidates);
+  if (books_count > 1U)
+    qsort(candidates.paths, books_count, sizeof(*candidates.paths),
+          compare_candidates);
+  const size_t root_count = candidates.count - books_count;
+  if (root_count > 1U)
+    qsort(candidates.paths + books_count, root_count,
+          sizeof(*candidates.paths), compare_candidates);
+
+  for (size_t i = 0; i < candidates.count; ++i) {
+    if (!ink_reader_book_open(book, candidates.paths[i])) continue;
+    snprintf(candidate_path, path_size, "%s", candidates.paths[i]);
+    free(candidates.paths);
+    return INK_READER_SCAN_OK;
+  }
+
+  if (candidates.count > 0U)
+    snprintf(candidate_path, path_size, "%s", candidates.paths[0]);
+  const ink_reader_scan_result_t result =
+      classify_scan(candidates.count, books_result, root_result);
+  free(candidates.paths);
+  return result;
 }
 
 bool ink_reader_book_open(ink_reader_book_t *book, const char *path) {
@@ -205,6 +310,19 @@ bool ink_reader_core_self_test(void) {
     return false;
   h[0] = 'B';
   if (parse_header(h, sizeof(h), &count, &index, &data)) return false;
+  if (!extension_ok("BOOK.XTC") || !extension_ok("book.xtch") ||
+      extension_ok("book.txt") ||
+      classify_scan(0U, READER_DIR_MISSING, READER_DIR_OK) !=
+          INK_READER_SCAN_DIR_MISSING ||
+      classify_scan(0U, READER_DIR_OK, READER_DIR_OK) !=
+          INK_READER_SCAN_EMPTY ||
+      classify_scan(1U, READER_DIR_OK, READER_DIR_OK) !=
+          INK_READER_SCAN_FORMAT_ERROR ||
+      classify_scan(1U, READER_DIR_OK, READER_DIR_IO_ERROR) !=
+          INK_READER_SCAN_IO_ERROR ||
+      classify_scan(0U, READER_DIR_OK, READER_DIR_IO_ERROR) !=
+          INK_READER_SCAN_IO_ERROR)
+    return false;
   ink_reader_book_t book = {.page_count = 2, .current_page = 0};
   return !ink_reader_book_previous(&book) && ink_reader_book_next(&book) &&
          book.current_page == 1 && !ink_reader_book_next(&book) &&
