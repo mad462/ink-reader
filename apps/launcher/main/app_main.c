@@ -5,14 +5,15 @@
 #include "freertos/task.h"
 #include "ink_boot_switch.h"
 #include "ink_epd_ui.h"
-#include "ink_fonts.h"
 #include "ink_hw.h"
 #include "ink_input.h"
-#include "ink_sd.h"
 
 static const char *TAG = "launcher";
-static ink_cpfont_t s_menu_font;
-static ink_cpfont_t s_footer_font;
+
+static void log_stage(const char *stage, int64_t started_us) {
+  ESP_LOGI(TAG, "APP_STAGE name=launcher stage=%s elapsed_ms=%lld", stage,
+           (long long)((esp_timer_get_time() - started_us) / 1000));
+}
 
 static int launcher_committed_selection(int current, int candidate,
                                         bool refresh_succeeded) {
@@ -25,6 +26,7 @@ static bool launcher_policy_self_test(void) {
 }
 
 void app_main(void) {
+  const int64_t started_us = esp_timer_get_time();
   ESP_LOGI(TAG, "APP_START name=launcher");
   if (!ink_epd_ui_self_test() || !ink_input_self_test() ||
       !launcher_policy_self_test()) {
@@ -47,31 +49,16 @@ void app_main(void) {
     ESP_LOGE(TAG, "input init failed err=%s", esp_err_to_name(ret));
     return;
   }
-
-  const esp_err_t sd_ret = ink_sd_mount();
-  ink_epd_ui_fonts_t fonts = {0};
-  if (sd_ret == ESP_OK) {
-    if (ink_fonts_load(&s_menu_font, INK_FONT_MENU)) {
-      fonts.title = &s_menu_font;
-      fonts.body = &s_menu_font;
-    } else {
-      ESP_LOGW(TAG, "menu font not found; using ASCII launcher");
-    }
-    if (ink_fonts_load(&s_footer_font, INK_FONT_FOOTER))
-      fonts.footer = &s_footer_font;
-    else
-      ESP_LOGW(TAG, "footer font not found; using ASCII launcher metadata");
-  } else {
-    ESP_LOGW(TAG, "font SD mount failed err=%s; using ASCII launcher",
-             esp_err_to_name(sd_ret));
-  }
+  log_stage("hardware_ready", started_us);
 
   int selected = 0;
-  ink_epd_ui_draw_launcher_with_fonts(framebuffer, INK_EPD_BUFFER_SIZE,
-                                      selected, &fonts);
+  ink_epd_ui_draw_launcher(framebuffer, INK_EPD_BUFFER_SIZE, selected);
+  log_stage("frame_drawn", started_us);
   ret = ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
   if (ret != ESP_OK)
     ESP_LOGE(TAG, "launcher refresh failed err=%s", esp_err_to_name(ret));
+  else
+    log_stage("first_refresh_done", started_us);
 
   while (true) {
     ink_input_snapshot_t input = {0};
@@ -84,8 +71,7 @@ void app_main(void) {
         ink_input_was_pressed(&input, INK_BUTTON_RIGHT)) {
       const int previous = selected;
       const int candidate = 1 - selected;
-      ink_epd_ui_draw_launcher_with_fonts(framebuffer, INK_EPD_BUFFER_SIZE,
-                                          candidate, &fonts);
+      ink_epd_ui_draw_launcher(framebuffer, INK_EPD_BUFFER_SIZE, candidate);
       const ink_epd_region_t region =
           ink_epd_ui_launcher_selection_region(previous, candidate);
       ret = ink_hw_partial_refresh_area(
@@ -105,8 +91,7 @@ void app_main(void) {
       selected = launcher_committed_selection(previous, candidate,
                                               ret == ESP_OK);
       if (ret != ESP_OK)
-        ink_epd_ui_draw_launcher_with_fonts(framebuffer, INK_EPD_BUFFER_SIZE,
-                                            selected, &fonts);
+        ink_epd_ui_draw_launcher(framebuffer, INK_EPD_BUFFER_SIZE, selected);
     }
     if (ink_input_was_pressed(&input, INK_BUTTON_CONFIRM)) {
       if (selected == 0) {
