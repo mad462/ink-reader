@@ -146,6 +146,25 @@ uint16_t native_height = px1 - px0;
 
 将 native x 起点向下对齐到 8、终点向上对齐到 8，并裁剪到 `800x480`。复用现有 `convert()` 的旋转关系，仅遍历扩展后的 portrait 区域，把结果写入 `s_native` 对应区域；区域之外保持不变。
 
+这里的 8 像素对齐只服务于帧缓冲的字节传输，不改变面板窗口寄存器的坐标单位。旧实机驱动已验证：`0x44` 的 start/end 和 `0x4E` 的 counter 均使用 16 位像素 X；全屏窗口为 `0..799`，即 end 按 little-endian 发送 `0x1f, 0x03`。`0x45`/`0x4F` 同样保持像素 Y 语义。
+
+```c
+const uint16_t x_end = x + width - 1;
+const uint8_t x_data[] = {x & 0xff, x >> 8,
+                          x_end & 0xff, x_end >> 8};
+const uint8_t x_counter[] = {x & 0xff, x >> 8};
+```
+
+只有 native 帧缓冲取数使用字节位置和字节宽度：
+
+```c
+const size_t native_stride = NATIVE_WIDTH / 8;
+const size_t row_bytes = width / 8;
+const uint8_t *line = src + ((size_t)y + row) * native_stride + x / 8;
+```
+
+窗口编码的 RED/GREEN 判据必须使用像素期望值：若把寄存器 X 错写成 `x / 8`，全屏会得到 `start=0,end=99,counter=0`，非零区域 `x=16,width=24` 会得到 `2..4,counter=2`，检查应为 RED。正确实现的 GREEN 期望分别为全屏 `0..799,counter=0`，以及非零区域 `16..39,counter=16`。
+
 - [ ] **Step 4: 实现同步局刷序列**
 
 使用现有同步 helper 组成以下顺序：
