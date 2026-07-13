@@ -144,3 +144,53 @@ launcher 首次启动在 `APP_START name=launcher` 后发生 `TG1WDT_SYS_RST`。
 - photo 的实际启动日志、SD 图片加载和屏幕刷新效果。
 
 在上述实体交互完成前，不宣称第一阶段实机验收全部通过，也不合并到 master。
+
+## Task 10：旧版 UI、SD 字体和照片全刷对齐
+
+本轮继续保持三个独立固件和共享小组件边界，没有恢复旧 runtime、display mailbox、后台协调器或多 app 同进程调度。
+
+### 字体与 UTF-8
+
+- `ink_fonts` 从旧版提取同步 cpfont v4 加载、interval/glyph 查找、2bit 字形解码、小型缓存、宽度测量和 480x800 单色 framebuffer 绘制。
+- 删除旧 `read_at`/SDIO service 接点，不依赖 EPD 驱动、runtime 或 resource coordinator。
+- loader 增加文件长度、offset 加乘法溢出、interval 顺序/glyph 范围和 bitmap 长度校验；损坏字体在绘制前失败。
+- menu/footer/reader 候选路径沿用旧版，固定路径失败后扫描 `/sdcard/fonts`、`/sdcard/FONTS` 和 `/sdcard/.fonts` 下一层 family 目录。
+- UTF-8 截断按 codepoint 处理，非法序列替换为 `U+FFFD`，不再按字节把中文显示成连续问号。
+
+### launcher
+
+- launcher 允许挂载 SD，但只加载 menu/footer 字体，不扫描书籍或图片。
+- 页面恢复旧 crosspoint 几何：header gutter 24、divider y=38、list x=24、row width=432、row height=70、gap=6。
+- 只使用旧列表前两行，显示书本/相册图标、说明文字和右侧 chevron；选中状态保持用户指定的文字左侧横线，不使用黑底反白。
+- 首次进入全刷，选择变化仍只刷新旧、新横线联合区域。
+
+### reader
+
+- 按顺序扫描 `/sdcard/books`，再扫描 `/sdcard` 根目录中的 `.xtc/.xtch`；目录内不区分大小写排序。
+- 坏候选不会阻塞后续有效书，扫描结果区分 SD 失败、目录缺失、空目录、格式错误、I/O 错误和成功打开。
+- 状态页使用 cpfont，书页继续直接显示 XTG/XTH 预渲染 framebuffer；Back 仍为短按返回 launcher。
+
+### photo 与灰阶全刷
+
+- 相册列表加载 menu/footer cpfont，标题和中文文件名按 codepoint 截断、按字体实际宽度测量；无字体时只显示英文 fallback，不输出乱码。
+- 列表仍采用局刷和累计 50 次后下一次全刷策略。
+- 图片预览和预览左右切图只调用 `ink_hw_gray_refresh()`，调用前打印 `PHOTO_REFRESH mode=full_gray`。
+- 灰阶初始化补回旧版 `0x18 -> 0x80`，恢复旧版 GDEY0426T82 灰阶 LUT；完整窗口仍为 800x480 像素坐标，随后依次写 `0x26` MSB、`0x24` LSB 和 `0x22 -> 0xC7` 更新。
+
+### 自动验证
+
+在 `IDF_PATH=C:\esp\v5.5.4\esp-idf`、`IDF_TOOLS_PATH=C:\Espressif` 下执行 `tools/build_all.ps1`，退出码为 0：
+
+| app | 镜像大小 | 分区大小 | build |
+| --- | ---: | ---: | --- |
+| launcher | 348,384 bytes | 1,048,576 bytes | PASS |
+| reader | 347,280 bytes | 4,194,304 bytes | PASS |
+| photo | 352,960 bytes | 4,194,304 bytes | PASS |
+
+源码排除项扫描未发现 voice note、ASR、I2S、WiFi、TinyUSB/USB MSC、resource coordinator、background flush、runtime shell、display mailbox 或 aggressive interrupt。`git diff --check` 通过。
+
+objdump 静态栈帧检查：launcher `app_main=128B`、reader `app_main=768B`、photo `app_main=128B`；`ink_cpfont_self_test=480B`、`ink_fonts_self_test=416B`、`ink_epd_ui_self_test=208B`、`ink_reader_core_self_test=448B`、`ink_hw_self_test=32B`。未在 3584B 主任务栈上放置 framebuffer 或字体 bitmap 大数组。
+
+### 待 COM9 验收
+
+本节记录时尚未烧录本轮镜像，因此不宣称以下项目通过：cpfont 实际读取与中文显示、launcher 新两卡布局、reader 书籍分类结果、photo 旧灰阶 LUT 全刷效果和完整三 app 按键往返。下一步先在 COM9 烧录三个镜像，再按串口和屏幕实际观察结果更新本节。
