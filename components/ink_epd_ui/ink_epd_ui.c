@@ -229,7 +229,8 @@ void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
                          y + kPhotoListTitleYOffset, 2, title, true);
     if (index == selected) {
       ink_epd_ui_fill_rect(buffer, length, counter_x - 12, y,
-                           counter_width + 12, INK_PHOTO_LIST_ROW_HEIGHT,
+                           kPhotoListX + kPhotoListWidth - (counter_x - 12),
+                           INK_PHOTO_LIST_ROW_HEIGHT,
                            false);
       ink_epd_ui_draw_text(buffer, length, counter_x,
                            y + kPhotoListTitleYOffset, 2, counter, true);
@@ -358,7 +359,16 @@ bool ink_epd_ui_self_test(void) {
   const size_t counter_gap_index =
       (size_t)60 * (INK_EPD_WIDTH / 8) + 396 / 8;
   const uint8_t counter_gap_mask = (uint8_t)(0x80u >> (396 & 7));
-  if (!(buffer[counter_gap_index] & counter_gap_mask)) {
+  bool counter_right_edge_is_clear = true;
+  for (int x = 440; x < kPhotoListX + kPhotoListWidth; ++x) {
+    const size_t index = (size_t)60 * (INK_EPD_WIDTH / 8) + (size_t)x / 8;
+    const uint8_t mask = (uint8_t)(0x80u >> (x & 7));
+    counter_right_edge_is_clear =
+        counter_right_edge_is_clear && (buffer[index] & mask);
+  }
+  if (!(buffer[counter_gap_index] & counter_gap_mask) ||
+      !counter_right_edge_is_clear ||
+      (buffer[first_counter_index] & first_counter_mask)) {
     free(buffer);
     return false;
   }
