@@ -125,3 +125,22 @@ photo 打印 `APP_START name=photo`。有图片时显示第一张，Left/Right �
 ### 待上板验证
 
 当前未提供串口和连接设备，因此以下项目没有宣称通过：GDEY0426T82 实际刷新效果与 BUSY 时序、SD 卡实际挂载和文件读取、按键电平/长按、三个分区间的真实重启切换，以及运行日志中不存在 panic/内存/面板超时错误。应使用 `flash_launcher.ps1 -Port <PORT>` 首次写入完整布局，再分别写 reader/photo 镜像并执行验收流程。
+
+## Task 9：COM9 首次上板验证
+
+首次执行烧录脚本时发现 esptool 4.12 拒绝连字符参数，脚本在 build 后以退出码 2 结束，Flash 实际未写入。已将三个脚本统一修正为 `default_reset`、`hard_reset`、`write_flash`、`flash_mode`、`flash_size` 和 `flash_freq`。随后在 COM9 完成写入并逐段看到 `Hash of data verified`：launcher 完整布局、reader `0x120000`、photo `0x520000` 均退出码为 0。
+
+launcher 首次启动在 `APP_START name=launcher` 后发生 `TG1WDT_SYS_RST`。根因是 `ink_epd_ui_self_test()` 在 3584 字节主任务栈上声明了 48,000 字节 framebuffer，造成栈破坏和 DoubleException。缓冲区改为堆分配后，launcher 可稳定运行超过 15 秒，未再出现 WDT、panic、assert、Guru Meditation、EPD timeout 或禁止模块日志。
+
+已观察到 reader 从 `0x120000` 启动并打印 `APP_START name=reader`，SD 成功挂载到 `/sdcard`；设备未找到字体时按设计降级到内置状态字体。reader 在观察窗口内保持稳定。将 otadata 恢复为空白后，bootloader 正确回退 factory 分区并打印 `APP_START name=launcher`。
+
+修复后再次执行 `tools/build_all.ps1`，launcher 231,008 bytes、reader 337,072 bytes、photo 336,352 bytes，三个项目均构建通过，脚本退出码为 0。
+
+### 尚待实体操作确认
+
+- launcher 屏幕实际显示 Reader / Photo。
+- Confirm 执行 launcher -> reader，reader Back 长按返回 launcher。
+- 选择 Photo 后执行 launcher -> photo，左右切图，photo Back 长按返回 launcher。
+- photo 的实际启动日志、SD 图片加载和屏幕刷新效果。
+
+在上述实体交互完成前，不宣称第一阶段实机验收全部通过，也不合并到 master。

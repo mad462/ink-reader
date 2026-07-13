@@ -1,5 +1,7 @@
 #include "ink_epd_ui.h"
 
+#include <stdlib.h>
+
 #include <string.h>
 
 static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
@@ -132,13 +134,24 @@ void ink_epd_ui_draw_status(uint8_t *buffer, size_t length, const char *title,
 }
 
 bool ink_epd_ui_self_test(void) {
-  uint8_t buffer[INK_EPD_BUFFER_SIZE];
-  ink_epd_ui_clear(buffer, sizeof(buffer), true);
-  ink_epd_ui_set_pixel(buffer, sizeof(buffer), 0, 0, true);
-  if (buffer[0] != 0x7f) return false;
-  ink_epd_ui_set_pixel(buffer, sizeof(buffer), -1, 0, true);
-  ink_epd_ui_draw_launcher(buffer, sizeof(buffer), 0);
-  for (size_t i = 0; i < sizeof(buffer); ++i)
-    if (buffer[i] != 0xff) return true;
-  return false;
+  uint8_t *buffer = malloc(INK_EPD_BUFFER_SIZE);
+  if (!buffer) return false;
+
+  ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
+  ink_epd_ui_set_pixel(buffer, INK_EPD_BUFFER_SIZE, 0, 0, true);
+  if (buffer[0] != 0x7f) {
+    free(buffer);
+    return false;
+  }
+  ink_epd_ui_set_pixel(buffer, INK_EPD_BUFFER_SIZE, -1, 0, true);
+  ink_epd_ui_draw_launcher(buffer, INK_EPD_BUFFER_SIZE, 0);
+  bool changed = false;
+  for (size_t i = 0; i < INK_EPD_BUFFER_SIZE; ++i) {
+    if (buffer[i] != 0xff) {
+      changed = true;
+      break;
+    }
+  }
+  free(buffer);
+  return changed;
 }
