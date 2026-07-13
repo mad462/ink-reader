@@ -5,9 +5,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $testDir = $PSScriptRoot
 $componentDir = Split-Path $testDir -Parent
-$repoRoot = (Resolve-Path (Join-Path $componentDir '..\..')).Path
 $toolsDir = Join-Path $env:TEMP 'ink-reader-host-tools'
-$buildDir = Join-Path $env:TEMP 'ink-reader-core-host-build'
+$runRoot = Join-Path $env:TEMP `
+    ('ink-reader-core-host-' + [guid]::NewGuid().ToString('N'))
+$buildDir = Join-Path $runRoot 'build'
+$scanRoot = Join-Path $runRoot 'sdcard'
 
 if (-not $TccPath) {
     $TccPath = Join-Path $toolsDir 'tcc\tcc.exe'
@@ -23,19 +25,18 @@ if (-not (Test-Path -LiteralPath $TccPath)) {
     Expand-Archive -Path $archive -DestinationPath $toolsDir -Force
 }
 
-if (Test-Path -LiteralPath $buildDir) {
-    $resolvedBuild = (Resolve-Path $buildDir).Path
-    $resolvedTemp = (Resolve-Path $env:TEMP).Path
-    if (-not $resolvedBuild.StartsWith($resolvedTemp)) {
-        throw "Host build directory escaped TEMP: $resolvedBuild"
-    }
-    Remove-Item -LiteralPath $resolvedBuild -Recurse -Force
-}
 New-Item -ItemType Directory -Force $buildDir | Out-Null
 $testExe = Join-Path $buildDir 'reader_core_host_test.exe'
+$scanRootC = $scanRoot.Replace('\', '/')
+$configHeader = Join-Path $runRoot 'scan_root_config.h'
+$config = "#define INK_READER_SCAN_ROOT `"$scanRootC`"`n" +
+    "#define INK_READER_TEST_ROOT `"$scanRootC`"`n"
+[System.IO.File]::WriteAllText($configHeader, $config)
 
 try {
+    Write-Host "HOST_RUN_ROOT=$runRoot"
     & $TccPath -Wall -Werror `
+        -include $configHeader `
         -I (Join-Path $testDir 'host') `
         -I (Join-Path $componentDir 'include') `
         -o $testExe `
@@ -43,15 +44,15 @@ try {
         (Join-Path $componentDir 'ink_reader_core.c')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    Push-Location $repoRoot
-    try {
-        & $testExe
-        exit $LASTEXITCODE
-    } finally {
-        Pop-Location
-    }
+    & $testExe
+    exit $LASTEXITCODE
 } finally {
-    if (Test-Path -LiteralPath $buildDir) {
-        Remove-Item -LiteralPath $buildDir -Recurse -Force
+    if (Test-Path -LiteralPath $runRoot) {
+        $resolvedRun = (Resolve-Path $runRoot).Path
+        $resolvedTemp = (Resolve-Path $env:TEMP).Path
+        if (-not $resolvedRun.StartsWith($resolvedTemp)) {
+            throw "Host run directory escaped TEMP: $resolvedRun"
+        }
+        Remove-Item -LiteralPath $resolvedRun -Recurse -Force
     }
 }

@@ -17,6 +17,11 @@
 #define XTG_MAGIC 0x00475458u
 #define XTH_MAGIC 0x00485458u
 
+#ifndef INK_READER_SCAN_ROOT
+#define INK_READER_SCAN_ROOT "/sdcard"
+#endif
+#define INK_READER_BOOKS_DIR INK_READER_SCAN_ROOT "/books"
+
 static uint16_t le16(const uint8_t *p) {
   return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
 }
@@ -177,7 +182,8 @@ void ink_reader_book_close(ink_reader_book_t *book) {
 bool ink_reader_find_first_book(char *path, size_t size) {
   if (!path || !size) return false;
   path[0] = 0;
-  return find_in("/sdcard/books", path, size) || find_in("/sdcard", path, size);
+  return find_in(INK_READER_BOOKS_DIR, path, size) ||
+         find_in(INK_READER_SCAN_ROOT, path, size);
 }
 
 ink_reader_scan_result_t ink_reader_open_first_book(
@@ -187,10 +193,10 @@ ink_reader_scan_result_t ink_reader_open_first_book(
   candidate_path[0] = 0;
   reader_candidate_list_t candidates = {0};
   const reader_dir_result_t books_result =
-      collect_candidates("/sdcard/books", &candidates);
+      collect_candidates(INK_READER_BOOKS_DIR, &candidates);
   const size_t books_count = candidates.count;
   const reader_dir_result_t root_result =
-      collect_candidates("/sdcard", &candidates);
+      collect_candidates(INK_READER_SCAN_ROOT, &candidates);
   if (books_count > 1U)
     qsort(candidates.paths, books_count, sizeof(*candidates.paths),
           compare_candidates);
