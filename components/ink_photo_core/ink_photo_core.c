@@ -198,7 +198,8 @@ static bmp_probe_result_t probe_bmp_parts(const uint8_t file_h[14],
 
   const uint64_t palette_offset = 14ULL + le32(dib);
   const size_t required_palette_size = (size_t)info.colors * 4U;
-  if ((uint64_t)info.image_offset <
+  if (info.image_offset > (uint32_t)LONG_MAX ||
+      (uint64_t)info.image_offset <
       palette_offset + required_palette_size)
     return BMP_PROBE_INVALID_PALETTE_OFFSET;
   if (palette_size < required_palette_size) return BMP_PROBE_SHORT_PALETTE;
@@ -349,6 +350,14 @@ bool ink_photo_core_self_test(void) {
   probe_fh[10] = 70;
   if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
                       sizeof(probe_palette) - 1) != BMP_PROBE_SHORT_PALETTE)
+    return false;
+  probe_fh[10] = 0;
+  probe_fh[11] = 0;
+  probe_fh[12] = 0;
+  probe_fh[13] = 0x80;
+  if (probe_bmp_parts(probe_fh, probe_dib, probe_palette,
+                      sizeof(probe_palette)) !=
+      BMP_PROBE_INVALID_PALETTE_OFFSET)
     return false;
   copy_photo_name(bmp_name, sizeof(bmp_name), "holiday.bmp");
   copy_photo_name(extensionless_name, sizeof(extensionless_name), "README");
