@@ -194,3 +194,57 @@ objdump 静态栈帧检查：launcher `app_main=128B`、reader `app_main=768B`�
 ### 待 COM9 验收
 
 本节记录时尚未烧录本轮镜像，因此不宣称以下项目通过：cpfont 实际读取与中文显示、launcher 新两卡布局、reader 书籍分类结果、photo 旧灰阶 LUT 全刷效果和完整三 app 按键往返。下一步先在 COM9 烧录三个镜像，再按串口和屏幕实际观察结果更新本节。
+
+## Task 11：COM9 旧版 UI、字体与灰阶首轮验收
+
+三个镜像均通过 COM9 写入并出现 `Hash of data verified`：launcher 完整布局、reader `0x120000`、photo `0x520000`。实机日志确认 launcher、reader、photo 分别打印对应的 `APP_START`，SD 挂载到 `/sdcard`。
+
+首轮固件完成了以下实际交互：
+
+- launcher 通过 Confirm 切换到 reader；reader 打开 `/sdcard/books` 下的 XTC 书籍并读取 `2658` 页。
+- reader 短按 Back 打印 `BOOT_SWITCH from=reader to=launcher` 并返回 launcher。
+- launcher 切换到 photo；`READ.BMP` 打印 `PHOTO_REFRESH mode=full_gray` 并完成显示。
+- 另一张中文文件名 BMP 在解码阶段失败，photo 保持原索引，没有 panic 或状态错乱。
+
+首轮日志同时证明 SD 卡上当时没有可用 cpfont，launcher/photo 按设计降级为 ASCII。观察窗口未出现 panic、assert、Guru Meditation、SD 内存不足、EPD timeout 或禁止模块日志。
+
+## Task 12：修复中文 FatFS 路径与 BMP 入库探测
+
+### 根因与修复
+
+旧版在 BMP 加入相册前先执行格式探测，新版最初只按 `.bmp` 扩展名入库，导致不支持文件到打开阶段才报错。现已恢复入库前探测，只接受 `480x800`、4bpp indexed、BI_RGB、bottom-up、4 到 16 色且调色板完整的 BMP；失败日志包含 path 和 reason。探测与 decoder 共用同一 metadata 校验，覆盖 palette offset、短 palette 和 32 位 `fseek` 上界。
+
+更关键的迁移回归是三个 v2 app 默认使用 `CONFIG_FATFS_LFN_NONE` 和 CP437。实机 reader 日志把中文书名输出为乱码，中文文件路径重新 `fopen()` 也可能失败。launcher、reader、photo 的 `sdkconfig.defaults` 现统一启用：
+
+```text
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_CODEPAGE_936=y
+CONFIG_FATFS_API_ENCODING_UTF_8=y
+```
+
+删除三个生成的 `sdkconfig` 和 build 目录后重新构建，实际生成配置均为 LFN heap、CP936、`CODEPAGE=936` 和 UTF-8，LFN_NONE/CP437 均为 not set。
+
+### 构建与烧录
+
+`tools/build_all.ps1` 退出码为 0：
+
+| app | 镜像大小 | 分区大小 | build |
+| --- | ---: | ---: | --- |
+| launcher | 526,800 bytes | 1,048,576 bytes | PASS |
+| reader | 525,712 bytes | 4,194,304 bytes | PASS |
+| photo | 532,688 bytes | 4,194,304 bytes | PASS |
+
+三镜像随后重新写入 COM9，launcher 完整布局、reader `0x120000`、photo `0x520000` 均出现 `Hash of data verified`，烧录脚本退出码均为 0。
+
+最终再次执行无源码改动的 `tools/build_all.ps1`，三个 app 均输出 `Project build complete`，脚本退出码为 0。禁止模块扫描为 0 命中，`git diff --check` 通过。objdump 栈帧为 launcher `app_main=128B`、reader `app_main=768B`、photo `app_main=128B`、`ink_photo_core_self_test=368B`，均远低于 3584B 主任务栈。
+
+### 新固件实机证据
+
+- launcher 打印 `APP_START name=launcher`，SD 挂载成功，并加载 `/sdcard/fonts/LXGWWenKai_24.cpfont` 与 `/sdcard/fonts/SmallSimSunEmbedded_16.cpfont`。
+- 通过 otadata 直接选择 reader 后，reader 打印 `APP_START name=reader`，正确输出 UTF-8 路径 `/sdcard/books/作家榜经典：磨坊信札.xtc`，打开 `1071` 页；书名不再乱码。
+- 通过 otadata 直接选择 photo 后，photo 打印 `APP_START name=photo`，SD、menu font 和 footer font 均加载成功；启动期间没有 `catalog skip ... open_failed`。
+- 上述启动观察均未出现 panic、assert、Guru Meditation、SD 内存不足、panel reset timeout、busy wait aborted、WiFi、voice note、I2S、ASR 或 USB MSC 日志。
+
+### 仍待实体确认
+
+本轮新固件尚未收到 photo Confirm、左右切图或 Back 按键事件，因此不把以下项目写成 PASS：中文 BMP 实际打开后的灰阶全刷、预览左右切图，以及 reader/photo 短按 Back 返回 launcher。launcher 卡片尺寸、图标、chevron、左侧横线和屏幕灰阶效果也需要以实体屏幕观察确认。旧固件首轮已验证对应切换路径，但最终验收仍以本轮镜像为准。
