@@ -48,7 +48,7 @@ enum {
   READER_FOOTER_TEXT_Y = 782,
   READER_FOOTER_LEFT_X = 8,
   READER_FOOTER_RIGHT_X = 472,
-  READER_FOOTER_RIGHT_WIDTH = 156,
+  READER_FOOTER_TEXT_GAP = 8,
 };
 
 static void draw_outline(uint8_t *buffer, size_t length, int x, int y,
@@ -355,22 +355,23 @@ void ink_epd_ui_draw_reader_footer(uint8_t *buffer, size_t length,
   ink_epd_ui_fill_rect(buffer, length, 0, READER_FOOTER_SEPARATOR_Y,
                        INK_EPD_WIDTH, 1, true);
 
-  draw_clipped_text(buffer, length, font, READER_FOOTER_LEFT_X,
-                    READER_FOOTER_TEXT_Y,
-                    INK_EPD_WIDTH - READER_FOOTER_LEFT_X -
-                        READER_FOOTER_RIGHT_WIDTH,
-                    2, scale_divisor, left_text ? left_text : "");
-
   int right_width = 0;
   if (!ink_epd_ui_measure_text(font, right_text ? right_text : "", 2,
                                scale_divisor, &right_width))
     right_width = 0;
-  if (right_width > READER_FOOTER_RIGHT_WIDTH)
-    right_width = READER_FOOTER_RIGHT_WIDTH;
-  draw_clipped_text(buffer, length, font,
-                    READER_FOOTER_RIGHT_X - right_width,
-                    READER_FOOTER_TEXT_Y, READER_FOOTER_RIGHT_WIDTH, 2,
-                    scale_divisor, right_text ? right_text : "");
+  if (right_width < 0) right_width = 0;
+  const int right_max_width = READER_FOOTER_RIGHT_X - READER_FOOTER_LEFT_X;
+  if (right_width > right_max_width) right_width = right_max_width;
+  const int right_x = READER_FOOTER_RIGHT_X - right_width;
+  int left_width = right_x - READER_FOOTER_TEXT_GAP - READER_FOOTER_LEFT_X;
+  if (left_width < 0) left_width = 0;
+
+  draw_clipped_text(buffer, length, font, READER_FOOTER_LEFT_X,
+                    READER_FOOTER_TEXT_Y, left_width, 2, scale_divisor,
+                    left_text ? left_text : "");
+  draw_clipped_text(buffer, length, font, right_x, READER_FOOTER_TEXT_Y,
+                    right_width, 2, scale_divisor,
+                    right_text ? right_text : "");
 }
 
 bool ink_epd_ui_reader_self_test(void) {
@@ -510,7 +511,7 @@ bool ink_epd_ui_reader_self_test(void) {
   ink_epd_ui_set_pixel(buffer, INK_EPD_BUFFER_SIZE, 0,
                        READER_FOOTER_SEPARATOR_Y - 1, true);
   ink_epd_ui_draw_reader_footer(buffer, INK_EPD_BUFFER_SIZE, NULL, "CHAPTER",
-                                "12% 12/100");
+                                "100% 1071/1071");
   bool separator_ok = true;
   for (int x = 0; x < INK_EPD_WIDTH; ++x)
     separator_ok = separator_ok &&
@@ -518,6 +519,7 @@ bool ink_epd_ui_reader_self_test(void) {
                                          READER_FOOTER_SEPARATOR_Y);
   bool left_text_ok = false;
   bool right_text_ok = false;
+  uint8_t final_glyph[12 * (INK_EPD_HEIGHT - READER_FOOTER_TEXT_Y)];
   for (int y = READER_FOOTER_TEXT_Y; y < INK_EPD_HEIGHT; ++y) {
     for (int x = READER_FOOTER_LEFT_X; x < 150; ++x)
       left_text_ok =
@@ -525,13 +527,33 @@ bool ink_epd_ui_reader_self_test(void) {
     for (int x = 316; x < READER_FOOTER_RIGHT_X; ++x)
       right_text_ok =
           right_text_ok || reader_pixel_is_black(buffer, x, y);
+    for (int x = READER_FOOTER_RIGHT_X - 12;
+         x < READER_FOOTER_RIGHT_X; ++x)
+      final_glyph[(y - READER_FOOTER_TEXT_Y) * 12 +
+                  x - (READER_FOOTER_RIGHT_X - 12)] =
+          reader_pixel_is_black(buffer, x, y) ? 1U : 0U;
   }
-  ok = ok && separator_ok && left_text_ok && right_text_ok &&
-       reader_pixel_is_black(buffer, 0, READER_FOOTER_SEPARATOR_Y - 1) &&
-       !reader_pixel_is_black(buffer, INK_EPD_WIDTH - 1,
-                              READER_FOOTER_SEPARATOR_Y - 1) &&
-       !reader_pixel_is_black(buffer, INK_EPD_WIDTH / 2,
-                              INK_EPD_HEIGHT - 1);
+  const bool footer_bounds_ok =
+      separator_ok && left_text_ok && right_text_ok &&
+      reader_pixel_is_black(buffer, 0, READER_FOOTER_SEPARATOR_Y - 1) &&
+      !reader_pixel_is_black(buffer, INK_EPD_WIDTH - 1,
+                             READER_FOOTER_SEPARATOR_Y - 1) &&
+      !reader_pixel_is_black(buffer, INK_EPD_WIDTH / 2,
+                             INK_EPD_HEIGHT - 1);
+  ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
+  (void)ink_epd_ui_draw_text_font(
+      buffer, INK_EPD_BUFFER_SIZE, NULL, READER_FOOTER_RIGHT_X - 12,
+      READER_FOOTER_TEXT_Y, 2, 1U, "1", NULL);
+  bool final_glyph_ok = true;
+  for (int y = READER_FOOTER_TEXT_Y; y < INK_EPD_HEIGHT; ++y)
+    for (int x = READER_FOOTER_RIGHT_X - 12;
+         x < READER_FOOTER_RIGHT_X; ++x)
+      final_glyph_ok =
+          final_glyph_ok &&
+          final_glyph[(y - READER_FOOTER_TEXT_Y) * 12 +
+                      x - (READER_FOOTER_RIGHT_X - 12)] ==
+              (reader_pixel_is_black(buffer, x, y) ? 1U : 0U);
+  ok = ok && footer_bounds_ok && final_glyph_ok;
 
   free(buffer);
   return ok;
