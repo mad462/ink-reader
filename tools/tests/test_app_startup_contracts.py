@@ -18,19 +18,57 @@ def test_launcher_has_no_sd_or_cpfont_startup() -> None:
     assert 'APP_STAGE name=launcher' in text
 
 
-def test_reader_does_not_load_fonts_for_prerendered_pages() -> None:
+def test_reader_starts_in_library_with_catalog_state_and_menu_fonts() -> None:
     text = source("apps/reader/main/app_main.c")
+    cmake = source("apps/reader/main/CMakeLists.txt")
 
-    assert "ink_fonts_load(" not in text
+    assert "ink_reader_catalog_load(" in text
+    assert "ink_reader_state_load(INK_READER_STATE_PATH" in text
+    assert "ink_fonts_load(&s_menu_font, INK_FONT_MENU)" in text
+    assert "ink_fonts_load(&s_footer_font, INK_FONT_FOOTER)" in text
+    assert "ink_epd_ui_draw_library(" in text
+    assert "ink_reader_open_first_book(" not in text
+    assert '"reader_app_model.c"' in cmake
+    assert "ink_fonts" in cmake
     assert 'APP_START name=reader' in text
     assert 'APP_STAGE name=reader' in text
+
+
+def test_reader_app_model_owns_library_state_machine() -> None:
+    header = source("apps/reader/main/reader_app_model.h")
+    model = source("apps/reader/main/reader_app_model.c")
+    app = source("apps/reader/main/app_main.c")
+
+    for symbol in (
+        "READER_APP_PAGE_LIBRARY",
+        "READER_APP_PAGE_READING",
+        "READER_LIBRARY_TAB_RECENT",
+        "READER_LIBRARY_TAB_ALL",
+        "READER_LIBRARY_TAB_FAVORITES",
+        "READER_LIBRARY_FOCUS_ITEMS",
+        "READER_LIBRARY_FOCUS_TABS",
+        "READER_LIBRARY_FOCUS_POPUP",
+        "READER_APP_EFFECT_OPEN_SELECTED",
+        "READER_APP_EFFECT_TOGGLE_FAVORITE",
+        "READER_APP_EFFECT_RETURN_LAUNCHER",
+        "reader_app_model_reduce",
+        "reader_app_model_rebuild",
+        "reader_app_model_self_test",
+    ):
+        assert symbol in header or symbol in model
+    assert "recent_order" in model
+    assert "visible_catalog" in model
+    assert "reader_app_model_reduce(" in app
+    assert "reader_app_model_rebuild(" in app
+    assert "candidate_model->focus = READER_LIBRARY_FOCUS_ITEMS" in app
+    assert "ink_reader_state_remember_open(" in app
 
 
 def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> None:
     text = source("apps/reader/main/app_main.c")
     page_turn = text[
-        text.index("if (target_page != book.current_page)") :
-        text.index("if (ink_input_was_pressed(&input, INK_BUTTON_BACK))")
+        text.index("static void handle_reading_input(") :
+        text.index("static bool input_event(")
     ]
 
     assert "READER_PARTIAL_REFRESH_LIMIT = 50" in text
@@ -41,16 +79,16 @@ def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> No
     assert 'PAGE_REFRESH mode=cleanup_full' in page_turn
     assert 'PAGE_REFRESH mode=recovery_full' in page_turn
     assert "bool screen_ready = false;" in text
-    assert "screen_ready = false;" in page_turn
-    assert "book.current_page = previous_page;" in page_turn
-    assert "memcpy(framebuffer, previous_framebuffer" in page_turn
+    assert "*screen_ready = false;" in page_turn
+    assert "book->current_page = previous_page;" in page_turn
+    assert "memcpy(framebuffer, candidate_framebuffer" in page_turn
 
 
 def test_reader_memory_error_keeps_back_navigation_available() -> None:
     text = source("apps/reader/main/app_main.c")
     allocation_error = text[
-        text.index("if (!framebuffer || !previous_framebuffer)") :
-        text.index("esp_err_t display_ret")
+        text.index("if (!framebuffer || !candidate_framebuffer)") :
+        text.index("const esp_err_t display_ret")
     ]
 
     assert '"MEMORY ERROR"' in allocation_error
