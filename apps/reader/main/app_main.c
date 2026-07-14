@@ -20,7 +20,14 @@
 
 static const char *TAG = "reader";
 
-enum { READER_PARTIAL_REFRESH_LIMIT = 50 };
+enum {
+  READER_PARTIAL_REFRESH_LIMIT = 50,
+  READER_MIN_MAIN_TASK_STACK_SIZE = 6144,
+};
+
+_Static_assert(
+    CONFIG_ESP_MAIN_TASK_STACK_SIZE >= READER_MIN_MAIN_TASK_STACK_SIZE,
+    "Reader main task stack is too small for book open and menu rendering");
 
 static ink_reader_catalog_t s_catalog;
 static ink_reader_state_t s_state;

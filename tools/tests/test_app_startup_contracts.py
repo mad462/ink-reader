@@ -34,6 +34,15 @@ def test_reader_starts_in_library_with_catalog_state_and_menu_fonts() -> None:
     assert 'APP_STAGE name=reader' in text
 
 
+def test_reader_reserves_stack_for_book_open_and_menu_rendering() -> None:
+    defaults = source("apps/reader/sdkconfig.defaults")
+    app = source("apps/reader/main/app_main.c")
+
+    assert "CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192" in defaults
+    assert "READER_MIN_MAIN_TASK_STACK_SIZE" in app
+    assert "CONFIG_ESP_MAIN_TASK_STACK_SIZE >= READER_MIN_MAIN_TASK_STACK_SIZE" in app
+
+
 def test_reader_app_model_owns_library_state_machine() -> None:
     header = source("apps/reader/main/reader_app_model.h")
     model = source("apps/reader/main/reader_app_model.c")
