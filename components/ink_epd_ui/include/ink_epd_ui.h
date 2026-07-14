@@ -24,6 +24,8 @@
 #define INK_LAUNCHER_MARKER_HEIGHT 4
 #define INK_LAUNCHER_MARKER_Y_OFFSET 33
 #define INK_LAUNCHER_MARKER_PADDING 4
+#define INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT 3
+#define INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT 2
 #define INK_EPD_UI_MENU_TAB_CAPACITY 3
 #define INK_EPD_UI_MENU_CARD_CAPACITY 8
 #define INK_EPD_UI_MENU_ACTION_CAPACITY 4
@@ -38,6 +40,11 @@ typedef struct {
   int width;
   int height;
 } ink_epd_region_t;
+
+typedef enum {
+  INK_EPD_UI_LAUNCHER_PAGE_MAIN = 0,
+  INK_EPD_UI_LAUNCHER_PAGE_SETTINGS,
+} ink_epd_ui_launcher_page_t;
 
 typedef struct {
   const char *name;
@@ -135,11 +142,16 @@ bool ink_epd_ui_draw_text_font(uint8_t *buffer, size_t length,
                                int ascii_scale, uint8_t font_scale_divisor,
                                const char *text, int *out_width);
 void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected);
+void ink_epd_ui_draw_launcher_page(uint8_t *buffer, size_t length,
+                                   ink_epd_ui_launcher_page_t page,
+                                   int selected);
 void ink_epd_ui_draw_launcher_with_fonts(
     uint8_t *buffer, size_t length, int selected,
     const ink_epd_ui_fonts_t *fonts);
 ink_epd_region_t ink_epd_ui_launcher_selection_region(int previous,
                                                        int selected);
+ink_epd_region_t ink_epd_ui_launcher_page_selection_region(
+    ink_epd_ui_launcher_page_t page, int previous, int selected);
 ink_epd_region_t ink_epd_ui_loading_region(void);
 void ink_epd_ui_draw_loading(uint8_t *buffer, size_t length);
 void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,

@@ -67,9 +67,10 @@ static const uint8_t kFont5x7[59][5] = {{0, 0, 0, 0, 0},
                                         {7, 8, 0x70, 8, 7},
                                         {0x61, 0x51, 0x49, 0x45, 0x43}};
 
-static const int kLauncherRows[2] = {
+static const int kLauncherRows[INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT] = {
     INK_LAUNCHER_LIST_Y,
     INK_LAUNCHER_LIST_Y + INK_LAUNCHER_ROW_HEIGHT + INK_LAUNCHER_ROW_GAP,
+    INK_LAUNCHER_LIST_Y + 2 * (INK_LAUNCHER_ROW_HEIGHT + INK_LAUNCHER_ROW_GAP),
 };
 static const int kLauncherLineX = INK_LAUNCHER_MARKER_X;
 static const int kLauncherLineWidth = INK_LAUNCHER_MARKER_WIDTH;
@@ -251,6 +252,35 @@ static void draw_photo_icon(uint8_t *buffer, size_t length, int x, int y) {
   ink_epd_ui_fill_rect(buffer, length, x + 13, y + 3, 3, 3, true);
 }
 
+static void draw_settings_icon(uint8_t *buffer, size_t length, int x, int y) {
+  draw_rect_outline(buffer, length, x + 5, y + 5, 10, 10);
+  draw_rect_outline(buffer, length, x + 8, y + 8, 4, 4);
+  draw_hline(buffer, length, x + 7, y + 1, 6);
+  draw_hline(buffer, length, x + 7, y + 19, 6);
+  draw_vline(buffer, length, x + 1, y + 7, 6);
+  draw_vline(buffer, length, x + 19, y + 7, 6);
+}
+
+static void draw_usb_icon(uint8_t *buffer, size_t length, int x, int y) {
+  draw_vline(buffer, length, x + 10, y + 2, 15);
+  draw_hline(buffer, length, x + 7, y + 17, 7);
+  draw_vline(buffer, length, x + 7, y + 11, 6);
+  draw_vline(buffer, length, x + 14, y + 7, 5);
+  ink_epd_ui_fill_rect(buffer, length, x + 8, y, 5, 3, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 5, y + 9, 4, 4, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 13, y + 5, 4, 4, true);
+}
+
+static void draw_wifi_icon(uint8_t *buffer, size_t length, int x, int y) {
+  for (int offset = 0; offset < 3; ++offset) {
+    ink_epd_ui_set_pixel(buffer, length, x + 4 + offset, y + 5 + offset, true);
+    ink_epd_ui_set_pixel(buffer, length, x + 16 - offset, y + 5 + offset, true);
+    ink_epd_ui_set_pixel(buffer, length, x + 7 + offset, y + 10 + offset, true);
+    ink_epd_ui_set_pixel(buffer, length, x + 13 - offset, y + 10 + offset, true);
+  }
+  ink_epd_ui_fill_rect(buffer, length, x + 9, y + 16, 3, 3, true);
+}
+
 static void draw_chevron(uint8_t *buffer, size_t length, int x, int y) {
   for (int i = 0; i < 4; ++i)
     ink_epd_ui_set_pixel(buffer, length, x + i, y + i, true);
@@ -258,48 +288,90 @@ static void draw_chevron(uint8_t *buffer, size_t length, int x, int y) {
     ink_epd_ui_set_pixel(buffer, length, x + 3 - i, y + 3 + i, true);
 }
 
-void ink_epd_ui_draw_launcher_with_fonts(
-    uint8_t *buffer, size_t length, int selected,
-    const ink_epd_ui_fonts_t *fonts) {
+static int launcher_page_item_count(ink_epd_ui_launcher_page_t page) {
+  return page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS
+             ? INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT
+             : INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT;
+}
+
+static void draw_launcher_page(uint8_t *buffer, size_t length,
+                               ink_epd_ui_launcher_page_t page, int selected,
+                               const ink_epd_ui_fonts_t *fonts) {
   if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
+  const int item_count = launcher_page_item_count(page);
   if (selected < 0) selected = 0;
-  if (selected > 1) selected = 1;
+  if (selected >= item_count) selected = item_count - 1;
   (void)fonts;
   ink_epd_ui_clear(buffer, length, true);
   if (!draw_builtin_text(buffer, length, INK_LAUNCHER_HEADER_GUTTER, 8,
                          "启动器", 24U))
     ink_epd_ui_draw_text(buffer, length, INK_LAUNCHER_HEADER_GUTTER, 8, 2,
                          "LAUNCHER", true);
-  const ink_ui_text_asset_t *meta =
-      ink_ui_text_asset_find("阅读 / 相册", 16U);
+  const char *meta_text = page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS
+                              ? "设备 / 网络"
+                              : "阅读 / 相册 / 设置";
+  const ink_ui_text_asset_t *meta = ink_ui_text_asset_find(meta_text, 16U);
   const int meta_x = meta ? INK_EPD_WIDTH - INK_LAUNCHER_HEADER_GUTTER -
                                 (int)meta->width
                           : 330;
-  if (!draw_builtin_text(buffer, length, meta_x, 10, "阅读 / 相册", 16U))
-    ink_epd_ui_draw_text(buffer, length, meta_x, 10, 1, "READER / PHOTO",
-                         true);
+  if (!draw_builtin_text(buffer, length, meta_x, 10, meta_text, 16U))
+    ink_epd_ui_draw_text(buffer, length, meta_x, 10, 1, meta_text, true);
   ink_epd_ui_fill_rect(
       buffer, length, INK_LAUNCHER_HEADER_GUTTER, INK_LAUNCHER_DIVIDER_Y,
       INK_EPD_WIDTH - 2 * INK_LAUNCHER_HEADER_GUTTER, 1, true);
 
-  const char *titles[2] = {"书库", "相册"};
-  const char *fallback_titles[2] = {"READER", "PHOTO"};
-  const char *descriptions[2] = {"打开图书与最近阅读",
-                                 "浏览 TF 卡灰阶图片"};
-  const char *fallback_descriptions[2] = {"OPEN BOOKS FROM TF CARD",
-                                          "BROWSE GRAYSCALE BMP"};
-  for (int i = 0; i < 2; ++i) {
+  const char *main_titles[INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT] = {
+      "书库", "相册", "设置"};
+  const char *main_fallback_titles[INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT] = {
+      "READER", "PHOTO", "SETTINGS"};
+  const char *main_descriptions[INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT] = {
+      "打开图书与最近阅读", "浏览 TF 卡灰阶图片", "管理设备与网络"};
+  const char *main_fallback_descriptions[INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT] = {
+      "OPEN BOOKS FROM TF CARD", "BROWSE GRAYSCALE BMP", "DEVICE AND NETWORK"};
+  const char *settings_titles[INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT] = {
+      "U盘模式", "WiFi配置"};
+  const char *settings_fallback_titles[INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT] = {
+      "USB MODE", "WIFI SETUP"};
+  const char *settings_descriptions[INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT] = {
+      "连接电脑管理存储", "选择并保存无线网络"};
+  const char *settings_fallback_descriptions[INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT] = {
+      "CONNECT STORAGE TO PC", "SELECT AND SAVE NETWORK"};
+  const char *const *titles = page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS
+                                  ? settings_titles
+                                  : main_titles;
+  const char *const *fallback_titles =
+      page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS ? settings_fallback_titles
+                                                 : main_fallback_titles;
+  const char *const *descriptions =
+      page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS ? settings_descriptions
+                                                 : main_descriptions;
+  const char *const *fallback_descriptions =
+      page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS
+          ? settings_fallback_descriptions
+          : main_fallback_descriptions;
+  for (int i = 0; i < item_count; ++i) {
     const int row_y = kLauncherRows[i];
     if (selected == i)
       ink_epd_ui_fill_rect(buffer, length, kLauncherLineX,
                            row_y + kLauncherLineYOffset,
                            kLauncherLineWidth, kLauncherLineHeight, true);
-    if (i == 0)
+    if (page == INK_EPD_UI_LAUNCHER_PAGE_SETTINGS) {
+      if (i == 0)
+        draw_usb_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
+                      row_y + (INK_LAUNCHER_ROW_HEIGHT - 20) / 2);
+      else
+        draw_wifi_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
+                       row_y + (INK_LAUNCHER_ROW_HEIGHT - 20) / 2);
+    } else if (i == 0) {
       draw_book_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
                      row_y + (INK_LAUNCHER_ROW_HEIGHT - 20) / 2);
-    else
+    } else if (i == 1) {
       draw_photo_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
                       row_y + (INK_LAUNCHER_ROW_HEIGHT - 18) / 2);
+    } else {
+      draw_settings_icon(buffer, length, INK_LAUNCHER_LIST_X + 16,
+                         row_y + (INK_LAUNCHER_ROW_HEIGHT - 20) / 2);
+    }
     if (!draw_builtin_text(buffer, length, 88, row_y + 10, titles[i], 24U))
       ink_epd_ui_draw_text(buffer, length, 88, row_y + 10, 1,
                            fallback_titles[i], true);
@@ -316,16 +388,36 @@ void ink_epd_ui_draw_launcher_with_fonts(
   }
 }
 
+void ink_epd_ui_draw_launcher_with_fonts(
+    uint8_t *buffer, size_t length, int selected,
+    const ink_epd_ui_fonts_t *fonts) {
+  draw_launcher_page(buffer, length, INK_EPD_UI_LAUNCHER_PAGE_MAIN, selected,
+                     fonts);
+}
+
+void ink_epd_ui_draw_launcher_page(uint8_t *buffer, size_t length,
+                                   ink_epd_ui_launcher_page_t page,
+                                   int selected) {
+  draw_launcher_page(buffer, length, page, selected, NULL);
+}
+
 void ink_epd_ui_draw_launcher(uint8_t *buffer, size_t length, int selected) {
   ink_epd_ui_draw_launcher_with_fonts(buffer, length, selected, NULL);
 }
 
 ink_epd_region_t ink_epd_ui_launcher_selection_region(int previous,
                                                        int selected) {
+  return ink_epd_ui_launcher_page_selection_region(
+      INK_EPD_UI_LAUNCHER_PAGE_MAIN, previous, selected);
+}
+
+ink_epd_region_t ink_epd_ui_launcher_page_selection_region(
+    ink_epd_ui_launcher_page_t page, int previous, int selected) {
+  const int item_count = launcher_page_item_count(page);
   if (previous < 0) previous = 0;
-  if (previous > 1) previous = 1;
+  if (previous >= item_count) previous = item_count - 1;
   if (selected < 0) selected = 0;
-  if (selected > 1) selected = 1;
+  if (selected >= item_count) selected = item_count - 1;
 
   const int first = previous < selected ? previous : selected;
   const int last = previous > selected ? previous : selected;

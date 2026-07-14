@@ -31,3 +31,5 @@ static esp_err_t switch_to(const char *label) {
 esp_err_t ink_boot_switch_to_launcher(void) { return switch_to("launcher"); }
 esp_err_t ink_boot_switch_to_reader(void) { return switch_to("reader"); }
 esp_err_t ink_boot_switch_to_photo(void) { return switch_to("photo"); }
+esp_err_t ink_boot_switch_to_usb_msc(void) { return switch_to("usb_msc"); }
+esp_err_t ink_boot_switch_to_wifi_setup(void) { return switch_to("wifi_setup"); }

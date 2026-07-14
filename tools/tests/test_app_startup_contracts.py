@@ -569,13 +569,14 @@ def test_boot_loading_precedes_all_normal_boot_switches() -> None:
         assert 'BOOT_LOADING from=%s to=%s refresh=%s' in helper
 
     launcher_reader = launcher[
-        launcher.index("if (selected == 0)") : launcher.index(
-            "} else {", launcher.index("if (selected == 0)")
+        launcher.index("static void boot_reader(") : launcher.index(
+            "static void boot_photo("
         )
     ]
     launcher_photo = launcher[
-        launcher.index("} else {", launcher.index("if (selected == 0)")) :
-        launcher.index("\n      }", launcher.index("} else {", launcher.index("if (selected == 0)")))
+        launcher.index("static void boot_photo(") : launcher.index(
+            "static void boot_usb_msc("
+        )
     ]
     for route, loading_call, switch_log, switch_call in (
         (
@@ -633,3 +634,164 @@ def test_boot_loading_covers_reader_memory_error_return() -> None:
         'show_boot_loading(framebuffer, "reader", "launcher")'
     ) < wait.index('BOOT_SWITCH from=reader to=launcher')
     assert "wait_for_launcher(memory_input_ret, error_framebuffer);" in allocation_error
+
+
+def test_boot_switch_settings_targets() -> None:
+    header = source("components/ink_boot_switch/include/ink_boot_switch.h")
+    implementation = source("components/ink_boot_switch/ink_boot_switch.c")
+
+    assert "esp_err_t ink_boot_switch_to_usb_msc(void);" in header
+    assert "esp_err_t ink_boot_switch_to_wifi_setup(void);" in header
+    assert 'ink_boot_switch_to_usb_msc(void) { return switch_to("usb_msc"); }' in implementation
+    assert 'ink_boot_switch_to_wifi_setup(void) { return switch_to("wifi_setup"); }' in implementation
+
+
+def test_launcher_settings_navigation_and_routes_are_bounded() -> None:
+    app = source("apps/launcher/main/app_main.c")
+    header = source("components/ink_epd_ui/include/ink_epd_ui.h")
+    cmake = source("apps/launcher/main/CMakeLists.txt")
+
+    for symbol in (
+        "INK_EPD_UI_LAUNCHER_PAGE_MAIN",
+        "INK_EPD_UI_LAUNCHER_PAGE_SETTINGS",
+        "INK_EPD_UI_LAUNCHER_MAIN_ITEM_COUNT",
+        "INK_EPD_UI_LAUNCHER_SETTINGS_ITEM_COUNT",
+        "ink_epd_ui_draw_launcher_page(",
+        "ink_epd_ui_launcher_page_selection_region(",
+    ):
+        assert symbol in header
+
+    assert "ink_epd_ui_launcher_page_t page = INK_EPD_UI_LAUNCHER_PAGE_MAIN;" in app
+    assert "launcher_wrapped_selection(" in app
+    assert "INK_BUTTON_LEFT" in app and "INK_BUTTON_RIGHT" in app
+    assert "page = INK_EPD_UI_LAUNCHER_PAGE_SETTINGS;" in app
+    assert "page = INK_EPD_UI_LAUNCHER_PAGE_MAIN;" in app
+    assert "ink_hw_full_refresh(" in app
+    assert "INK_BUTTON_BACK" in app
+    assert "ink_epd_ui_launcher_page_selection_region(" in app
+    assert "ink_hw_partial_refresh_area(" in app
+
+    for forbidden in (
+        "ink_sd_mount(",
+        "ink_fonts_load(",
+        "esp_wifi_init(",
+        "tinyusb_driver_install(",
+        "tinyusb_msc",
+        "tusb_init(",
+    ):
+        assert forbidden not in app
+    assert "ink_sd" not in cmake
+    assert "ink_fonts" not in cmake
+
+    usb_route = app[app.index("static void boot_usb_msc(") : app.index("static void boot_wifi_setup(")]
+    wifi_route = app[app.index("static void boot_wifi_setup(") : app.index("void app_main(")]
+    for route, loading, log, call in (
+        (
+            usb_route,
+            'show_boot_loading(framebuffer, "launcher", "usb_msc")',
+            'BOOT_SWITCH from=launcher to=usb_msc',
+            "ink_boot_switch_to_usb_msc()",
+        ),
+        (
+            wifi_route,
+            'show_boot_loading(framebuffer, "launcher", "wifi_setup")',
+            'BOOT_SWITCH from=launcher to=wifi_setup',
+            "ink_boot_switch_to_wifi_setup()",
+        ),
+    ):
+        assert route.index(loading) < route.index(log) < route.index(call)
+
+
+def test_minimal_settings_apps_have_only_placeholder_runtime() -> None:
+    expected = {
+        "usb_msc": "USB MSC / NOT READY",
+        "wifi_setup": "WIFI SETUP / NOT READY",
+    }
+    forbidden = (
+        "ink_system_runtime",
+        "ink_system_services",
+        "resource_coordinator",
+        "usb_msc_coordinator",
+        "wifi_coordinator",
+        "mpu",
+        "tilt",
+        "ink_sd_mount(",
+        "sdmmc_",
+        "tinyusb_",
+        "tusb_init(",
+        "esp_wifi_",
+        "nvs_flash_",
+    )
+
+    for name, placeholder in expected.items():
+        root = f"apps/{name}"
+        project = source(f"{root}/CMakeLists.txt")
+        defaults = source(f"{root}/sdkconfig.defaults")
+        main_cmake = source(f"{root}/main/CMakeLists.txt")
+        app = source(f"{root}/main/app_main.c")
+
+        assert 'set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../../components")' in project
+        assert "idf_build_set_property(MINIMAL_BUILD ON)" in project
+        assert f"project({name})" in project
+        for setting in (
+            'CONFIG_IDF_TARGET="esp32s3"',
+            "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
+            "CONFIG_PARTITION_TABLE_CUSTOM=y",
+            'CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../partitions/partitions_16mb.csv"',
+            "CONFIG_SPIRAM=y",
+            "CONFIG_SPIRAM_MODE_OCT=y",
+            "CONFIG_SPIRAM_SPEED_80M=y",
+            "CONFIG_SPIRAM_USE_MALLOC=y",
+        ):
+            assert setting in defaults
+        for dependency in ("ink_boot_switch", "ink_epd_ui", "ink_hw", "ink_input", "esp_timer"):
+            assert dependency in main_cmake
+
+        assert f'APP_START name={name}' in app
+        assert placeholder in app
+        assert "MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT" in app
+        assert "ink_hw_init()" in app
+        assert "ink_input_init()" in app
+        assert "ink_epd_ui_draw_status(" in app
+        assert "ink_hw_full_refresh(" in app
+        assert "INK_BUTTON_BACK" in app
+        back = app[app.index("ink_input_was_pressed(&input, INK_BUTTON_BACK)") :]
+        loading = f'show_boot_loading(framebuffer, "{name}", "launcher")'
+        log = f'BOOT_SWITCH from={name} to=launcher'
+        assert back.index(loading) < back.index(log) < back.index("ink_boot_switch_to_launcher()")
+        lowered = app.lower()
+        for token in forbidden:
+            assert token not in lowered
+
+
+def test_flash_layout_scripts_use_fixed_app_slots_and_single_full_write() -> None:
+    offsets = {
+        "launcher": "0x20000",
+        "reader": "0x220000",
+        "photo": "0x420000",
+        "usb_msc": "0x620000",
+        "wifi_setup": "0x820000",
+    }
+    for app, offset in offsets.items():
+        script = source(f"tools/flash_{app}.ps1")
+        assert ". (Join-Path $PSScriptRoot 'idf_env.ps1')" in script
+        assert offset in script
+        assert "monitor" not in script.lower()
+
+    full = source("tools/flash_all_layout.ps1")
+    assert "param([Parameter(Mandatory = $true)][string]$Port)" in full
+    assert ". (Join-Path $PSScriptRoot 'idf_env.ps1')" in full
+    for app, offset in offsets.items():
+        assert f"'apps\\{app}'" in full
+        assert offset in full
+    for offset, artifact in (
+        ("0x0", "build\\bootloader\\bootloader.bin"),
+        ("0x8000", "build\\partition_table\\partition-table.bin"),
+        ("0xF000", "build\\ota_data_initial.bin"),
+    ):
+        assert offset in full and artifact in full
+    assert full.count("python -m esptool") == 1
+    assert "write_flash" in full
+    assert "0xA20000" not in full and "0xC20000" not in full
+    assert "future_a" not in full and "future_b" not in full
+    assert "monitor" not in full.lower()

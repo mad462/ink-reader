@@ -87,6 +87,62 @@ static bool loading_draw_test(void) {
          loading_image_fingerprint(buffer) == UINT32_C(0xC912932C);
 }
 
+static bool region_has_black(const uint8_t *buffer, int x, int y, int width,
+                             int height) {
+  for (int py = y; py < y + height; ++py)
+    for (int px = x; px < x + width; ++px)
+      if (pixel_is_black(buffer, px, py)) return true;
+  return false;
+}
+
+static bool launcher_page_test(void) {
+  uint8_t buffer[INK_EPD_BUFFER_SIZE];
+  ink_epd_ui_draw_launcher_page(buffer, sizeof(buffer),
+                                INK_EPD_UI_LAUNCHER_PAGE_MAIN, 2);
+
+  const bool main_rows =
+      region_has_black(buffer, 88, 60, 160, 24) &&
+      region_has_black(buffer, 88, 136, 160, 24) &&
+      region_has_black(buffer, 88, 212, 160, 24) &&
+      region_has_black(buffer, 40, 70, 24, 24) &&
+      region_has_black(buffer, 40, 146, 24, 24) &&
+      region_has_black(buffer, 40, 222, 24, 24) &&
+      pixel_is_black(buffer, 100, 119) && pixel_is_black(buffer, 100, 195) &&
+      pixel_is_black(buffer, 100, 271);
+  const bool main_marker = !pixel_is_black(buffer, INK_LAUNCHER_MARKER_X, 83) &&
+                           !pixel_is_black(buffer, INK_LAUNCHER_MARKER_X, 159) &&
+                           pixel_is_black(buffer, INK_LAUNCHER_MARKER_X, 235);
+
+  ink_epd_ui_draw_launcher_page(buffer, sizeof(buffer),
+                                INK_EPD_UI_LAUNCHER_PAGE_SETTINGS, 1);
+  const bool settings_rows =
+      region_has_black(buffer, 88, 60, 160, 24) &&
+      region_has_black(buffer, 88, 136, 180, 24) &&
+      region_has_black(buffer, 40, 70, 24, 24) &&
+      region_has_black(buffer, 40, 146, 24, 24) &&
+      pixel_is_black(buffer, 100, 119) && pixel_is_black(buffer, 100, 195) &&
+      !region_has_black(buffer, 24, 202, 432, 70);
+  const bool settings_marker =
+      !pixel_is_black(buffer, INK_LAUNCHER_MARKER_X, 83) &&
+      pixel_is_black(buffer, INK_LAUNCHER_MARKER_X, 159);
+
+  return main_rows && main_marker && settings_rows && settings_marker;
+}
+
+static bool launcher_selection_region_test(void) {
+  const ink_epd_region_t main = ink_epd_ui_launcher_page_selection_region(
+      INK_EPD_UI_LAUNCHER_PAGE_MAIN, 0, 2);
+  const ink_epd_region_t settings = ink_epd_ui_launcher_page_selection_region(
+      INK_EPD_UI_LAUNCHER_PAGE_SETTINGS, 0, 1);
+  const ink_epd_region_t clamped = ink_epd_ui_launcher_page_selection_region(
+      (ink_epd_ui_launcher_page_t)99, -100, 100);
+  return main.x == 22 && main.y == 79 && main.width == 20 &&
+         main.height == 164 && settings.x == 22 && settings.y == 79 &&
+         settings.width == 20 && settings.height == 88 && clamped.x >= 0 &&
+         clamped.y >= 0 && clamped.x + clamped.width <= INK_EPD_WIDTH &&
+         clamped.y + clamped.height <= INK_EPD_HEIGHT;
+}
+
 int main(void) {
   if (!loading_region_test()) {
     fprintf(stderr, "loading region test failed\n");
@@ -94,6 +150,14 @@ int main(void) {
   }
   if (!loading_draw_test()) {
     fprintf(stderr, "loading draw test failed\n");
+    return 1;
+  }
+  if (!launcher_page_test()) {
+    fprintf(stderr, "launcher page test failed\n");
+    return 1;
+  }
+  if (!launcher_selection_region_test()) {
+    fprintf(stderr, "launcher selection region test failed\n");
     return 1;
   }
   puts("PASS: loading UI host test");

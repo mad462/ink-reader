@@ -17,11 +17,19 @@ CHECKED_IN_SOURCE = ROOT / "components" / "ink_epd_ui" / "ink_ui_text_assets.c"
 REQUIRED_PHRASES = (
     Phrase("启动器", 24),
     Phrase("阅读 / 相册", 16),
+    Phrase("阅读 / 相册 / 设置", 16),
+    Phrase("设备 / 网络", 16),
     Phrase("书库", 24),
     Phrase("相册", 24),
+    Phrase("设置", 24),
+    Phrase("U盘模式", 24),
+    Phrase("WiFi配置", 24),
     Phrase("相册", 12),
     Phrase("打开图书与最近阅读", 16),
     Phrase("浏览 TF 卡灰阶图片", 16),
+    Phrase("管理设备与网络", 16),
+    Phrase("连接电脑管理存储", 16),
+    Phrase("选择并保存无线网络", 16),
     Phrase("正在加载", 16),
     Phrase("字体不可用", 16),
     Phrase("未找到图片", 16),
@@ -118,8 +126,8 @@ def test_launcher_titles_match_legacy_24px_bounds(tmp_path: Path) -> None:
         encoding="utf-8"
     )
     launcher = ui_source[
-        ui_source.index("void ink_epd_ui_draw_launcher_with_fonts") :
-        ui_source.index("void ink_epd_ui_draw_launcher(")
+        ui_source.index("static void draw_launcher_page(") :
+        ui_source.index("void ink_epd_ui_draw_launcher_with_fonts")
     ]
     assert "row_y + 10, titles[i], 24U" in launcher
     assert "row_y + 10, titles[i], 12U" not in launcher
