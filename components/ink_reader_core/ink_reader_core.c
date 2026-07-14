@@ -192,6 +192,23 @@ static bool extension_ok(const char *name) {
   return dot && (!strcasecmp(dot, ".xtc") || !strcasecmp(dot, ".xtch"));
 }
 
+static unsigned char ascii_lower(unsigned char value) {
+  return value >= 'A' && value <= 'Z' ? (unsigned char)(value + ('a' - 'A'))
+                                      : value;
+}
+
+static int ascii_case_compare(const char *left, const char *right) {
+  while (*left && *right) {
+    const unsigned char l = ascii_lower((unsigned char)*left);
+    const unsigned char r = ascii_lower((unsigned char)*right);
+    if (l != r) return l < r ? -1 : 1;
+    ++left;
+    ++right;
+  }
+  if (*left || *right) return *left ? 1 : -1;
+  return strcmp(left, right);
+}
+
 typedef struct {
   char (*paths)[INK_READER_PATH_MAX];
   size_t count;
@@ -226,7 +243,14 @@ static bool candidate_add(reader_candidate_list_t *list, const char *path) {
 }
 
 static int compare_candidates(const void *left, const void *right) {
-  return strcasecmp((const char *)left, (const char *)right);
+  const char *left_path = (const char *)left;
+  const char *right_path = (const char *)right;
+  const char *left_name = strrchr(left_path, '/');
+  const char *right_name = strrchr(right_path, '/');
+  left_name = left_name ? left_name + 1 : left_path;
+  right_name = right_name ? right_name + 1 : right_path;
+  const int folded = ascii_case_compare(left_name, right_name);
+  return folded != 0 ? folded : strcmp(left_name, right_name);
 }
 
 static reader_dir_result_t collect_candidates(
@@ -315,6 +339,66 @@ void ink_reader_book_close(ink_reader_book_t *book) {
   free(book->pages);
   memset(book, 0, sizeof(*book));
 }
+
+bool ink_reader_catalog_load(ink_reader_catalog_t *catalog) {
+  if (!catalog) return false;
+  reader_candidate_list_t candidates = {0};
+  if (collect_candidates(INK_READER_BOOKS_DIR, &candidates) != READER_DIR_OK) {
+    free(candidates.paths);
+    return false;
+  }
+  if (candidates.count > 1U)
+    qsort(candidates.paths, candidates.count, sizeof(*candidates.paths),
+          compare_candidates);
+
+  const size_t count = candidates.count < INK_READER_CATALOG_CAPACITY
+                           ? candidates.count
+                           : INK_READER_CATALOG_CAPACITY;
+  ink_reader_catalog_item_t *items = NULL;
+  if (count > 0U) {
+    items = heap_caps_calloc(count, sizeof(*items),
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!items) items = calloc(count, sizeof(*items));
+    if (!items) {
+      free(candidates.paths);
+      return false;
+    }
+  }
+  for (size_t i = 0; i < count; ++i) {
+    const char *name = strrchr(candidates.paths[i], '/');
+    name = name ? name + 1 : candidates.paths[i];
+    if (snprintf(items[i].path, sizeof(items[i].path), "%s",
+                 candidates.paths[i]) >= (int)sizeof(items[i].path) ||
+        snprintf(items[i].name, sizeof(items[i].name), "%s", name) >=
+            (int)sizeof(items[i].name)) {
+      free(items);
+      free(candidates.paths);
+      return false;
+    }
+  }
+  free(candidates.paths);
+  ink_reader_catalog_free(catalog);
+  catalog->items = items;
+  catalog->count = count;
+  return true;
+}
+
+void ink_reader_catalog_free(ink_reader_catalog_t *catalog) {
+  if (!catalog) return;
+  free(catalog->items);
+  catalog->items = NULL;
+  catalog->count = 0U;
+}
+
+size_t ink_reader_catalog_count(const ink_reader_catalog_t *catalog) {
+  return catalog ? catalog->count : 0U;
+}
+
+const ink_reader_catalog_item_t *ink_reader_catalog_at(
+    const ink_reader_catalog_t *catalog, size_t index) {
+  return catalog && index < catalog->count ? &catalog->items[index] : NULL;
+}
+
 bool ink_reader_find_first_book(char *path, size_t size) {
   if (!path || !size) return false;
   path[0] = 0;

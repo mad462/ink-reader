@@ -29,7 +29,8 @@ if (-not (Test-Path -LiteralPath $TccPath)) {
 }
 
 New-Item -ItemType Directory -Force $buildDir | Out-Null
-$testExe = Join-Path $buildDir 'reader_core_host_test.exe'
+$coreTestExe = Join-Path $buildDir 'reader_core_host_test.exe'
+$stateTestExe = Join-Path $buildDir 'reader_state_host_test.exe'
 $scanRootC = $scanRoot.Replace('\', '/')
 $configHeader = Join-Path $runRoot 'scan_root_config.h'
 $config = "#define INK_READER_SCAN_ROOT `"$scanRootC`"`n" +
@@ -42,12 +43,25 @@ try {
         -include $configHeader `
         -I (Join-Path $testDir 'host') `
         -I (Join-Path $componentDir 'include') `
-        -o $testExe `
+        -o $coreTestExe `
         (Join-Path $testDir 'reader_core_host_test.c') `
         (Join-Path $componentDir 'ink_reader_core.c')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    & $testExe
+    & $coreTestExe
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    & $TccPath -Wall -Werror `
+        -include $configHeader `
+        -I (Join-Path $testDir 'host') `
+        -I (Join-Path $componentDir 'include') `
+        -o $stateTestExe `
+        (Join-Path $testDir 'reader_state_host_test.c') `
+        (Join-Path $componentDir 'ink_reader_core.c') `
+        (Join-Path $componentDir 'ink_reader_state.c')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    & $stateTestExe
     exit $LASTEXITCODE
 } finally {
     if (Test-Path -LiteralPath $runRoot) {

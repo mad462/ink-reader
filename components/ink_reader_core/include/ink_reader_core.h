@@ -7,6 +7,18 @@
 
 #define INK_READER_PATH_MAX 320
 #define INK_READER_PAGE_SIZE (480 * 800 / 8)
+#define INK_READER_CATALOG_CAPACITY 32
+#define INK_READER_CATALOG_NAME_MAX 256
+
+typedef struct {
+  char path[INK_READER_PATH_MAX];
+  char name[INK_READER_CATALOG_NAME_MAX];
+} ink_reader_catalog_item_t;
+
+typedef struct {
+  ink_reader_catalog_item_t *items;
+  size_t count;
+} ink_reader_catalog_t;
 
 typedef struct {
   uint64_t offset;
@@ -53,6 +65,11 @@ typedef enum {
 
 void ink_reader_book_init(ink_reader_book_t *book);
 void ink_reader_book_close(ink_reader_book_t *book);
+bool ink_reader_catalog_load(ink_reader_catalog_t *catalog);
+void ink_reader_catalog_free(ink_reader_catalog_t *catalog);
+size_t ink_reader_catalog_count(const ink_reader_catalog_t *catalog);
+const ink_reader_catalog_item_t *ink_reader_catalog_at(
+    const ink_reader_catalog_t *catalog, size_t index);
 bool ink_reader_find_first_book(char *path, size_t path_size);
 ink_reader_scan_result_t ink_reader_open_first_book(
     ink_reader_book_t *book, char *candidate_path, size_t path_size);
