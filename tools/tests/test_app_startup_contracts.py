@@ -99,10 +99,25 @@ def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> No
     assert 'PAGE_REFRESH mode=partial' in page_turn
     assert 'PAGE_REFRESH mode=cleanup_full' in page_turn
     assert 'PAGE_REFRESH mode=recovery_full' in page_turn
-    assert "bool screen_ready = false;" in text
-    assert "*screen_ready = false;" in page_turn
+    assert "reader_refresh_state_init(&refresh_state);" in text
+    assert "reader_refresh_state_choose(" in page_turn
+    assert "reader_refresh_state_record(refresh_state, false);" in page_turn
     assert "book->current_page = previous_page;" in page_turn
     assert "memcpy(framebuffer, candidate_framebuffer" in page_turn
+
+
+def test_reader_all_refresh_paths_share_recovery_state() -> None:
+    text = source("apps/reader/main/app_main.c")
+    policy = source("apps/reader/main/reader_refresh_policy.c")
+    library_refresh = text[
+        text.index("static bool refresh_library_candidate(") :
+        text.index("static bool save_state(")
+    ]
+
+    assert "reader_refresh_state_choose(" in library_refresh
+    assert "READER_REFRESH_FULL" in library_refresh
+    assert "reader_refresh_state_record(refresh_state, ret == ESP_OK);" in library_refresh
+    assert "!state->screen_ready ? READER_REFRESH_FULL : preferred" in policy
 
 
 def test_reader_memory_error_keeps_back_navigation_available() -> None:

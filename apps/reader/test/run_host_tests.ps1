@@ -10,6 +10,7 @@ $repoRoot = Split-Path (Split-Path $readerDir -Parent) -Parent
 $coreInclude = Join-Path $repoRoot 'components\ink_reader_core\include'
 $runRoot = Join-Path $env:TEMP ('ink-reader-app-model-' + [guid]::NewGuid().ToString('N'))
 $exe = Join-Path $runRoot 'reader_app_model_host_test.exe'
+$refreshExe = Join-Path $runRoot 'reader_refresh_policy_host_test.exe'
 
 if (-not $TccPath) {
     $cachedTcc = Join-Path $env:TEMP 'ink-reader-host-tools\tcc\tcc.exe'
@@ -39,6 +40,14 @@ try {
         (Join-Path $mainDir 'reader_app_model.c')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $exe
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $TccPath -Wall -Werror `
+        -I $mainDir `
+        -o $refreshExe `
+        (Join-Path $testDir 'reader_refresh_policy_host_test.c') `
+        (Join-Path $mainDir 'reader_refresh_policy.c')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $refreshExe
     exit $LASTEXITCODE
 } finally {
     if (Test-Path -LiteralPath $runRoot) {

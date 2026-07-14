@@ -164,6 +164,33 @@ static int expect_favorite_removal_closes_and_clamps(void) {
          reader_app_model_selected_catalog_index(&model) == 1;
 }
 
+static int expect_recent_rebuild_keeps_opened_catalog_identity(void) {
+  ink_reader_catalog_item_t items[3];
+  ink_reader_catalog_t catalog = {.items = items, .count = 3};
+  ink_reader_state_t state = {0};
+  reader_app_model_t model;
+  for (size_t i = 0; i < 3; ++i) {
+    char name[8];
+    snprintf(name, sizeof(name), "recent%u", (unsigned)i);
+    set_item(&items[i], name);
+    set_shelf(&state.bookshelf[i], name, true, false,
+              (uint32_t)(3U - i));
+  }
+
+  reader_app_model_init(&model);
+  reader_app_model_rebuild(&model, &catalog, &state);
+  model.selected[READER_LIBRARY_TAB_RECENT] = 1U;
+  if (reader_app_model_selected_catalog_index(&model) != 1U) return 0;
+
+  model.page = READER_APP_PAGE_READING;
+  model.focus = READER_LIBRARY_FOCUS_ITEMS;
+  state.bookshelf[1].recent_order = 4U;
+  reader_app_model_rebuild(&model, &catalog, &state);
+
+  return reader_app_model_selected_catalog_index(&model) == 1U &&
+         model.selected[READER_LIBRARY_TAB_RECENT] == 0U;
+}
+
 static int expect_visible_window(void) {
   ink_reader_catalog_item_t items[10];
   ink_reader_catalog_t catalog = {.items = items, .count = 10};
@@ -196,6 +223,10 @@ int main(void) {
   }
   if (!expect_favorite_removal_closes_and_clamps()) {
     fputs("favorite removal contraction failed\n", stderr);
+    return 1;
+  }
+  if (!expect_recent_rebuild_keeps_opened_catalog_identity()) {
+    fputs("recent rebuild changed opened book selection\n", stderr);
     return 1;
   }
   if (!expect_visible_window() || !reader_app_model_self_test()) {

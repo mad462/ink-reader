@@ -12,6 +12,7 @@
 #include "ink_reader_state.h"
 #include "ink_sd.h"
 #include "reader_app_model.h"
+#include "reader_refresh_policy.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -254,26 +255,39 @@ static void draw_library(const reader_app_model_t *model, uint8_t *buffer) {
 static bool refresh_library_candidate(const reader_app_model_t *previous,
                                       const reader_app_model_t *candidate,
                                       uint8_t *framebuffer,
-                                      uint8_t *candidate_framebuffer) {
+                                      uint8_t *candidate_framebuffer,
+                                      reader_refresh_state_t *refresh_state) {
   draw_library(candidate, candidate_framebuffer);
   ink_epd_region_t changed = {0};
-  if (!find_changed_region(framebuffer, candidate_framebuffer, INK_HW_WIDTH,
-                           INK_HW_HEIGHT, &changed))
+  const bool has_changes = find_changed_region(
+      framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
+      &changed);
+  const reader_refresh_mode_t mode = reader_refresh_state_choose(
+      refresh_state, READER_REFRESH_PARTIAL);
+  if (!has_changes && mode == READER_REFRESH_PARTIAL)
     return true;
-  const ink_epd_ui_library_focus_t previous_focus = library_focus(previous);
-  const ink_epd_ui_library_focus_t candidate_focus = library_focus(candidate);
-  const ink_epd_region_t policy = ink_epd_ui_library_selection_region(
-      &previous_focus, &candidate_focus);
-  ESP_LOGI(TAG,
-           "LIBRARY_REFRESH mode=partial x=%d y=%d w=%d h=%d policy=%d,%d,%d,%d",
-           changed.x, changed.y, changed.width, changed.height, policy.x,
-           policy.y, policy.width, policy.height);
-  const esp_err_t ret = ink_hw_partial_refresh_area(
-      candidate_framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)changed.x,
-      (uint16_t)changed.y, (uint16_t)changed.width,
-      (uint16_t)changed.height);
+  esp_err_t ret;
+  if (mode == READER_REFRESH_FULL) {
+    ESP_LOGI(TAG, "LIBRARY_REFRESH mode=recovery_full");
+    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  } else {
+    const ink_epd_ui_library_focus_t previous_focus = library_focus(previous);
+    const ink_epd_ui_library_focus_t candidate_focus = library_focus(candidate);
+    const ink_epd_region_t policy = ink_epd_ui_library_selection_region(
+        &previous_focus, &candidate_focus);
+    ESP_LOGI(
+        TAG,
+        "LIBRARY_REFRESH mode=partial x=%d y=%d w=%d h=%d policy=%d,%d,%d,%d",
+        changed.x, changed.y, changed.width, changed.height, policy.x, policy.y,
+        policy.width, policy.height);
+    ret = ink_hw_partial_refresh_area(
+        candidate_framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)changed.x,
+        (uint16_t)changed.y, (uint16_t)changed.width,
+        (uint16_t)changed.height);
+  }
+  reader_refresh_state_record(refresh_state, ret == ESP_OK);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "library partial refresh failed err=%s",
+    ESP_LOGE(TAG, "library refresh failed err=%s",
              esp_err_to_name(ret));
     return false;
   }
@@ -326,6 +340,7 @@ static void update_progress(const ink_reader_book_t *book) {
 static bool open_selected_book(reader_app_model_t *candidate_model,
                                ink_reader_book_t *book, uint8_t *framebuffer,
                                uint8_t *candidate_framebuffer,
+                               reader_refresh_state_t *refresh_state,
                                unsigned *successful_page_turns) {
   const size_t catalog_index =
       reader_app_model_selected_catalog_index(candidate_model);
@@ -353,6 +368,7 @@ static bool open_selected_book(reader_app_model_t *candidate_model,
   }
   const esp_err_t refresh_ret =
       ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  reader_refresh_state_record(refresh_state, refresh_ret == ESP_OK);
   if (refresh_ret != ESP_OK) {
     ESP_LOGE(TAG, "book full refresh failed path=%s err=%s", item->path,
              esp_err_to_name(refresh_ret));
@@ -383,7 +399,8 @@ static bool open_selected_book(reader_app_model_t *candidate_model,
 
 static bool toggle_selected_favorite(
     reader_app_model_t *candidate_model, uint8_t *framebuffer,
-    uint8_t *candidate_framebuffer) {
+    uint8_t *candidate_framebuffer,
+    reader_refresh_state_t *refresh_state) {
   const size_t catalog_index =
       reader_app_model_selected_catalog_index(candidate_model);
   const ink_reader_catalog_item_t *item =
@@ -407,7 +424,8 @@ static bool toggle_selected_favorite(
   }
   reader_app_model_rebuild(candidate_model, &s_catalog, candidate_state);
   const bool refreshed = refresh_library_candidate(
-      &s_model, candidate_model, framebuffer, candidate_framebuffer);
+      &s_model, candidate_model, framebuffer, candidate_framebuffer,
+      refresh_state);
   if (refreshed) {
     memcpy(&s_state, candidate_state, sizeof(s_state));
     s_model = *candidate_model;
@@ -420,12 +438,14 @@ static bool toggle_selected_favorite(
 static bool return_to_library(reader_app_model_t *candidate_model,
                               const ink_reader_book_t *book,
                               uint8_t *framebuffer,
-                              uint8_t *candidate_framebuffer) {
+                              uint8_t *candidate_framebuffer,
+                              reader_refresh_state_t *refresh_state) {
   update_progress(book);
   reader_app_model_rebuild(candidate_model, &s_catalog, &s_state);
   draw_library(candidate_model, candidate_framebuffer);
   const esp_err_t ret =
       ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  reader_refresh_state_record(refresh_state, ret == ESP_OK);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "library full refresh failed err=%s", esp_err_to_name(ret));
     return false;
@@ -440,6 +460,7 @@ static void handle_library_input(reader_app_input_t input,
                                  ink_reader_book_t *book,
                                  uint8_t *framebuffer,
                                  uint8_t *candidate_framebuffer,
+                                 reader_refresh_state_t *refresh_state,
                                  unsigned *successful_page_turns) {
   s_candidate_model = s_model;
   const reader_app_effect_t effect =
@@ -454,17 +475,18 @@ static void handle_library_input(reader_app_input_t input,
   }
   if (effect == READER_APP_EFFECT_OPEN_SELECTED) {
     if (open_selected_book(&s_candidate_model, book, framebuffer,
-                           candidate_framebuffer, successful_page_turns))
+                           candidate_framebuffer, refresh_state,
+                           successful_page_turns))
       s_model = s_candidate_model;
     return;
   }
   if (effect == READER_APP_EFFECT_TOGGLE_FAVORITE) {
     (void)toggle_selected_favorite(&s_candidate_model, framebuffer,
-                                   candidate_framebuffer);
+                                   candidate_framebuffer, refresh_state);
     return;
   }
   if (refresh_library_candidate(&s_model, &s_candidate_model, framebuffer,
-                                candidate_framebuffer))
+                                candidate_framebuffer, refresh_state))
     s_model = s_candidate_model;
 }
 
@@ -472,14 +494,14 @@ static void handle_reading_input(reader_app_input_t input,
                                  ink_reader_book_t *book,
                                  uint8_t *framebuffer,
                                  uint8_t *candidate_framebuffer,
-                                 bool *screen_ready,
+                                 reader_refresh_state_t *refresh_state,
                                  unsigned *successful_page_turns) {
   if (input == READER_APP_INPUT_BACK) {
     s_candidate_model = s_model;
     if (reader_app_model_reduce(&s_candidate_model, input) ==
         READER_APP_EFFECT_REDRAW)
       (void)return_to_library(&s_candidate_model, book, framebuffer,
-                              candidate_framebuffer);
+                              candidate_framebuffer, refresh_state);
     return;
   }
   if (input != READER_APP_INPUT_LEFT && input != READER_APP_INPUT_RIGHT)
@@ -502,7 +524,9 @@ static void handle_reading_input(reader_app_input_t input,
   const bool changed = find_changed_region(
       framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
       &region);
-  const bool recovery = !*screen_ready;
+  const bool recovery = reader_refresh_state_choose(
+                            refresh_state, READER_REFRESH_PARTIAL) ==
+                        READER_REFRESH_FULL;
   const bool cleanup =
       !recovery && reader_should_cleanup(*successful_page_turns);
   esp_err_t ret = ESP_OK;
@@ -524,12 +548,12 @@ static void handle_reading_input(reader_app_input_t input,
   }
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "page refresh failed err=%s", esp_err_to_name(ret));
-    *screen_ready = false;
+    reader_refresh_state_record(refresh_state, false);
     book->current_page = previous_page;
     return;
   }
   memcpy(framebuffer, candidate_framebuffer, INK_EPD_BUFFER_SIZE);
-  *screen_ready = true;
+  reader_refresh_state_record(refresh_state, true);
   *successful_page_turns =
       (cleanup || recovery) ? 0U : *successful_page_turns + 1U;
   update_progress(book);
@@ -619,13 +643,14 @@ void app_main(void) {
   reader_app_model_init(&s_model);
   reader_app_model_rebuild(&s_model, &s_catalog, &s_state);
   draw_library(&s_model, framebuffer);
-  bool screen_ready = false;
+  reader_refresh_state_t refresh_state;
+  reader_refresh_state_init(&refresh_state);
   if (display_ret == ESP_OK) {
     ESP_LOGI(TAG, "FIRST_REFRESH mode=full page=library");
     const esp_err_t ret =
         ink_hw_full_refresh(framebuffer, INK_EPD_BUFFER_SIZE);
+    reader_refresh_state_record(&refresh_state, ret == ESP_OK);
     if (ret == ESP_OK) {
-      screen_ready = true;
       log_stage("first_refresh_done", started_us);
     } else {
       ESP_LOGE(TAG, "library refresh failed err=%s", esp_err_to_name(ret));
@@ -643,10 +668,10 @@ void app_main(void) {
         input_event(&input, &event)) {
       if (s_model.page == READER_APP_PAGE_LIBRARY)
         handle_library_input(event, &book, framebuffer, candidate_framebuffer,
-                             &successful_page_turns);
+                             &refresh_state, &successful_page_turns);
       else
         handle_reading_input(event, &book, framebuffer, candidate_framebuffer,
-                             &screen_ready, &successful_page_turns);
+                             &refresh_state, &successful_page_turns);
     }
     vTaskDelay(pdMS_TO_TICKS(20));
   }

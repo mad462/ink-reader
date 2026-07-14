@@ -87,10 +87,8 @@ void reader_app_model_rebuild(reader_app_model_t *model,
                               const ink_reader_catalog_t *catalog,
                               const ink_reader_state_t *state) {
   if (!model) return;
-  const size_t popup_catalog_index =
-      model->focus == READER_LIBRARY_FOCUS_POPUP
-          ? reader_app_model_selected_catalog_index(model)
-          : READER_APP_NO_INDEX;
+  const size_t selected_catalog_index =
+      reader_app_model_selected_catalog_index(model);
   memset(model->visible_count, 0, sizeof(model->visible_count));
   const size_t catalog_count =
       catalog && catalog->items
@@ -119,11 +117,11 @@ void reader_app_model_rebuild(reader_app_model_t *model,
       model->selected[tab] = count - 1U;
   }
 
-  if (popup_catalog_index != READER_APP_NO_INDEX) {
+  if (selected_catalog_index != READER_APP_NO_INDEX) {
     bool still_visible = false;
     const size_t count = model->visible_count[model->tab];
     for (size_t i = 0; i < count; ++i) {
-      if (model->visible_catalog[model->tab][i] == popup_catalog_index) {
+      if (model->visible_catalog[model->tab][i] == selected_catalog_index) {
         model->selected[model->tab] = i;
         still_visible = true;
         break;
