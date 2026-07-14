@@ -26,6 +26,7 @@
 #define BAD_CHAPTER_RANGE_BOOK TEST_BOOKS "/bad_chapter_range.xtc"
 #define BAD_CHAPTER_REVERSED_BOOK TEST_BOOKS "/bad_chapter_reversed.xtc"
 #define BAD_CHAPTER_END_BOOK TEST_BOOKS "/bad_chapter_end.xtc"
+#define BAD_CHAPTER_COUNT_BOOK TEST_BOOKS "/bad_chapter_count.xtc"
 
 #define XTC_METADATA_SIZE 256u
 #define XTC_CHAPTER_ENTRY_SIZE 96u
@@ -152,7 +153,8 @@ static int write_single_page_xth(const char *path, size_t payload_bytes) {
 
 static int write_chapter_book(const char *path, uint16_t version,
                               const char *title, int bad_metadata_offset,
-                              int bad_chapter_range) {
+                              int bad_chapter_range,
+                              uint16_t metadata_chapter_count) {
   uint8_t header[56] = {0};
   uint8_t metadata[XTC_METADATA_SIZE] = {0};
   uint8_t chapters[2 * XTC_CHAPTER_ENTRY_SIZE] = {0};
@@ -178,7 +180,7 @@ static int write_chapter_book(const char *path, uint16_t version,
   if (version == 1) put64(header + 48, chapter_offset);
 
   snprintf((char *)metadata, 128, "%s", title);
-  put16(metadata + 196, 2);
+  put16(metadata + 196, metadata_chapter_count);
   memcpy(chapters, "Opening", 7);
   put16(chapters + 80, bad_chapter_range == 1 ? 3
                         : bad_chapter_range == 2 ? 2
@@ -258,6 +260,7 @@ static void cleanup_fixture(void) {
   remove(BAD_CHAPTER_RANGE_BOOK);
   remove(BAD_CHAPTER_REVERSED_BOOK);
   remove(BAD_CHAPTER_END_BOOK);
+  remove(BAD_CHAPTER_COUNT_BOOK);
   _rmdir(TEST_BOOKS);
   _rmdir(TEST_ROOT);
 }
@@ -288,13 +291,15 @@ int main(void) {
       !write_page_failure_book() ||
       !write_single_page_xth(XTH_GOOD_BOOK, INK_READER_PAGE_SIZE * 2u) ||
       !write_xth_page_failure_book() ||
-      !write_chapter_book(CHAPTER_V1_BOOK, 1, "Version One", 0, 0) ||
-      !write_chapter_book(CHAPTER_V256_BOOK, 256, "Legacy 256", 0, 0) ||
-      !write_chapter_book(BAD_METADATA_OFFSET_BOOK, 1, "Bad Offset", 1, 0) ||
-      !write_chapter_book(BAD_CHAPTER_RANGE_BOOK, 1, "Bad Range", 0, 1) ||
-      !write_chapter_book(BAD_CHAPTER_REVERSED_BOOK, 1, "Bad Reverse", 0,
+      !write_chapter_book(CHAPTER_V1_BOOK, 1, "Version One", 0, 0, 2) ||
+      !write_chapter_book(CHAPTER_V256_BOOK, 256, "Legacy 256", 0, 0, 2) ||
+      !write_chapter_book(BAD_METADATA_OFFSET_BOOK, 1, "Bad Offset", 1, 0,
                           2) ||
-      !write_chapter_book(BAD_CHAPTER_END_BOOK, 1, "Bad End", 0, 3)) {
+      !write_chapter_book(BAD_CHAPTER_RANGE_BOOK, 1, "Bad Range", 0, 1, 2) ||
+      !write_chapter_book(BAD_CHAPTER_REVERSED_BOOK, 1, "Bad Reverse", 0,
+                          2, 2) ||
+      !write_chapter_book(BAD_CHAPTER_END_BOOK, 1, "Bad End", 0, 3, 2) ||
+      !write_chapter_book(BAD_CHAPTER_COUNT_BOOK, 1, "Bad Count", 0, 0, 1)) {
     fprintf(stderr, "fixture file setup failed\n");
     goto cleanup;
   }
@@ -370,6 +375,11 @@ int main(void) {
   }
   if (ink_reader_book_open(&book, BAD_CHAPTER_END_BOOK)) {
     fprintf(stderr, "out-of-range chapter end was accepted\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  if (ink_reader_book_open(&book, BAD_CHAPTER_COUNT_BOOK)) {
+    fprintf(stderr, "metadata chapter count mismatch was accepted\n");
     ink_reader_book_close(&book);
     goto cleanup;
   }

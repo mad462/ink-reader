@@ -409,6 +409,12 @@ bool ink_reader_book_open(ink_reader_book_t *book, const char *path) {
     free(pages);
     goto fail;
   }
+  if (parsed.has_metadata && parsed.has_chapters &&
+      metadata.chapter_count != chapter_count) {
+    free(chapters);
+    free(pages);
+    goto fail;
+  }
   book->file = file;
   book->metadata = metadata;
   book->has_metadata = parsed.has_metadata;
