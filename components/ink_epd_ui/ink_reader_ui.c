@@ -191,6 +191,7 @@ ink_epd_region_t ink_epd_ui_library_selection_region(
                                  .width = LIBRARY_PAGE_WIDTH,
                                  .height = LIBRARY_PAGE_HEIGHT};
   if (!previous || !current || previous->active_tab != current->active_tab ||
+      previous->tabs_focused != current->tabs_focused ||
       previous->window_start != current->window_start ||
       previous->popup_open != current->popup_open || current->popup_open)
     return full;
@@ -269,6 +270,14 @@ bool ink_epd_ui_reader_self_test(void) {
       .active_tab = 0, .window_start = 0, .selected_card = 1};
   ink_epd_region_t region =
       ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.x == 24 && region.y == 108 && region.width == 432 &&
+       region.height == 122;
+  current.tabs_focused = true;
+  region = ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.x == 8 && region.y == 8 && region.width == 464 &&
+       region.height == 776;
+  current.tabs_focused = false;
+  region = ink_epd_ui_library_selection_region(&previous, &current);
   ok = ok && region.x == 24 && region.y == 108 && region.width == 432 &&
        region.height == 122;
   current.active_tab = 1;

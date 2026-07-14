@@ -79,6 +79,7 @@ typedef struct {
 
 typedef struct {
   size_t active_tab;
+  bool tabs_focused;
   size_t window_start;
   size_t selected_card;
   bool popup_open;
