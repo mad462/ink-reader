@@ -4,11 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <direct.h>
-#else
-#include <sys/stat.h>
 #endif
 
 #define STATE_MAGIC 0x49534150U
@@ -572,8 +571,6 @@ static bool decode_v4(const uint8_t *bytes, ink_reader_state_t *state) {
         state, state->open_book_path, state->open_book_page,
         state->open_book_chapter, state->open_book_total_pages_snapshot);
   }
-  migrate_progress(state);
-  migrate_open(state);
   return true;
 }
 
@@ -684,9 +681,17 @@ ink_reader_state_result_t ink_reader_state_load(const char *path,
   if (!path || path[0] == '\0' || !state)
     return INK_READER_STATE_INVALID_ARGUMENT;
   FILE *file = fopen(path, "rb");
-  if (!file)
-    return errno == ENOENT ? INK_READER_STATE_NOT_FOUND
-                           : INK_READER_STATE_IO_ERROR;
+  if (!file) {
+    if (errno != ENOENT) return INK_READER_STATE_IO_ERROR;
+    char backup[TEMP_PATH_CAPACITY];
+    if (snprintf(backup, sizeof(backup), "%s.bak", path) >=
+        (int)sizeof(backup))
+      return INK_READER_STATE_INVALID_ARGUMENT;
+    file = fopen(backup, "rb");
+    if (!file)
+      return errno == ENOENT ? INK_READER_STATE_NOT_FOUND
+                             : INK_READER_STATE_IO_ERROR;
+  }
   uint8_t header[DISK_HEADER_SIZE];
   if (fread(header, 1, sizeof(header), file) != sizeof(header)) {
     fclose(file);
@@ -766,12 +771,33 @@ static bool ensure_parent_directory(const char *path) {
   return make_directory(parent) == 0 || errno == EEXIST;
 }
 
+static bool inspect_path(const char *path, bool *exists, bool *is_directory) {
+  struct stat status;
+  if (stat(path, &status) == 0) {
+    *exists = true;
+    *is_directory = S_ISDIR(status.st_mode);
+    return true;
+  }
+  if (errno != ENOENT) return false;
+  *exists = false;
+  *is_directory = false;
+  return true;
+}
+
 bool ink_reader_state_save(const char *path, const ink_reader_state_t *state) {
   if (!path || path[0] == '\0' || !state || !ensure_parent_directory(path))
     return false;
   char temporary[TEMP_PATH_CAPACITY];
+  char backup[TEMP_PATH_CAPACITY];
   if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >=
-      (int)sizeof(temporary))
+          (int)sizeof(temporary) ||
+      snprintf(backup, sizeof(backup), "%s.bak", path) >=
+          (int)sizeof(backup))
+    return false;
+  bool target_exists = false;
+  bool target_is_directory = false;
+  if (!inspect_path(path, &target_exists, &target_is_directory) ||
+      target_is_directory)
     return false;
   uint8_t *bytes = (uint8_t *)calloc(1, DISK_V4_SIZE);
   if (!bytes) return false;
@@ -791,12 +817,23 @@ bool ink_reader_state_save(const char *path, const ink_reader_state_t *state) {
     remove(temporary);
     return false;
   }
-#ifdef _WIN32
-  (void)remove(path);
-#endif
-  if (rename(temporary, path) != 0) {
+
+  bool backup_exists = false;
+  bool backup_is_directory = false;
+  if (!inspect_path(backup, &backup_exists, &backup_is_directory) ||
+      backup_is_directory || (backup_exists && remove(backup) != 0)) {
     remove(temporary);
     return false;
   }
+  if (target_exists && rename(path, backup) != 0) {
+    remove(temporary);
+    return false;
+  }
+  if (rename(temporary, path) != 0) {
+    if (target_exists) (void)rename(backup, path);
+    remove(temporary);
+    return false;
+  }
+  if (target_exists) (void)remove(backup);
   return true;
 }

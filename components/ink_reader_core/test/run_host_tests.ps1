@@ -34,7 +34,8 @@ $stateTestExe = Join-Path $buildDir 'reader_state_host_test.exe'
 $scanRootC = $scanRoot.Replace('\', '/')
 $configHeader = Join-Path $runRoot 'scan_root_config.h'
 $config = "#define INK_READER_SCAN_ROOT `"$scanRootC`"`n" +
-    "#define INK_READER_TEST_ROOT `"$scanRootC`"`n"
+    "#define INK_READER_TEST_ROOT `"$scanRootC`"`n" +
+    "#define rename ink_reader_test_rename`n"
 [System.IO.File]::WriteAllText($configHeader, $config)
 
 try {

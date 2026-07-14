@@ -1,4 +1,5 @@
 #include <direct.h>
+#include <errno.h>
 #include <io.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,6 +8,11 @@
 
 #include "ink_reader_core.h"
 #include "ink_reader_state.h"
+
+#ifdef rename
+#undef rename
+#endif
+int rename(const char *old_path, const char *new_path);
 
 #ifndef INK_READER_TEST_ROOT
 #define INK_READER_TEST_ROOT "/sdcard"
@@ -21,6 +27,21 @@
 #define TRUNCATED_PATH TEST_ROOT "/truncated.bin"
 #define UNKNOWN_PATH TEST_ROOT "/unknown.bin"
 #define BAD_MAGIC_PATH TEST_ROOT "/bad-magic.bin"
+#define DIRECTORY_TARGET TEST_ROOT "/directory-target"
+
+static int rename_failure_enabled;
+static const char *rename_failure_target;
+
+int ink_reader_test_rename(const char *old_path, const char *new_path) {
+  const size_t length = old_path ? strlen(old_path) : 0U;
+  if (rename_failure_enabled && rename_failure_target && new_path &&
+      strcmp(new_path, rename_failure_target) == 0 && length >= 4U &&
+      strcmp(old_path + length - 4U, ".tmp") == 0) {
+    errno = EACCES;
+    return -1;
+  }
+  return rename(old_path, new_path);
+}
 
 #define LEGACY_V4_FILE_SIZE 23616u
 #define LEGACY_STATE_OFFSET 8u
@@ -66,12 +87,16 @@ static void remove_catalog_files(void) {
 static void cleanup_fixture(void) {
   remove_catalog_files();
   remove(TEST_STATE_PATH ".tmp");
+  remove(TEST_STATE_PATH ".bak");
   remove(TEST_STATE_PATH);
   remove(LEGACY_V4_PATH);
   remove(LEGACY_OLD_PATH);
   remove(TRUNCATED_PATH);
   remove(UNKNOWN_PATH);
   remove(BAD_MAGIC_PATH);
+  remove(DIRECTORY_TARGET ".tmp");
+  remove(DIRECTORY_TARGET ".bak");
+  _rmdir(DIRECTORY_TARGET);
   _rmdir(TEST_STATE_DIR);
   _rmdir(TEST_BOOKS);
   _rmdir(TEST_ROOT);
@@ -227,11 +252,71 @@ static int test_bookmarks(void) {
   return 1;
 }
 
+static int test_replacement_failure_and_backup_recovery(void) {
+  ink_reader_state_t state;
+  ink_reader_state_t restored;
+
+  remove(TEST_STATE_PATH ".tmp");
+  remove(TEST_STATE_PATH ".bak");
+  ink_reader_state_default(&state);
+  state.recent_order_counter = 10U;
+  if (!ink_reader_state_save(TEST_STATE_PATH, &state)) return 0;
+
+  state.recent_order_counter = 20U;
+  rename_failure_target = TEST_STATE_PATH;
+  rename_failure_enabled = 1;
+  const bool save_result = ink_reader_state_save(TEST_STATE_PATH, &state);
+  rename_failure_enabled = 0;
+  rename_failure_target = NULL;
+  if (save_result) return 0;
+
+  ink_reader_state_default(&restored);
+  if (ink_reader_state_load(TEST_STATE_PATH, &restored) !=
+          INK_READER_STATE_OK ||
+      restored.recent_order_counter != 10U)
+    return 0;
+
+  remove(TEST_STATE_PATH ".bak");
+  if (rename(TEST_STATE_PATH, TEST_STATE_PATH ".bak") != 0 ||
+      _access(TEST_STATE_PATH, 0) == 0)
+    return 0;
+  ink_reader_state_default(&restored);
+  if (ink_reader_state_load(TEST_STATE_PATH, &restored) !=
+          INK_READER_STATE_OK ||
+      restored.recent_order_counter != 10U)
+    return 0;
+
+  if (_mkdir(DIRECTORY_TARGET) != 0 ||
+      ink_reader_state_save(DIRECTORY_TARGET, &state) ||
+      _access(DIRECTORY_TARGET, 0) != 0 ||
+      _access(DIRECTORY_TARGET ".bak", 0) == 0)
+    return 0;
+  return 1;
+}
+
 static int write_legacy_v4_fixture(void) {
   uint8_t *bytes = (uint8_t *)calloc(1, LEGACY_V4_FILE_SIZE);
   if (!bytes) return 0;
   put32(bytes, 0x49534150U);
   put16(bytes + 4, 4U);
+
+  uint8_t *state = bytes + LEGACY_STATE_OFFSET;
+  state[0] = 1;
+  put32(state + 4, 3U);
+  put32(state + 8, 14U);
+  put32(state + 12, 2U);
+  put32(state + 16, 200U);
+  memcpy(state + 20, "/sdcard/books/open.xtc",
+         sizeof("/sdcard/books/open.xtc"));
+
+  uint8_t *progress = state + 276U;
+  progress[0] = 1;
+  put32(progress + 4, 3U);
+  put32(progress + 8, 23U);
+  put32(progress + 12, 4U);
+  put32(progress + 16, 300U);
+  memcpy(progress + 20, "/sdcard/books/progress.xtc",
+         sizeof("/sdcard/books/progress.xtc"));
 
   const size_t shelf = LEGACY_STATE_OFFSET + LEGACY_BOOKSHELF_OFFSET +
                        3U * LEGACY_BOOKSHELF_ENTRY_SIZE;
@@ -346,7 +431,11 @@ static int test_legacy_and_transactional_load(void) {
   if (ink_reader_state_load(LEGACY_V4_PATH, &state) != INK_READER_STATE_OK ||
       state.recent_order_counter != 77U ||
       !ink_reader_state_find_bookshelf(&state, "/sdcard/books/legacy.xtc",
-                                       &index))
+                                       &index) ||
+      ink_reader_state_find_bookshelf(&state, "/sdcard/books/open.xtc",
+                                      NULL) ||
+      ink_reader_state_find_bookshelf(&state, "/sdcard/books/progress.xtc",
+                                      NULL))
     return 0;
   const ink_reader_bookshelf_entry_t *entry =
       ink_reader_state_bookshelf_at(&state, index);
@@ -411,6 +500,10 @@ int main(void) {
   }
   if (!test_bookmarks()) {
     fprintf(stderr, "bookmark tests failed\n");
+    goto cleanup;
+  }
+  if (!test_replacement_failure_and_backup_recovery()) {
+    fprintf(stderr, "replacement/backup recovery tests failed\n");
     goto cleanup;
   }
   if (!test_legacy_v1_to_v3()) {
