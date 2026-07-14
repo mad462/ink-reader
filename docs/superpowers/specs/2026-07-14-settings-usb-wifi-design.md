@@ -87,12 +87,14 @@ MAIN                       SETTINGS
 USB App 启动顺序：
 
 1. 打印 `APP_START name=usb_msc`。
-2. 初始化 EPD 与按键并显示 USB 状态页。
+2. 初始化 EPD 与按键；保留 Launcher 切换前画出的 Loading，不先显示独立 USB 页面。
 3. 初始化 raw SDMMC、TinyUSB 与 MSC storage。
-4. 导出成功后显示 Flash 内置的 `U盘模式已启动.bmp`，图片为 200x40、1bpp，居中局刷。
-5. 导出失败时显示明确错误，不显示成功图片。
+4. 导出成功后直接用固定居中区域局刷 Flash 内置的 `USB_mode_active.bmp`。
+5. 导出失败时直接用同一区域局刷 `USB_mode_failed.bmp`，不得显示成功图片。
 
-Back 使用短按，但必须先停止 MSC、删除 storage、关闭 SD card，再显示 Loading 并返回 Launcher。停止失败时留在 USB App 并显示错误，不能带着活动 MSC 直接重启。用户仍应先在电脑端安全弹出 U 盘，UI 页面显示该要求。
+两张 USB 图片均为 200x40、1bpp。USB App 不绘制占位首页或状态卡片；进入 App 后用户只看到 Loading 被最终的 Active/Failed 弹窗替换。
+
+Back 使用短按，但必须先停止 MSC、删除 storage、关闭 SD card，再显示 Loading 并返回 Launcher。停止失败时留在 USB App，复用 `USB_mode_failed.bmp` 显示错误，不能带着活动 MSC 直接重启。用户操作上仍应先在电脑端安全弹出 U 盘，但本阶段不增加独立说明页面或额外素材。
 
 ## WiFi Setup App
 
@@ -117,15 +119,33 @@ STARTING -> SCANNING -> AP_LIST -> PASSWORD_KEYBOARD
                               SUCCESS    ERROR
 ```
 
-WiFi App 先画出 SCANNING 页面，再启动异步扫描，避免进入 App 后长时间没有屏幕反馈。扫描结果按信号强度排序并对 SSID 去重。AP_LIST 使用上/下选择，Confirm 进入密码页；开放网络可直接进入 CONNECTING。
+WiFi App 初始化 EPD 与按键后，先用固定居中区域局刷 `WiFi_Scanning.bmp`，随后立即启动异步扫描，避免进入 App 后长时间没有屏幕反馈。扫描失败显示 `WiFi_Scan_Failed.bmp`；扫描成功但没有 AP 时显示 `No_WiFi_Found.bmp`。扫描结果按信号强度排序并对 SSID 去重；有结果时才全页切换到动态 AP_LIST。AP_LIST 使用上/下选择，Confirm 进入密码页；开放网络可直接进入 CONNECTING。
 
 PASSWORD_KEYBOARD 完整渲染旧版小写、大写、符号三层键盘。当前只有纵向导航可用，因此 `GPIO12/GPIO11` 按 row-major 顺序向前/向后遍历全部键，支持循环；Confirm 激活字符或 `space/delete/clear/layer/connect`。长按允许连续移动以降低临时输入成本。Back 从键盘返回 AP_LIST，AP_LIST Back 返回 Launcher。
 
 提交密码后连接选中的 SSID，等待 `IP_EVENT_STA_GOT_IP`，超时为 15 秒：
 
-- 成功获取 IP 后才保存 NVS，并显示“WiFi 已保存”。
-- 失败或超时不覆盖已有活动配置，保留当前输入并显示错误。
+- 开始连接时局刷 `WiFi_Connecting....bmp`。
+- 成功获取 IP 后才保存 NVS，并局刷 `WiFi_Saved.bmp`。
+- 失败或超时不覆盖已有活动配置，保留当前输入并局刷 `WiFi_Connect_Failed.bmp`。
 - SSID 可以记录到日志；密码、密码长度和明文输入不得记录到日志。
+
+WiFi 的 AP 列表、SSID、密码掩码、键盘字符、层切换和操作键必须由 framebuffer renderer 动态绘制，不制作成静态图片。
+
+### 固定状态素材
+
+以下素材位于工作区 `素材/`，全部为 200x40、1bpp BMP。构建时机械转换为 Flash 常量，运行时不得读取文件系统或 SD：
+
+| 状态 | 素材文件 |
+|---|---|
+| USB 导出成功 | `USB_mode_active.bmp` |
+| USB 导出失败 | `USB_mode_failed.bmp` |
+| WiFi 扫描中 | `WiFi_Scanning.bmp` |
+| WiFi 扫描失败 | `WiFi_Scan_Failed.bmp` |
+| 未发现 WiFi | `No_WiFi_Found.bmp` |
+| WiFi 连接中 | `WiFi_Connecting....bmp` |
+| WiFi 已保存 | `WiFi_Saved.bmp` |
+| WiFi 连接失败 | `WiFi_Connect_Failed.bmp` |
 
 本阶段不让 Launcher、Reader、Photo 自动连接 WiFi。它们未来需要联网时显式调用共享配置 API并自行初始化 `ink_wifi_core`。
 
@@ -155,8 +175,8 @@ esp_err_t ink_wifi_config_clear_active(void);
 
 - Launcher MAIN/SETTINGS 选择变化继续使用区域局刷。
 - App 切换继续先局刷 `Now Loading...`，再重启。
-- USB active 图片使用固定小区域局刷。
-- WiFi AP 列表选择和键盘游标使用区域局刷；页面转换、扫描结果整体变化和连接结果使用全刷或现有维护策略。
+- USB Active/Failed 图片共用现有 Loading 的固定居中小区域，并使用快速区域局刷。
+- WiFi 固定状态图片共用同一居中区域并使用快速区域局刷；AP 列表选择和键盘游标使用区域局刷；进入动态 AP 列表、键盘等整页页面时全刷。
 - USB/WiFi App 返回 Launcher 前均显示 Loading。
 
 ## 日志约束
