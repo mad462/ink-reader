@@ -437,6 +437,17 @@ static int test_legacy_and_transactional_load(void) {
       ink_reader_state_find_bookshelf(&state, "/sdcard/books/progress.xtc",
                                       NULL))
     return 0;
+  if (!state.has_open_book ||
+      strcmp(state.open_book_path, "/sdcard/books/open.xtc") != 0 ||
+      !state.progress[0].used || state.progress[0].page_index != 23U ||
+      state.progress[0].chapter_index != 4U ||
+      state.progress[0].total_pages_snapshot != 300U ||
+      strcmp(state.progress[0].book_path, "/sdcard/books/progress.xtc") != 0 ||
+      ink_reader_state_find_progress(&state, "/sdcard/books/open.xtc", NULL,
+                                     NULL, NULL))
+    return 0;
+  for (size_t i = 1; i < INK_READER_PROGRESS_CAPACITY; ++i)
+    if (state.progress[i].used) return 0;
   const ink_reader_bookshelf_entry_t *entry =
       ink_reader_state_bookshelf_at(&state, index);
   if (!entry || !entry->has_opened || !entry->is_favorite ||

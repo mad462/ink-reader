@@ -567,9 +567,6 @@ static bool decode_v4(const uint8_t *bytes, ink_reader_state_t *state) {
   if (state->has_open_book &&
       state->open_book_kind == INK_READER_BOOK_KIND_XTC) {
     if (state->open_book_path[0] == '\0') return false;
-    (void)ink_reader_state_set_progress(
-        state, state->open_book_path, state->open_book_page,
-        state->open_book_chapter, state->open_book_total_pages_snapshot);
   }
   return true;
 }
