@@ -96,33 +96,137 @@ def test_reader_library_has_complete_ascii_font_fallback() -> None:
 
 def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> None:
     text = source("apps/reader/main/app_main.c")
+    transaction = source("apps/reader/main/reader_page_turn.c")
     page_turn = text[
         text.index("static void handle_reading_page_turn(") :
         text.index("static void handle_reading_input(")
+    ]
+    refresh = text[
+        text.index("static bool refresh_reader_page(") :
+        text.index("static void handle_reading_page_turn(")
     ]
 
     assert "READER_PARTIAL_REFRESH_LIMIT = 50" in text
     assert "!reader_should_cleanup(48)" in text
     assert "reader_should_cleanup(49)" in text
-    assert "PAGE_REFRESH mode=partial_full_window" in page_turn
+    assert "PAGE_REFRESH mode=partial_full_window" in refresh
     assert (
-        "ink_hw_partial_refresh_area(\n"
-        "        candidate_framebuffer, INK_EPD_BUFFER_SIZE, 0U, 0U,\n"
-        "        INK_HW_WIDTH, INK_HW_HEIGHT)"
-    ) in page_turn
+        "ink_hw_partial_refresh_area_with_work_and_pump(\n"
+        "        candidate, INK_EPD_BUFFER_SIZE, 0U, 0U, INK_HW_WIDTH, INK_HW_HEIGHT"
+    ) in refresh
     assert "region.x" not in page_turn
     assert "region.y" not in page_turn
     assert "region.width" not in page_turn
     assert "region.height" not in page_turn
-    assert 'PAGE_REFRESH mode=cleanup_full' in page_turn
-    assert 'PAGE_REFRESH mode=recovery_full' in page_turn
+    assert 'PAGE_REFRESH mode=cleanup_full' in refresh
+    assert 'PAGE_REFRESH mode=recovery_full' in refresh
     assert "reader_refresh_state_init(&refresh_state);" in text
-    assert "reader_refresh_state_choose(" in page_turn
+    assert "reader_refresh_state_choose(" in refresh
     assert "reader_refresh_state_record(refresh_state, false);" in page_turn
-    assert "book->current_page = previous_page;" in page_turn
-    assert "memcpy(framebuffer, candidate_framebuffer" in page_turn
+    assert "*options->current_page = previous_page;" in transaction
+    assert "memcpy(options->framebuffer, options->candidate" in transaction
     assert "*successful_page_turns + 1U" in page_turn
     assert "*successful_page_turns + page_step" not in page_turn
+
+
+def test_partial_refresh_work_runs_after_activation_before_busy_wait() -> None:
+    header = source("components/ink_hw/include/ink_hw.h")
+    hw = source("components/ink_hw/ink_hw.c")
+
+    assert "typedef esp_err_t (*ink_hw_refresh_work_fn)(void *context);" in header
+    assert "ink_hw_partial_refresh_area_with_work(" in header
+    wrapper = hw[
+        hw.index("esp_err_t ink_hw_partial_refresh_area(") :
+        hw.index("esp_err_t ink_hw_partial_refresh_area_with_work(")
+    ]
+    assert "ink_hw_partial_refresh_area_with_work(" in wrapper
+    assert "NULL, NULL" in wrapper
+
+    with_work_wrapper = hw[
+        hw.index("esp_err_t ink_hw_partial_refresh_area_with_work(") :
+        hw.index("esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(")
+    ]
+    assert "ink_hw_partial_refresh_area_with_work_and_pump(" in with_work_wrapper
+    assert "context, NULL, NULL" in with_work_wrapper
+
+    with_work = hw[
+        hw.index("esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(") :
+        hw.index("esp_err_t ink_hw_gray_refresh(")
+    ]
+    activate = with_work.index('command(0x20), TAG, "partial activate"')
+    callback = with_work.index("if (work) (void)work(work_context);")
+    wait = with_work.index("wait_ready_with_pump(")
+    assert activate < callback < wait
+    assert with_work.count("if (work) (void)work(work_context);") == 1
+
+
+def test_reader_page_cache_is_optional_transactional_and_prefetches() -> None:
+    app = source("apps/reader/main/app_main.c")
+    transaction = source("apps/reader/main/reader_page_turn.c")
+    cmake = source("apps/reader/main/CMakeLists.txt")
+    page_turn = app[
+        app.index("static void handle_reading_page_turn(") :
+        app.index("static void handle_reading_input(")
+    ]
+    open_book = app[
+        app.index("static bool open_selected_book(") :
+        app.index("static bool toggle_selected_favorite(")
+    ]
+
+    assert '#include "reader_page_cache.h"' in app
+    assert '#include "reader_page_turn.h"' in app
+    assert '"reader_page_cache.c"' in cmake
+    assert '"reader_page_turn.c"' in cmake
+    assert "READER_PAGE_CACHE_SLOT_COUNT * INK_READER_PAGE_SIZE" in app
+    assert "page cache allocation failed; direct decode fallback" in app
+    assert "reader_page_cache_reset(" in open_book
+    assert "reader_page_cache_lookup(" in transaction
+    assert "ink_reader_book_decode_page(" in app
+    assert "reader_page_cache_insert(" in transaction
+    assert "ink_reader_book_load_page(" not in page_turn
+    assert 'PAGE_CACHE result=hit page=%u prepare_ms=%lld' in app
+    assert 'PAGE_CACHE result=miss page=%u prepare_ms=%lld' in app
+    assert "reader_hold_target_page(\n      target_page" in page_turn
+    assert "reader_page_turn_execute(" in page_turn
+    assert "ink_hw_partial_refresh_area_with_work_and_pump(" in app
+    assert "prefetch_and_restore" in transaction
+    assert 'PAGE_CACHE result=prefetch_hit page=%u load_ms=%lld' in app
+    assert 'PAGE_CACHE result=prefetch_loaded page=%u load_ms=%lld' in app
+    assert 'PAGE_CACHE result=prefetch_failed page=%u load_ms=%lld' in app
+    assert "xTaskCreate" not in page_turn
+
+
+def test_reader_partial_refresh_pumps_and_replays_deferred_input() -> None:
+    app = source("apps/reader/main/app_main.c")
+    cmake = source("apps/reader/main/CMakeLists.txt")
+    hw_header = source("components/ink_hw/include/ink_hw.h")
+    hw = source("components/ink_hw/ink_hw.c")
+
+    assert '#include "reader_input_queue.h"' in app
+    assert '"reader_input_queue.c"' in cmake
+    assert "ink_hw_refresh_pump_fn" in hw_header
+    assert "ink_hw_partial_refresh_area_with_work_and_pump(" in hw_header
+    partial = hw[
+        hw.index("esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(") :
+        hw.index("esp_err_t ink_hw_gray_refresh(")
+    ]
+    activate = partial.index('command(0x20), TAG, "partial activate"')
+    first_pump = partial.index("if (pump) pump(pump_context);")
+    work = partial.index("if (work) (void)work(work_context);")
+    assert activate < first_pump < work
+    assert "wait_ready_with_pump(" in partial
+    assert "pump_reader_input" in app
+    assert "reader_input_queue_push(" in app
+    assert "reader_input_queue_pop(" in app
+    input_source = app[
+        app.index("static bool next_reader_input(") :
+        app.index("typedef struct {", app.index("static bool next_reader_input("))
+    ]
+    assert input_source.index("reader_input_queue_pop(") < input_source.index(
+        "ink_input_poll("
+    )
+    main_loop = app[app.index("ink_reader_book_t book;") :]
+    assert "next_reader_input(now_ms, &input)" in main_loop
 
 
 def test_reader_hold_paging_uses_raw_hold_state_and_shared_refresh_path() -> None:
@@ -294,12 +398,7 @@ def test_reader_library_ui_is_a_pure_bounded_renderer() -> None:
     assert "previous.tabs_focused = true;" in reader_ui
 
     for geometry in (
-        "LIBRARY_PAGE_X = 8",
-        "LIBRARY_PAGE_Y = 8",
-        "LIBRARY_PAGE_WIDTH = 464",
-        "LIBRARY_PAGE_HEIGHT = 776",
-        "LIBRARY_HEADER_HEIGHT = 38",
-        "LIBRARY_TAB_X = 24",
+        "LIBRARY_TAB_X = INK_LAUNCHER_HEADER_GUTTER",
         "LIBRARY_TAB_Y = 58",
         "LIBRARY_TAB_WIDTH = 138",
         "LIBRARY_TAB_GAP = 8",
@@ -321,6 +420,13 @@ def test_reader_library_ui_is_a_pure_bounded_renderer() -> None:
     assert "draw_heart_icon(" in reader_ui
     assert "draw_clipped_text(" in reader_ui
     assert "ink_epd_ui_reader_self_test" in reader_ui
+    draw_library = reader_ui[
+        reader_ui.index("void ink_epd_ui_draw_library(") :
+        reader_ui.index("ink_epd_region_t ink_epd_ui_library_selection_region(")
+    ]
+    assert "INK_LAUNCHER_DIVIDER_Y" in draw_library
+    assert "view->header_meta" not in draw_library
+    assert "LIBRARY_PAGE_" not in draw_library
     for forbidden in (
         "ink_system_runtime",
         "ink_display_mailbox",
@@ -406,8 +512,9 @@ def test_reader_footer_is_bounded_and_overlaid_after_page_decode() -> None:
     assert "ink_epd_ui_fill_rect(" in draw_footer
     assert "draw_clipped_text(" in draw_footer
     assert '"%u%% %u/%u"' in app
-    assert "draw_reader_footer(book, candidate_framebuffer);" in app
-    assert app.count("draw_reader_footer(book, candidate_framebuffer);") >= 2
+    assert "draw_reader_footer(&candidate_book, candidate_framebuffer);" in app
+    assert "draw_reader_footer((const ink_reader_book_t *)context, buffer);" in app
+    assert ".decorate = decorate_reader_page" in app
 
 
 def test_reader_back_navigation_remains_two_level() -> None:
@@ -420,3 +527,109 @@ def test_reader_back_navigation_remains_two_level() -> None:
     assert "READER_APP_PAGE_READING" in model
     assert "READER_LIBRARY_FOCUS_TABS" in model
     assert "READER_APP_EFFECT_CLOSE_READER_MENU" in model
+
+
+def test_boot_loading_asset_is_flash_backed_and_fixed_geometry() -> None:
+    header = source("components/ink_epd_ui/include/ink_epd_ui.h")
+    cmake = source("components/ink_epd_ui/CMakeLists.txt")
+    asset = source("components/ink_epd_ui/ink_loading_asset.c")
+
+    assert "ink_epd_ui_loading_region(void)" in header
+    assert "ink_epd_ui_draw_loading(uint8_t *buffer, size_t length)" in header
+    assert '"ink_loading_asset.c"' in cmake
+    for geometry in (
+        "LOADING_REGION_X = 132",
+        "LOADING_REGION_Y = 372",
+        "LOADING_REGION_WIDTH = 216",
+        "LOADING_REGION_HEIGHT = 56",
+        "LOADING_IMAGE_X = 140",
+        "LOADING_IMAGE_Y = 380",
+        "LOADING_IMAGE_WIDTH = 200",
+        "LOADING_IMAGE_HEIGHT = 40",
+    ):
+        assert geometry in asset
+    assert "fopen(" not in asset
+    assert "ink_sd" not in asset
+    assert "ink_fonts" not in asset
+
+
+def test_boot_loading_precedes_all_normal_boot_switches() -> None:
+    launcher = source("apps/launcher/main/app_main.c")
+    reader = source("apps/reader/main/app_main.c")
+    photo = source("apps/photo/main/app_main.c")
+
+    for app in (launcher, reader, photo):
+        helper = app[
+            app.index("static void show_boot_loading(") :
+            app.index("\n}\n", app.index("static void show_boot_loading(")) + 3
+        ]
+        assert "ink_epd_ui_draw_loading(" in helper
+        assert "ink_epd_ui_loading_region()" in helper
+        assert "ink_hw_partial_refresh_area(" in helper
+        assert 'BOOT_LOADING from=%s to=%s refresh=%s' in helper
+
+    launcher_reader = launcher[
+        launcher.index("if (selected == 0)") : launcher.index(
+            "} else {", launcher.index("if (selected == 0)")
+        )
+    ]
+    launcher_photo = launcher[
+        launcher.index("} else {", launcher.index("if (selected == 0)")) :
+        launcher.index("\n      }", launcher.index("} else {", launcher.index("if (selected == 0)")))
+    ]
+    for route, loading_call, switch_log, switch_call in (
+        (
+            launcher_reader,
+            'show_boot_loading(framebuffer, "launcher", "reader")',
+            'BOOT_SWITCH from=launcher to=reader',
+            "ink_boot_switch_to_reader()",
+        ),
+        (
+            launcher_photo,
+            'show_boot_loading(framebuffer, "launcher", "photo")',
+            'BOOT_SWITCH from=launcher to=photo',
+            "ink_boot_switch_to_photo()",
+        ),
+    ):
+        assert route.index(loading_call) < route.index(switch_log)
+        assert route.index(switch_log) < route.index(switch_call)
+
+    reader_return = reader[
+        reader.index("if (effect == READER_APP_EFFECT_RETURN_LAUNCHER)") :
+        reader.index("\n  }", reader.index("if (effect == READER_APP_EFFECT_RETURN_LAUNCHER)"))
+    ]
+    assert reader_return.index(
+        'show_boot_loading(framebuffer, "reader", "launcher")'
+    ) < reader_return.index('BOOT_SWITCH from=reader to=launcher')
+    assert reader_return.index('BOOT_SWITCH from=reader to=launcher') < reader_return.index(
+        "ink_boot_switch_to_launcher()"
+    )
+
+    photo_return = photo[
+        photo.index("if (ink_input_was_pressed(&input, INK_BUTTON_BACK))") :
+        photo.index("\n      }", photo.index("if (ink_input_was_pressed(&input, INK_BUTTON_BACK))"))
+    ]
+    assert photo_return.index(
+        'show_boot_loading(lsb, "photo", "launcher")'
+    ) < photo_return.index('BOOT_SWITCH from=photo to=launcher')
+    assert photo_return.index('BOOT_SWITCH from=photo to=launcher') < photo_return.index(
+        "ink_boot_switch_to_launcher()"
+    )
+
+
+def test_boot_loading_covers_reader_memory_error_return() -> None:
+    reader = source("apps/reader/main/app_main.c")
+    wait = reader[
+        reader.index("static void wait_for_launcher(") :
+        reader.index("\n}\n", reader.index("static void wait_for_launcher(")) + 3
+    ]
+    allocation_error = reader[
+        reader.index("if (!framebuffer || !candidate_framebuffer)") :
+        reader.index("uint8_t *page_cache_storage")
+    ]
+
+    assert "uint8_t *framebuffer" in wait
+    assert wait.index(
+        'show_boot_loading(framebuffer, "reader", "launcher")'
+    ) < wait.index('BOOT_SWITCH from=reader to=launcher')
+    assert "wait_for_launcher(memory_input_ret, error_framebuffer);" in allocation_error

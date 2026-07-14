@@ -62,6 +62,24 @@ static void log_stage(const char *stage) {
            (long long)elapsed_ms());
 }
 
+static void show_boot_loading(uint8_t *framebuffer, const char *from,
+                              const char *to) {
+  if (!framebuffer) {
+    ESP_LOGI(TAG, "BOOT_LOADING from=%s to=%s refresh=%s", from, to,
+             "skipped");
+    return;
+  }
+  ink_epd_ui_draw_loading(framebuffer, INK_EPD_BUFFER_SIZE);
+  const ink_epd_region_t region = ink_epd_ui_loading_region();
+  const esp_err_t ret = ink_hw_partial_refresh_area(
+      framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)region.x,
+      (uint16_t)region.y, (uint16_t)region.width, (uint16_t)region.height);
+  ESP_LOGI(TAG, "BOOT_LOADING from=%s to=%s refresh=%s", from, to,
+           ret == ESP_OK ? "ok" : "failed");
+  if (ret != ESP_OK)
+    ESP_LOGW(TAG, "boot loading refresh failed err=%s", esp_err_to_name(ret));
+}
+
 static bool photo_should_full_refresh(unsigned successful_partial_count) {
   return successful_partial_count >= PHOTO_PARTIAL_REFRESH_LIMIT;
 }
@@ -479,6 +497,7 @@ void app_main(void) {
     const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     if (input_ret == ESP_OK && ink_input_poll(now, &input) == ESP_OK) {
       if (ink_input_was_pressed(&input, INK_BUTTON_BACK)) {
+        show_boot_loading(lsb, "photo", "launcher");
         ESP_LOGI(TAG, "BOOT_SWITCH from=photo to=launcher");
         esp_err_t ret = ink_boot_switch_to_launcher();
         if (ret != ESP_OK) {

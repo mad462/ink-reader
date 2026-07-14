@@ -590,10 +590,16 @@ bool ink_reader_book_load_current(const ink_reader_book_t *book,
                    length);
 }
 
+bool ink_reader_book_decode_page(const ink_reader_book_t *book,
+                                 size_t page_index, uint8_t *buffer,
+                                 size_t length) {
+  if (!book || !book->pages || page_index >= book->page_count) return false;
+  return load_page(book->file, &book->pages[page_index], buffer, length);
+}
+
 bool ink_reader_book_load_page(ink_reader_book_t *book, size_t page_index,
                                uint8_t *buffer, size_t length) {
-  if (!book || !book->pages || page_index >= book->page_count ||
-      !load_page(book->file, &book->pages[page_index], buffer, length))
+  if (!ink_reader_book_decode_page(book, page_index, buffer, length))
     return false;
   book->current_page = page_index;
   return true;

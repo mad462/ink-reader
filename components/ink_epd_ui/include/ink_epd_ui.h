@@ -140,6 +140,8 @@ void ink_epd_ui_draw_launcher_with_fonts(
     const ink_epd_ui_fonts_t *fonts);
 ink_epd_region_t ink_epd_ui_launcher_selection_region(int previous,
                                                        int selected);
+ink_epd_region_t ink_epd_ui_loading_region(void);
+void ink_epd_ui_draw_loading(uint8_t *buffer, size_t length);
 void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
                                 const ink_epd_photo_row_t *rows, size_t count,
                                 size_t selected);

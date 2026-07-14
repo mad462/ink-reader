@@ -486,6 +486,24 @@ int main(void) {
     fprintf(stderr, "page transaction fixture did not open\n");
     goto cleanup;
   }
+  book.current_page = 1U;
+  memset(framebuffer, 0xa5, INK_READER_PAGE_SIZE);
+  if (!ink_reader_book_decode_page(&book, 0U, framebuffer,
+                                   INK_READER_PAGE_SIZE) ||
+      book.current_page != 1U || !framebuffer_is(framebuffer, 0x00)) {
+    fprintf(stderr, "successful non-destructive decode changed book state\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  book.current_page = 0U;
+  memset(framebuffer, 0xa5, INK_READER_PAGE_SIZE);
+  if (ink_reader_book_decode_page(&book, 1U, framebuffer,
+                                  INK_READER_PAGE_SIZE) ||
+      book.current_page != 0U || !framebuffer_is(framebuffer, 0xa5)) {
+    fprintf(stderr, "failed non-destructive decode changed output state\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
   memset(framebuffer, 0xa5, INK_READER_PAGE_SIZE);
   if (ink_reader_book_load_page(&book, 1, framebuffer,
                                 INK_READER_PAGE_SIZE)) {

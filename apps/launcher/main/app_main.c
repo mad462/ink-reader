@@ -25,6 +25,24 @@ static bool launcher_policy_self_test(void) {
          launcher_committed_selection(0, 1, true) == 1;
 }
 
+static void show_boot_loading(uint8_t *framebuffer, const char *from,
+                              const char *to) {
+  if (!framebuffer) {
+    ESP_LOGI(TAG, "BOOT_LOADING from=%s to=%s refresh=%s", from, to,
+             "skipped");
+    return;
+  }
+  ink_epd_ui_draw_loading(framebuffer, INK_EPD_BUFFER_SIZE);
+  const ink_epd_region_t region = ink_epd_ui_loading_region();
+  const esp_err_t ret = ink_hw_partial_refresh_area(
+      framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)region.x,
+      (uint16_t)region.y, (uint16_t)region.width, (uint16_t)region.height);
+  ESP_LOGI(TAG, "BOOT_LOADING from=%s to=%s refresh=%s", from, to,
+           ret == ESP_OK ? "ok" : "failed");
+  if (ret != ESP_OK)
+    ESP_LOGW(TAG, "boot loading refresh failed err=%s", esp_err_to_name(ret));
+}
+
 void app_main(void) {
   const int64_t started_us = esp_timer_get_time();
   ESP_LOGI(TAG, "APP_START name=launcher");
@@ -95,9 +113,11 @@ void app_main(void) {
     }
     if (ink_input_was_pressed(&input, INK_BUTTON_CONFIRM)) {
       if (selected == 0) {
+        show_boot_loading(framebuffer, "launcher", "reader");
         ESP_LOGI(TAG, "BOOT_SWITCH from=launcher to=reader");
         (void)ink_boot_switch_to_reader();
       } else {
+        show_boot_loading(framebuffer, "launcher", "photo");
         ESP_LOGI(TAG, "BOOT_SWITCH from=launcher to=photo");
         (void)ink_boot_switch_to_photo();
       }

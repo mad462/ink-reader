@@ -96,6 +96,20 @@ static esp_err_t wait_ready(const char *stage, ink_hw_refresh_poll_fn poll,
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
+static esp_err_t wait_ready_with_pump(const char *stage,
+                                      ink_hw_refresh_pump_fn pump,
+                                      void *context) {
+  TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(BUSY_TIMEOUT_MS);
+  while (true) {
+    if (pump) pump(context);
+    if (!gpio_get_level(GPIO_NUM_16)) return ESP_OK;
+    if ((int32_t)(deadline - xTaskGetTickCount()) <= 0) {
+      ESP_LOGE(TAG, "busy timeout stage=%s", stage);
+      return ESP_ERR_TIMEOUT;
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
 static void reset_panel(void) {
   gpio_set_level(GPIO_NUM_15, 0);
   vTaskDelay(pdMS_TO_TICKS(10));
@@ -301,6 +315,22 @@ esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length) {
 esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
                                       uint16_t x, uint16_t y, uint16_t width,
                                       uint16_t height) {
+  return ink_hw_partial_refresh_area_with_work(buffer, length, x, y, width,
+                                               height, NULL, NULL);
+}
+
+esp_err_t ink_hw_partial_refresh_area_with_work(
+    const uint8_t *buffer, size_t length, uint16_t x, uint16_t y,
+    uint16_t width, uint16_t height, ink_hw_refresh_work_fn work,
+    void *context) {
+  return ink_hw_partial_refresh_area_with_work_and_pump(
+      buffer, length, x, y, width, height, work, context, NULL, NULL);
+}
+
+esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(
+    const uint8_t *buffer, size_t length, uint16_t x, uint16_t y,
+    uint16_t width, uint16_t height, ink_hw_refresh_work_fn work,
+    void *work_context, ink_hw_refresh_pump_fn pump, void *pump_context) {
   if (!s_initialized) return ESP_ERR_INVALID_STATE;
   if (!buffer || length < INK_HW_BUFFER_SIZE || !width || !height ||
       (uint32_t)x + width > INK_HW_WIDTH ||
@@ -339,9 +369,11 @@ esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
   ESP_RETURN_ON_ERROR(command(0x22), TAG, "partial update cmd");
   ESP_RETURN_ON_ERROR(data_byte(0xff), TAG, "partial update mode");
   ESP_RETURN_ON_ERROR(command(0x20), TAG, "partial activate");
-  ESP_RETURN_ON_ERROR(
-      wait_ready("partial_update", NULL, NULL, WAIT_CANCEL_NONE), TAG,
-      "partial update timeout");
+  if (pump) pump(pump_context);
+  if (work) (void)work(work_context);
+  ESP_RETURN_ON_ERROR(wait_ready_with_pump("partial_update", pump,
+                                           pump_context),
+                      TAG, "partial update timeout");
   copy_native_area(s_shadow, s_native, native_x, native_y, native_width,
                    native_height);
   return ESP_OK;

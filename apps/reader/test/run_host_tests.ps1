@@ -12,6 +12,9 @@ $runRoot = Join-Path $env:TEMP ('ink-reader-app-model-' + [guid]::NewGuid().ToSt
 $exe = Join-Path $runRoot 'reader_app_model_host_test.exe'
 $refreshExe = Join-Path $runRoot 'reader_refresh_policy_host_test.exe'
 $holdExe = Join-Path $runRoot 'reader_hold_paging_host_test.exe'
+$cacheExe = Join-Path $runRoot 'reader_page_cache_host_test.exe'
+$pageTurnExe = Join-Path $runRoot 'reader_page_turn_host_test.exe'
+$inputQueueExe = Join-Path $runRoot 'reader_input_queue_host_test.exe'
 
 if (-not $TccPath) {
     $cachedTcc = Join-Path $env:TEMP 'ink-reader-host-tools\tcc\tcc.exe'
@@ -57,6 +60,31 @@ try {
         (Join-Path $mainDir 'reader_hold_paging.c')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $holdExe
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $TccPath -Wall -Werror `
+        -I $mainDir `
+        -o $cacheExe `
+        (Join-Path $testDir 'reader_page_cache_host_test.c') `
+        (Join-Path $mainDir 'reader_page_cache.c')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $cacheExe
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $TccPath -Wall -Werror `
+        -I $mainDir `
+        -o $pageTurnExe `
+        (Join-Path $testDir 'reader_page_turn_host_test.c') `
+        (Join-Path $mainDir 'reader_page_turn.c') `
+        (Join-Path $mainDir 'reader_page_cache.c')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $pageTurnExe
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $TccPath -Wall -Werror `
+        -I $mainDir `
+        -o $inputQueueExe `
+        (Join-Path $testDir 'reader_input_queue_host_test.c') `
+        (Join-Path $mainDir 'reader_input_queue.c')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $inputQueueExe
     exit $LASTEXITCODE
 } finally {
     if (Test-Path -LiteralPath $runRoot) {
