@@ -14,9 +14,30 @@ typedef struct {
   uint16_t width;
   uint16_t height;
 } ink_reader_page_t;
+
+typedef struct {
+  char title[129];
+  char author[65];
+  char publisher[33];
+  char language[17];
+  uint32_t create_time;
+  uint16_t cover_page;
+  uint16_t chapter_count;
+} ink_reader_metadata_t;
+
+typedef struct {
+  char title[81];
+  uint16_t start_page;
+  uint16_t end_page;
+} ink_reader_chapter_t;
+
 typedef struct {
   FILE *file;
   char path[INK_READER_PATH_MAX];
+  ink_reader_metadata_t metadata;
+  bool has_metadata;
+  ink_reader_chapter_t *chapters;
+  size_t chapter_count;
   ink_reader_page_t *pages;
   size_t page_count;
   size_t current_page;
@@ -42,4 +63,11 @@ bool ink_reader_book_load_page(ink_reader_book_t *book, size_t page_index,
                                uint8_t *buffer, size_t length);
 bool ink_reader_book_next(ink_reader_book_t *book);
 bool ink_reader_book_previous(ink_reader_book_t *book);
+size_t ink_reader_book_chapter_count(const ink_reader_book_t *book);
+const ink_reader_chapter_t *ink_reader_book_chapter_at(
+    const ink_reader_book_t *book, size_t chapter_index);
+const ink_reader_chapter_t *ink_reader_book_chapter_for_page(
+    const ink_reader_book_t *book, size_t page_index);
+bool ink_reader_book_jump_to_chapter(ink_reader_book_t *book,
+                                     size_t chapter_index);
 bool ink_reader_core_self_test(void);

@@ -10,6 +10,9 @@
 #include "esp_heap_caps.h"
 
 #define XTC_HEADER_SIZE 56u
+#define XTC_LEGACY_HEADER_SIZE 48u
+#define XTC_METADATA_SIZE 256u
+#define XTC_CHAPTER_ENTRY_SIZE 96u
 #define XTC_INDEX_ENTRY_SIZE 16u
 #define XTG_HEADER_SIZE 22u
 #define XTC_MAGIC 0x00435458u
@@ -33,23 +36,155 @@ static uint64_t le64(const uint8_t *p) {
   return (uint64_t)le32(p) | ((uint64_t)le32(p + 4) << 32);
 }
 
-static bool parse_header(const uint8_t *raw, size_t length, uint16_t *count,
-                         uint64_t *index_offset, uint64_t *data_offset) {
-  if (!raw || length < XTC_HEADER_SIZE || !count || !index_offset ||
-      !data_offset)
-    return false;
+typedef struct {
+  uint16_t version;
+  uint16_t page_count;
+  bool has_metadata;
+  bool has_chapters;
+  uint64_t metadata_offset;
+  uint64_t chapter_offset;
+  uint64_t index_offset;
+  uint64_t data_offset;
+} xtc_header_t;
+
+static bool range_end(uint64_t offset, uint64_t length, uint64_t *end) {
+  if (UINT64_MAX - offset < length) return false;
+  if (end) *end = offset + length;
+  return true;
+}
+
+static void copy_text(char *dst, size_t dst_size, const uint8_t *src,
+                      size_t src_size) {
+  size_t length = 0;
+  if (!dst || dst_size == 0U) return;
+  while (length < src_size && src[length] != 0U) ++length;
+  if (length >= dst_size) length = dst_size - 1U;
+  if (length > 0U) memcpy(dst, src, length);
+  dst[length] = '\0';
+}
+
+static bool parse_header(const uint8_t *raw, size_t length,
+                         xtc_header_t *header) {
+  if (!raw || length < XTC_HEADER_SIZE || !header) return false;
+  memset(header, 0, sizeof(*header));
   const uint32_t magic = le32(raw);
-  const uint16_t version = le16(raw + 4);
-  *count = le16(raw + 6);
-  *index_offset = le64(raw + 24);
-  *data_offset = le64(raw + 32);
+  header->version = le16(raw + 4);
+  header->page_count = le16(raw + 6);
+  header->has_metadata = raw[9] != 0U;
+  header->has_chapters = raw[11] != 0U;
+  header->metadata_offset = le64(raw + 16);
+  header->index_offset = le64(raw + 24);
+  header->data_offset = le64(raw + 32);
+  const uint64_t header_size =
+      header->version == 256 ? XTC_LEGACY_HEADER_SIZE : XTC_HEADER_SIZE;
   if ((magic != XTC_MAGIC && magic != XTCH_MAGIC) ||
-      (version != 1 && version != 256) || *count == 0)
+      (header->version != 1 && header->version != 256) ||
+      header->page_count == 0U || header->index_offset < header_size ||
+      header->data_offset <= header->index_offset)
     return false;
-  const uint64_t header_size = version == 256 ? 48u : 56u;
-  return *index_offset >= header_size && *data_offset > *index_offset &&
-         *index_offset + (uint64_t)*count * XTC_INDEX_ENTRY_SIZE <=
-             *data_offset;
+
+  uint64_t metadata_end = 0;
+  uint64_t index_end = 0;
+  if (!range_end(header->index_offset,
+                 (uint64_t)header->page_count * XTC_INDEX_ENTRY_SIZE,
+                 &index_end) ||
+      index_end > header->data_offset)
+    return false;
+  if (header->has_metadata) {
+    if (header->metadata_offset < header_size ||
+        !range_end(header->metadata_offset, XTC_METADATA_SIZE,
+                   &metadata_end) ||
+        metadata_end > header->index_offset)
+      return false;
+  } else if (header->metadata_offset != 0U) {
+    return false;
+  }
+
+  if (header->version == 256) {
+    if (header->has_chapters)
+      header->chapter_offset =
+          header->has_metadata ? metadata_end : XTC_LEGACY_HEADER_SIZE;
+  } else {
+    header->chapter_offset = le64(raw + 48);
+  }
+  if (header->has_chapters) {
+    if (header->chapter_offset < header_size ||
+        header->chapter_offset >= header->index_offset ||
+        (header->has_metadata && header->chapter_offset < metadata_end) ||
+        (header->index_offset - header->chapter_offset) %
+                XTC_CHAPTER_ENTRY_SIZE !=
+            0U)
+      return false;
+  } else if (header->chapter_offset != 0U) {
+    return false;
+  }
+  return true;
+}
+
+static void parse_metadata(const uint8_t *raw, ink_reader_metadata_t *out) {
+  memset(out, 0, sizeof(*out));
+  copy_text(out->title, sizeof(out->title), raw, 128U);
+  copy_text(out->author, sizeof(out->author), raw + 128, 64U);
+  copy_text(out->publisher, sizeof(out->publisher), raw + 200, 32U);
+  copy_text(out->language, sizeof(out->language), raw + 224, 16U);
+  out->create_time = le32(raw + 192);
+  out->chapter_count = le16(raw + 196);
+  out->cover_page = le16(raw + 244);
+  if (out->chapter_count == 0U) out->chapter_count = le16(raw + 246);
+}
+
+static bool read_metadata(FILE *file, const xtc_header_t *header,
+                          ink_reader_metadata_t *metadata) {
+  uint8_t raw[XTC_METADATA_SIZE];
+  if (!header->has_metadata) return true;
+  if (header->metadata_offset > LONG_MAX ||
+      fseek(file, (long)header->metadata_offset, SEEK_SET) != 0 ||
+      fread(raw, 1, sizeof(raw), file) != sizeof(raw))
+    return false;
+  parse_metadata(raw, metadata);
+  return true;
+}
+
+static bool read_chapters(FILE *file, const xtc_header_t *header,
+                          ink_reader_chapter_t **chapters_out,
+                          size_t *count_out) {
+  *chapters_out = NULL;
+  *count_out = 0U;
+  if (!header->has_chapters) return true;
+  const uint64_t span = header->index_offset - header->chapter_offset;
+  const uint64_t count64 = span / XTC_CHAPTER_ENTRY_SIZE;
+  if (count64 == 0U || count64 > SIZE_MAX / sizeof(ink_reader_chapter_t) ||
+      header->chapter_offset > LONG_MAX)
+    return false;
+  const size_t count = (size_t)count64;
+  ink_reader_chapter_t *chapters = heap_caps_calloc(
+      count, sizeof(*chapters), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!chapters) chapters = calloc(count, sizeof(*chapters));
+  if (!chapters || fseek(file, (long)header->chapter_offset, SEEK_SET) != 0) {
+    free(chapters);
+    return false;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    uint8_t raw[XTC_CHAPTER_ENTRY_SIZE];
+    if (fread(raw, 1, sizeof(raw), file) != sizeof(raw)) {
+      free(chapters);
+      return false;
+    }
+    copy_text(chapters[i].title, sizeof(chapters[i].title), raw, 80U);
+    chapters[i].start_page = le16(raw + 80);
+    chapters[i].end_page = le16(raw + 82);
+    if (chapters[i].start_page >= header->page_count ||
+        chapters[i].end_page < chapters[i].start_page ||
+        chapters[i].end_page >= header->page_count ||
+        (i > 0U &&
+         chapters[i].start_page < chapters[i - 1U].start_page)) {
+      free(chapters);
+      return false;
+    }
+  }
+  *chapters_out = chapters;
+  *count_out = count;
+  return true;
 }
 
 static bool extension_ok(const char *name) {
@@ -176,6 +311,7 @@ void ink_reader_book_init(ink_reader_book_t *book) {
 void ink_reader_book_close(ink_reader_book_t *book) {
   if (!book) return;
   if (book->file) fclose(book->file);
+  free(book->chapters);
   free(book->pages);
   memset(book, 0, sizeof(*book));
 }
@@ -230,22 +366,21 @@ bool ink_reader_book_open(ink_reader_book_t *book, const char *path) {
   FILE *file = fopen(path, "rb");
   if (!file) return false;
   uint8_t header[XTC_HEADER_SIZE];
-  uint16_t count;
-  uint64_t index_offset, data_offset;
+  xtc_header_t parsed;
   if (fread(header, 1, sizeof(header), file) != sizeof(header) ||
-      !parse_header(header, sizeof(header), &count, &index_offset,
-                    &data_offset) ||
-      index_offset > LONG_MAX)
+      !parse_header(header, sizeof(header), &parsed) ||
+      parsed.index_offset > LONG_MAX)
     goto fail;
   ink_reader_page_t *pages = heap_caps_calloc(
-      count, sizeof(*pages), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!pages) pages = calloc(count, sizeof(*pages));
+      parsed.page_count, sizeof(*pages), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!pages) pages = calloc(parsed.page_count, sizeof(*pages));
   if (!pages) goto fail;
-  if (fseek(file, (long)index_offset, SEEK_SET) != 0) {
+  if (fseek(file, (long)parsed.index_offset, SEEK_SET) != 0) {
     free(pages);
     goto fail;
   }
-  for (uint16_t i = 0; i < count; ++i) {
+  uint64_t previous_end = parsed.data_offset;
+  for (uint16_t i = 0; i < parsed.page_count; ++i) {
     uint8_t raw[XTC_INDEX_ENTRY_SIZE];
     if (fread(raw, 1, sizeof(raw), file) != sizeof(raw)) {
       free(pages);
@@ -255,16 +390,32 @@ bool ink_reader_book_open(ink_reader_book_t *book, const char *path) {
     pages[i].encoded_size = le32(raw + 8);
     pages[i].width = le16(raw + 12);
     pages[i].height = le16(raw + 14);
-    if (pages[i].offset < data_offset ||
+    uint64_t page_end = 0;
+    if (pages[i].offset < parsed.data_offset ||
         pages[i].encoded_size < XTG_HEADER_SIZE || pages[i].width != 480 ||
-        pages[i].height != 800) {
+        pages[i].height != 800 ||
+        !range_end(pages[i].offset, pages[i].encoded_size, &page_end) ||
+        pages[i].offset < previous_end) {
       free(pages);
       goto fail;
     }
+    previous_end = page_end;
+  }
+  ink_reader_metadata_t metadata = {0};
+  ink_reader_chapter_t *chapters = NULL;
+  size_t chapter_count = 0U;
+  if (!read_metadata(file, &parsed, &metadata) ||
+      !read_chapters(file, &parsed, &chapters, &chapter_count)) {
+    free(pages);
+    goto fail;
   }
   book->file = file;
+  book->metadata = metadata;
+  book->has_metadata = parsed.has_metadata;
+  book->chapters = chapters;
+  book->chapter_count = chapter_count;
   book->pages = pages;
-  book->page_count = count;
+  book->page_count = parsed.page_count;
   snprintf(book->path, sizeof(book->path), "%s", path);
   return true;
 fail:
@@ -350,17 +501,49 @@ bool ink_reader_book_previous(ink_reader_book_t *book) {
   return true;
 }
 
+size_t ink_reader_book_chapter_count(const ink_reader_book_t *book) {
+  return book ? book->chapter_count : 0U;
+}
+
+const ink_reader_chapter_t *ink_reader_book_chapter_at(
+    const ink_reader_book_t *book, size_t chapter_index) {
+  if (!book || !book->chapters || chapter_index >= book->chapter_count)
+    return NULL;
+  return &book->chapters[chapter_index];
+}
+
+const ink_reader_chapter_t *ink_reader_book_chapter_for_page(
+    const ink_reader_book_t *book, size_t page_index) {
+  if (!book || !book->chapters || book->chapter_count == 0U ||
+      page_index >= book->page_count)
+    return NULL;
+  const ink_reader_chapter_t *chapter = &book->chapters[0];
+  for (size_t i = 1; i < book->chapter_count; ++i) {
+    if (page_index < book->chapters[i].start_page) break;
+    chapter = &book->chapters[i];
+  }
+  return chapter;
+}
+
+bool ink_reader_book_jump_to_chapter(ink_reader_book_t *book,
+                                     size_t chapter_index) {
+  const ink_reader_chapter_t *chapter =
+      ink_reader_book_chapter_at(book, chapter_index);
+  if (!chapter || chapter->start_page >= book->page_count) return false;
+  book->current_page = chapter->start_page;
+  return true;
+}
+
 bool ink_reader_core_self_test(void) {
   uint8_t h[XTC_HEADER_SIZE] = {'X', 'T', 'C', 0, 1, 0, 2, 0};
   h[24] = 56;
   h[32] = 88;
-  uint16_t count = 0;
-  uint64_t index = 0, data = 0;
-  if (!parse_header(h, sizeof(h), &count, &index, &data) || count != 2 ||
-      index != 56 || data != 88)
+  xtc_header_t header;
+  if (!parse_header(h, sizeof(h), &header) || header.page_count != 2 ||
+      header.index_offset != 56 || header.data_offset != 88)
     return false;
   h[0] = 'B';
-  if (parse_header(h, sizeof(h), &count, &index, &data)) return false;
+  if (parse_header(h, sizeof(h), &header)) return false;
   if (!extension_ok("BOOK.XTC") || !extension_ok("book.xtch") ||
       extension_ok("book.txt") ||
       classify_scan(0U, READER_DIR_MISSING, READER_DIR_OK) !=

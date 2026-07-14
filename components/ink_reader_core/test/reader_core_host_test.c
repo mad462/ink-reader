@@ -20,6 +20,16 @@
 #define XTH_FAIL_BOOK TEST_BOOKS "/xth_fail.bin"
 #define XTH_SCAN_BAD_BOOK TEST_BOOKS "/a_xth_bad.xtch"
 #define XTH_SCAN_GOOD_BOOK TEST_BOOKS "/b_xth_good.xtch"
+#define CHAPTER_V1_BOOK TEST_BOOKS "/chapter_v1.xtc"
+#define CHAPTER_V256_BOOK TEST_BOOKS "/chapter_v256.xtc"
+#define BAD_METADATA_OFFSET_BOOK TEST_BOOKS "/bad_metadata_offset.xtc"
+#define BAD_CHAPTER_RANGE_BOOK TEST_BOOKS "/bad_chapter_range.xtc"
+#define BAD_CHAPTER_REVERSED_BOOK TEST_BOOKS "/bad_chapter_reversed.xtc"
+#define BAD_CHAPTER_END_BOOK TEST_BOOKS "/bad_chapter_end.xtc"
+
+#define XTC_METADATA_SIZE 256u
+#define XTC_CHAPTER_ENTRY_SIZE 96u
+#define XTC_PAGE_INDEX_ENTRY_SIZE 16u
 
 static void put16(uint8_t *p, uint16_t value) {
   p[0] = (uint8_t)value;
@@ -140,6 +150,65 @@ static int write_single_page_xth(const char *path, size_t payload_bytes) {
   return fclose(file) == 0 && ok;
 }
 
+static int write_chapter_book(const char *path, uint16_t version,
+                              const char *title, int bad_metadata_offset,
+                              int bad_chapter_range) {
+  uint8_t header[56] = {0};
+  uint8_t metadata[XTC_METADATA_SIZE] = {0};
+  uint8_t chapters[2 * XTC_CHAPTER_ENTRY_SIZE] = {0};
+  uint8_t index[3 * XTC_PAGE_INDEX_ENTRY_SIZE] = {0};
+  uint8_t page_header[22];
+  const uint64_t header_size = version == 256 ? 48u : 56u;
+  const uint64_t metadata_offset = header_size;
+  const uint64_t chapter_offset = metadata_offset + sizeof(metadata);
+  const uint64_t index_offset = chapter_offset + sizeof(chapters);
+  const uint64_t data_offset = index_offset + sizeof(index);
+  FILE *file = fopen(path, "wb");
+  if (!file) return 0;
+
+  memcpy(header, "XTC\0", 4);
+  put16(header + 4, version);
+  put16(header + 6, 3);
+  header[9] = 1;
+  header[11] = 1;
+  put64(header + 16,
+        bad_metadata_offset ? header_size - 1u : metadata_offset);
+  put64(header + 24, index_offset);
+  put64(header + 32, data_offset);
+  if (version == 1) put64(header + 48, chapter_offset);
+
+  snprintf((char *)metadata, 128, "%s", title);
+  put16(metadata + 196, 2);
+  memcpy(chapters, "Opening", 7);
+  put16(chapters + 80, bad_chapter_range == 1 ? 3
+                        : bad_chapter_range == 2 ? 2
+                                                 : 0);
+  put16(chapters + 82, bad_chapter_range == 2   ? 0
+                        : bad_chapter_range == 3 ? 3
+                                                 : 1);
+  memcpy(chapters + XTC_CHAPTER_ENTRY_SIZE, "Finale", 6);
+  put16(chapters + XTC_CHAPTER_ENTRY_SIZE + 80, 2);
+  put16(chapters + XTC_CHAPTER_ENTRY_SIZE + 82, 2);
+
+  for (size_t i = 0; i < 3; ++i) {
+    const uint64_t page_offset = data_offset + i * sizeof(page_header);
+    put64(index + i * XTC_PAGE_INDEX_ENTRY_SIZE, page_offset);
+    put32(index + i * XTC_PAGE_INDEX_ENTRY_SIZE + 8, sizeof(page_header));
+    put16(index + i * XTC_PAGE_INDEX_ENTRY_SIZE + 12, 480);
+    put16(index + i * XTC_PAGE_INDEX_ENTRY_SIZE + 14, 800);
+  }
+  make_page_header(page_header, "XTG\0", INK_READER_PAGE_SIZE);
+
+  int ok = fwrite(header, 1, (size_t)header_size, file) == header_size &&
+           fwrite(metadata, 1, sizeof(metadata), file) == sizeof(metadata) &&
+           fwrite(chapters, 1, sizeof(chapters), file) == sizeof(chapters) &&
+           fwrite(index, 1, sizeof(index), file) == sizeof(index);
+  for (size_t i = 0; ok && i < 3; ++i)
+    ok = fwrite(page_header, 1, sizeof(page_header), file) ==
+         sizeof(page_header);
+  return fclose(file) == 0 && ok;
+}
+
 static int write_xth_page_failure_book(void) {
   uint8_t container[88] = {0};
   uint8_t xtg_header[22];
@@ -183,6 +252,12 @@ static void cleanup_fixture(void) {
   remove(XTH_FAIL_BOOK);
   remove(XTH_SCAN_BAD_BOOK);
   remove(XTH_SCAN_GOOD_BOOK);
+  remove(CHAPTER_V1_BOOK);
+  remove(CHAPTER_V256_BOOK);
+  remove(BAD_METADATA_OFFSET_BOOK);
+  remove(BAD_CHAPTER_RANGE_BOOK);
+  remove(BAD_CHAPTER_REVERSED_BOOK);
+  remove(BAD_CHAPTER_END_BOOK);
   _rmdir(TEST_BOOKS);
   _rmdir(TEST_ROOT);
 }
@@ -212,7 +287,14 @@ int main(void) {
       !write_single_page_book(GOOD_BOOK, INK_READER_PAGE_SIZE) ||
       !write_page_failure_book() ||
       !write_single_page_xth(XTH_GOOD_BOOK, INK_READER_PAGE_SIZE * 2u) ||
-      !write_xth_page_failure_book()) {
+      !write_xth_page_failure_book() ||
+      !write_chapter_book(CHAPTER_V1_BOOK, 1, "Version One", 0, 0) ||
+      !write_chapter_book(CHAPTER_V256_BOOK, 256, "Legacy 256", 0, 0) ||
+      !write_chapter_book(BAD_METADATA_OFFSET_BOOK, 1, "Bad Offset", 1, 0) ||
+      !write_chapter_book(BAD_CHAPTER_RANGE_BOOK, 1, "Bad Range", 0, 1) ||
+      !write_chapter_book(BAD_CHAPTER_REVERSED_BOOK, 1, "Bad Reverse", 0,
+                          2) ||
+      !write_chapter_book(BAD_CHAPTER_END_BOOK, 1, "Bad End", 0, 3)) {
     fprintf(stderr, "fixture file setup failed\n");
     goto cleanup;
   }
@@ -232,6 +314,65 @@ int main(void) {
     goto cleanup;
   }
   ink_reader_book_close(&book);
+
+  if (!ink_reader_book_open(&book, CHAPTER_V1_BOOK) || !book.has_metadata ||
+      strcmp(book.metadata.title, "Version One") != 0 ||
+      ink_reader_book_chapter_count(&book) != 2) {
+    fprintf(stderr, "v1 metadata or chapters did not parse\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  const ink_reader_chapter_t *chapter = ink_reader_book_chapter_at(&book, 0);
+  if (!chapter || strcmp(chapter->title, "Opening") != 0 ||
+      chapter->start_page != 0 || chapter->end_page != 1 ||
+      ink_reader_book_chapter_at(&book, 2) != NULL ||
+      ink_reader_book_chapter_for_page(&book, 0) != chapter ||
+      ink_reader_book_chapter_for_page(&book, 1) != chapter) {
+    fprintf(stderr, "v1 chapter entries or first boundary are wrong\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  chapter = ink_reader_book_chapter_for_page(&book, 2);
+  if (!chapter || strcmp(chapter->title, "Finale") != 0 ||
+      ink_reader_book_chapter_for_page(&book, 3) != NULL ||
+      !ink_reader_book_jump_to_chapter(&book, 1) || book.current_page != 2 ||
+      ink_reader_book_jump_to_chapter(&book, 2) || book.current_page != 2) {
+    fprintf(stderr, "page-to-chapter boundary or jump is wrong\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  ink_reader_book_close(&book);
+
+  if (!ink_reader_book_open(&book, CHAPTER_V256_BOOK) ||
+      strcmp(book.metadata.title, "Legacy 256") != 0 ||
+      ink_reader_book_chapter_count(&book) != 2 ||
+      !ink_reader_book_jump_to_chapter(&book, 1) || book.current_page != 2) {
+    fprintf(stderr, "v256 metadata, chapters, or jump did not parse\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  ink_reader_book_close(&book);
+
+  if (ink_reader_book_open(&book, BAD_METADATA_OFFSET_BOOK)) {
+    fprintf(stderr, "invalid metadata offset was accepted\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  if (ink_reader_book_open(&book, BAD_CHAPTER_RANGE_BOOK)) {
+    fprintf(stderr, "out-of-range chapter was accepted\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  if (ink_reader_book_open(&book, BAD_CHAPTER_REVERSED_BOOK)) {
+    fprintf(stderr, "reversed chapter range was accepted\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
+  if (ink_reader_book_open(&book, BAD_CHAPTER_END_BOOK)) {
+    fprintf(stderr, "out-of-range chapter end was accepted\n");
+    ink_reader_book_close(&book);
+    goto cleanup;
+  }
 
   if (!ink_reader_book_open(&book, XTH_FAIL_BOOK)) {
     fprintf(stderr, "XTH transaction fixture did not open\n");
