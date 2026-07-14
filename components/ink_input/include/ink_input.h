@@ -14,6 +14,7 @@ typedef enum {
   INK_BUTTON_COUNT
 } ink_button_t;
 typedef struct {
+  uint32_t raw_down;
   uint32_t down;
   uint32_t pressed;
   uint32_t released;
@@ -25,6 +26,8 @@ esp_err_t ink_input_poll(uint32_t now_ms, ink_input_snapshot_t *snapshot);
 uint32_t ink_input_mask(ink_button_t button);
 bool ink_input_is_down(const ink_input_snapshot_t *snapshot,
                        ink_button_t button);
+bool ink_input_is_raw_down(const ink_input_snapshot_t *snapshot,
+                           ink_button_t button);
 bool ink_input_was_pressed(const ink_input_snapshot_t *snapshot,
                            ink_button_t button);
 uint32_t ink_input_held_ms(const ink_input_snapshot_t *snapshot,

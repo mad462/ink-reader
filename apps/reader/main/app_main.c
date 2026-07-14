@@ -12,6 +12,7 @@
 #include "ink_reader_state.h"
 #include "ink_sd.h"
 #include "reader_app_model.h"
+#include "reader_hold_paging.h"
 #include "reader_refresh_policy.h"
 
 #include <stdio.h>
@@ -822,6 +823,68 @@ static bool jump_from_reader_menu(
   return true;
 }
 
+static void handle_reading_page_turn(
+    reader_hold_direction_t direction, size_t page_step,
+    ink_reader_book_t *book, uint8_t *framebuffer,
+    uint8_t *candidate_framebuffer, reader_refresh_state_t *refresh_state,
+    unsigned *successful_page_turns) {
+  const size_t target_page = reader_hold_target_page(
+      book->current_page, book->page_count, direction, page_step);
+  if (target_page == book->current_page) return;
+
+  const size_t previous_page = book->current_page;
+  memcpy(candidate_framebuffer, framebuffer, INK_EPD_BUFFER_SIZE);
+  if (!ink_reader_book_load_page(book, target_page, candidate_framebuffer,
+                                 INK_EPD_BUFFER_SIZE)) {
+    ESP_LOGE(TAG, "page load failed page=%u", (unsigned)target_page);
+    return;
+  }
+  draw_reader_footer(book, candidate_framebuffer);
+  ink_epd_region_t changed_region = {0};
+  const bool changed = find_changed_region(
+      framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
+      &changed_region);
+  const bool recovery = reader_refresh_state_choose(
+                            refresh_state, READER_REFRESH_PARTIAL) ==
+                        READER_REFRESH_FULL;
+  const bool cleanup =
+      !recovery && reader_should_cleanup(*successful_page_turns);
+  esp_err_t ret = ESP_OK;
+  if (recovery) {
+    ESP_LOGI(TAG, "PAGE_REFRESH mode=recovery_full page=%u step=%u",
+             (unsigned)target_page, (unsigned)page_step);
+    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  } else if (cleanup) {
+    ESP_LOGI(TAG, "PAGE_REFRESH mode=cleanup_full page=%u step=%u",
+             (unsigned)target_page, (unsigned)page_step);
+    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  } else if (changed) {
+    ESP_LOGI(TAG,
+             "PAGE_REFRESH mode=partial_full_window page=%u step=%u "
+             "x=0 y=0 w=%u h=%u",
+             (unsigned)target_page, (unsigned)page_step,
+             (unsigned)INK_HW_WIDTH, (unsigned)INK_HW_HEIGHT);
+    ret = ink_hw_partial_refresh_area(
+        candidate_framebuffer, INK_EPD_BUFFER_SIZE, 0U, 0U,
+        INK_HW_WIDTH, INK_HW_HEIGHT);
+  }
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "page refresh failed err=%s", esp_err_to_name(ret));
+    reader_refresh_state_record(refresh_state, false);
+    book->current_page = previous_page;
+    return;
+  }
+  memcpy(framebuffer, candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  if (recovery || cleanup) {
+    reader_refresh_state_record(refresh_state, true);
+    *successful_page_turns = 0U;
+  } else if (changed) {
+    reader_refresh_state_record(refresh_state, true);
+    *successful_page_turns = *successful_page_turns + 1U;
+  }
+  update_progress(book);
+}
+
 static void handle_reading_input(reader_app_input_t input,
                                  ink_reader_book_t *book,
                                  uint8_t *framebuffer,
@@ -876,58 +939,40 @@ static void handle_reading_input(reader_app_input_t input,
   }
   if (input != READER_APP_INPUT_LEFT && input != READER_APP_INPUT_RIGHT)
     return;
-  size_t target_page = book->current_page;
-  if (input == READER_APP_INPUT_LEFT && target_page > 0U)
-    --target_page;
-  if (input == READER_APP_INPUT_RIGHT && target_page + 1U < book->page_count)
-    ++target_page;
-  if (target_page == book->current_page) return;
+  handle_reading_page_turn(
+      input == READER_APP_INPUT_LEFT ? READER_HOLD_BACKWARD
+                                     : READER_HOLD_FORWARD,
+      1U, book, framebuffer, candidate_framebuffer, refresh_state,
+      successful_page_turns);
+}
 
-  const size_t previous_page = book->current_page;
-  memcpy(candidate_framebuffer, framebuffer, INK_EPD_BUFFER_SIZE);
-  if (!ink_reader_book_load_page(book, target_page, candidate_framebuffer,
-                                 INK_EPD_BUFFER_SIZE)) {
-    ESP_LOGE(TAG, "page load failed page=%u", (unsigned)target_page);
-    return;
+static bool reader_hold_sample_from_input(
+    reader_hold_paging_t *hold_paging, const ink_input_snapshot_t *input,
+    uint32_t now_ms, reader_hold_sample_t *sample) {
+  if (!hold_paging || !input || !sample) return false;
+  reader_hold_direction_t direction = hold_paging->direction;
+  if (!hold_paging->pending && !hold_paging->active) {
+    if (ink_input_was_pressed(input, INK_BUTTON_LEFT))
+      direction = READER_HOLD_BACKWARD;
+    else if (ink_input_was_pressed(input, INK_BUTTON_RIGHT))
+      direction = READER_HOLD_FORWARD;
+    else
+      return false;
   }
-  draw_reader_footer(book, candidate_framebuffer);
-  ink_epd_region_t region = {0};
-  const bool changed = find_changed_region(
-      framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
-      &region);
-  const bool recovery = reader_refresh_state_choose(
-                            refresh_state, READER_REFRESH_PARTIAL) ==
-                        READER_REFRESH_FULL;
-  const bool cleanup =
-      !recovery && reader_should_cleanup(*successful_page_turns);
-  esp_err_t ret = ESP_OK;
-  if (recovery) {
-    ESP_LOGI(TAG, "PAGE_REFRESH mode=recovery_full page=%u",
-             (unsigned)target_page);
-    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
-  } else if (cleanup) {
-    ESP_LOGI(TAG, "PAGE_REFRESH mode=cleanup_full page=%u",
-             (unsigned)target_page);
-    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
-  } else if (changed) {
-    ESP_LOGI(TAG, "PAGE_REFRESH mode=partial page=%u x=%d y=%d w=%d h=%d",
-             (unsigned)target_page, region.x, region.y, region.width,
-             region.height);
-    ret = ink_hw_partial_refresh_area(
-        candidate_framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)region.x,
-        (uint16_t)region.y, (uint16_t)region.width, (uint16_t)region.height);
-  }
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "page refresh failed err=%s", esp_err_to_name(ret));
-    reader_refresh_state_record(refresh_state, false);
-    book->current_page = previous_page;
-    return;
-  }
-  memcpy(framebuffer, candidate_framebuffer, INK_EPD_BUFFER_SIZE);
-  reader_refresh_state_record(refresh_state, true);
-  *successful_page_turns =
-      (cleanup || recovery) ? 0U : *successful_page_turns + 1U;
-  update_progress(book);
+  const ink_button_t button = direction == READER_HOLD_BACKWARD
+                                  ? INK_BUTTON_LEFT
+                                  : INK_BUTTON_RIGHT;
+  *sample = (reader_hold_sample_t){
+      .direction = direction,
+      .pressed = ink_input_was_pressed(input, button),
+      .released = (input->released & ink_input_mask(button)) != 0U,
+      .down = hold_paging->active
+                  ? ink_input_is_raw_down(input, button)
+                  : ink_input_is_down(input, button),
+      .held_ms = ink_input_held_ms(input, button),
+      .now_ms = now_ms,
+  };
+  return true;
 }
 
 static bool input_event(const ink_input_snapshot_t *input,
@@ -1030,19 +1075,52 @@ void app_main(void) {
 
   ink_reader_book_t book;
   ink_reader_book_init(&book);
+  reader_hold_paging_t hold_paging;
+  reader_hold_paging_init(&hold_paging);
   unsigned successful_page_turns = 0U;
   while (true) {
     ink_input_snapshot_t input = {0};
     const uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     reader_app_input_t event;
-    if (input_ret == ESP_OK && ink_input_poll(now_ms, &input) == ESP_OK &&
-        input_event(&input, &event)) {
-      if (s_model.page == READER_APP_PAGE_LIBRARY)
-        handle_library_input(event, &book, framebuffer, candidate_framebuffer,
-                             &refresh_state, &successful_page_turns);
-      else
+    if (input_ret == ESP_OK && ink_input_poll(now_ms, &input) == ESP_OK) {
+      if (s_model.page == READER_APP_PAGE_LIBRARY) {
+        reader_hold_paging_init(&hold_paging);
+        if (input_event(&input, &event))
+          handle_library_input(event, &book, framebuffer,
+                               candidate_framebuffer, &refresh_state,
+                               &successful_page_turns);
+      } else if (s_model.reader_menu_open) {
+        reader_hold_paging_init(&hold_paging);
+        if (input_event(&input, &event))
+          handle_reading_input(event, &book, framebuffer,
+                               candidate_framebuffer, &refresh_state,
+                               &successful_page_turns);
+      } else if (ink_input_was_pressed(&input, INK_BUTTON_BACK) ||
+                 ink_input_was_pressed(&input, INK_BUTTON_CONFIRM)) {
+        reader_hold_paging_init(&hold_paging);
+        event = ink_input_was_pressed(&input, INK_BUTTON_BACK)
+                    ? READER_APP_INPUT_BACK
+                    : READER_APP_INPUT_CONFIRM;
         handle_reading_input(event, &book, framebuffer, candidate_framebuffer,
                              &refresh_state, &successful_page_turns);
+      } else {
+        reader_hold_sample_t sample;
+        if (reader_hold_sample_from_input(&hold_paging, &input, now_ms,
+                                          &sample)) {
+          const reader_hold_action_t action =
+              reader_hold_paging_update(&hold_paging, &sample);
+          if (action.kind == READER_HOLD_ACTION_TURN) {
+            ESP_LOGI(TAG, "PAGE_HOLD direction=%s step=%u held_ms=%u",
+                     action.direction == READER_HOLD_FORWARD ? "forward"
+                                                             : "backward",
+                     (unsigned)action.page_step, (unsigned)sample.held_ms);
+            handle_reading_page_turn(
+                action.direction, action.page_step, &book, framebuffer,
+                candidate_framebuffer, &refresh_state,
+                &successful_page_turns);
+          }
+        }
+      }
     }
     vTaskDelay(pdMS_TO_TICKS(20));
   }

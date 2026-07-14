@@ -97,15 +97,23 @@ def test_reader_library_has_complete_ascii_font_fallback() -> None:
 def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> None:
     text = source("apps/reader/main/app_main.c")
     page_turn = text[
-        text.index("static void handle_reading_input(") :
-        text.index("static bool input_event(")
+        text.index("static void handle_reading_page_turn(") :
+        text.index("static void handle_reading_input(")
     ]
 
     assert "READER_PARTIAL_REFRESH_LIMIT = 50" in text
     assert "!reader_should_cleanup(48)" in text
     assert "reader_should_cleanup(49)" in text
-    assert "ink_hw_partial_refresh_area(" in page_turn
-    assert 'PAGE_REFRESH mode=partial' in page_turn
+    assert "PAGE_REFRESH mode=partial_full_window" in page_turn
+    assert (
+        "ink_hw_partial_refresh_area(\n"
+        "        candidate_framebuffer, INK_EPD_BUFFER_SIZE, 0U, 0U,\n"
+        "        INK_HW_WIDTH, INK_HW_HEIGHT)"
+    ) in page_turn
+    assert "region.x" not in page_turn
+    assert "region.y" not in page_turn
+    assert "region.width" not in page_turn
+    assert "region.height" not in page_turn
     assert 'PAGE_REFRESH mode=cleanup_full' in page_turn
     assert 'PAGE_REFRESH mode=recovery_full' in page_turn
     assert "reader_refresh_state_init(&refresh_state);" in text
@@ -113,6 +121,29 @@ def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> No
     assert "reader_refresh_state_record(refresh_state, false);" in page_turn
     assert "book->current_page = previous_page;" in page_turn
     assert "memcpy(framebuffer, candidate_framebuffer" in page_turn
+    assert "*successful_page_turns + 1U" in page_turn
+    assert "*successful_page_turns + page_step" not in page_turn
+
+
+def test_reader_hold_paging_uses_raw_hold_state_and_shared_refresh_path() -> None:
+    text = source("apps/reader/main/app_main.c")
+    cmake = source("apps/reader/main/CMakeLists.txt")
+    input_header = source("components/ink_input/include/ink_input.h")
+    input_source = source("components/ink_input/ink_input.c")
+
+    assert '#include "reader_hold_paging.h"' in text
+    assert '"reader_hold_paging.c"' in cmake
+    assert "reader_hold_paging_update(" in text
+    assert "ink_input_held_ms(" in text
+    assert "input->released & ink_input_mask(button)" in text
+    assert "uint32_t raw_down;" in input_header
+    assert "ink_input_is_raw_down(" in input_header
+    assert "out->raw_down = state->raw;" in input_source
+    assert "hold_paging->active" in text
+    assert "? ink_input_is_raw_down(input, button)" in text
+    assert "reader_hold_target_page(" in text
+    assert "handle_reading_page_turn(" in text
+    assert "reader_hold_paging_init(&hold_paging);" in text
 
 
 def test_reader_all_refresh_paths_share_recovery_state() -> None:
