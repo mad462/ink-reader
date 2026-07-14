@@ -64,6 +64,27 @@ def test_reader_app_model_owns_library_state_machine() -> None:
     assert "ink_reader_state_remember_open(" in app
 
 
+def test_reader_library_has_complete_ascii_font_fallback() -> None:
+    app = source("apps/reader/main/app_main.c")
+
+    assert "bool localized" in app
+    assert "ink_cpfont_is_loaded(s_library_fonts.body)" in app
+    for label in (
+        "LIBRARY",
+        "RECENT",
+        "ALL",
+        "FAVORITES",
+        "NO BOOKS",
+        "NO RECENT",
+        "NO FAVORITES",
+        "OPEN",
+        "ADD FAVORITE",
+        "REMOVE FAVORITE",
+        "UNREAD",
+    ):
+        assert f'"{label}"' in app
+
+
 def test_reader_page_turn_uses_partial_refresh_with_cleanup_and_rollback() -> None:
     text = source("apps/reader/main/app_main.c")
     page_turn = text[

@@ -122,15 +122,34 @@ static const char *catalog_title(const ink_reader_catalog_item_t *item,
   return entry && entry->title[0] != '\0' ? entry->title : item->name;
 }
 
+static bool is_printable_ascii(const char *text) {
+  if (!text || text[0] == '\0') return false;
+  for (const unsigned char *cursor = (const unsigned char *)text; *cursor;
+       ++cursor) {
+    if (*cursor < 0x20U || *cursor > 0x7eU) return false;
+  }
+  return true;
+}
+
+static const char *visible_title(const ink_reader_catalog_item_t *item,
+                                 const ink_reader_bookshelf_entry_t *entry,
+                                 bool localized) {
+  const char *title = catalog_title(item, entry);
+  return localized || is_printable_ascii(title) ? title : "BOOK";
+}
+
 static void build_library_view(const reader_app_model_t *model,
                                ink_epd_ui_library_view_t *view,
                                char lines[INK_EPD_UI_MENU_CARD_CAPACITY][96],
-                               char meta[24]) {
-  static const char *const tab_labels[READER_LIBRARY_TAB_COUNT] = {
+                               char meta[24], bool localized) {
+  static const char *const localized_tabs[READER_LIBRARY_TAB_COUNT] = {
       "最近", "全部", "收藏"};
+  static const char *const ascii_tabs[READER_LIBRARY_TAB_COUNT] = {
+      "RECENT", "ALL", "FAVORITES"};
+  const char *const *tab_labels = localized ? localized_tabs : ascii_tabs;
   memset(view, 0, sizeof(*view));
   snprintf(meta, 24, "%u BOOKS", (unsigned)s_catalog.count);
-  view->header_title = "书库";
+  view->header_title = localized ? "书库" : "LIBRARY";
   view->header_meta = meta;
   view->tab_count = READER_LIBRARY_TAB_COUNT;
   for (size_t i = 0; i < READER_LIBRARY_TAB_COUNT; ++i) {
@@ -156,17 +175,19 @@ static void build_library_view(const reader_app_model_t *model,
         ink_reader_catalog_at(&s_catalog, catalog_index);
     if (!item) continue;
     const ink_reader_bookshelf_entry_t *entry = find_shelf(item->path);
-    view->cards[card].title = catalog_title(item, entry);
+    view->cards[card].title = visible_title(item, entry, localized);
     if (entry && entry->has_opened) {
       const unsigned page = (unsigned)entry->page_index + 1U;
       const unsigned total = (unsigned)entry->total_pages_snapshot;
-      if (entry->chapter_title[0] != '\0')
+      if (entry->chapter_title[0] != '\0' &&
+          (localized || is_printable_ascii(entry->chapter_title)))
         snprintf(lines[card], sizeof(lines[card]), "%u/%u %s", page, total,
                  entry->chapter_title);
       else
         snprintf(lines[card], sizeof(lines[card]), "%u/%u", page, total);
     } else {
-      snprintf(lines[card], sizeof(lines[card]), "%s", "未读");
+      snprintf(lines[card], sizeof(lines[card]), "%s",
+               localized ? "未读" : "UNREAD");
     }
     view->cards[card].line1 = lines[card];
     view->cards[card].line2 = "";
@@ -178,11 +199,12 @@ static void build_library_view(const reader_app_model_t *model,
 
   if (visible_count == 0U) {
     view->card_count = 1U;
-    view->cards[0].title =
-        s_catalog.count == 0U
-            ? "未找到书籍"
-            : model->tab == READER_LIBRARY_TAB_RECENT ? "暂无最近阅读"
-                                                       : "暂无收藏";
+    if (s_catalog.count == 0U)
+      view->cards[0].title = localized ? "未找到书籍" : "NO BOOKS";
+    else if (model->tab == READER_LIBRARY_TAB_RECENT)
+      view->cards[0].title = localized ? "暂无最近阅读" : "NO RECENT";
+    else
+      view->cards[0].title = localized ? "暂无收藏" : "NO FAVORITES";
     view->cards[0].line1 = "";
     view->cards[0].line2 = "";
   }
@@ -194,11 +216,13 @@ static void build_library_view(const reader_app_model_t *model,
   if (!item) return;
   const ink_reader_bookshelf_entry_t *entry = find_shelf(item->path);
   view->popup_open = true;
-  view->popup_title = catalog_title(item, entry);
+  view->popup_title = visible_title(item, entry, localized);
   view->action_count = 2U;
-  view->actions[0].label = "打开";
+  view->actions[0].label = localized ? "打开" : "OPEN";
   view->actions[0].selected = model->popup_action == 0U;
-  view->actions[1].label = entry && entry->is_favorite ? "取消收藏" : "加入收藏";
+  view->actions[1].label = entry && entry->is_favorite
+                               ? (localized ? "取消收藏" : "REMOVE FAVORITE")
+                               : (localized ? "加入收藏" : "ADD FAVORITE");
   view->actions[1].selected = model->popup_action == 1U;
 }
 
@@ -221,7 +245,8 @@ static void draw_library(const reader_app_model_t *model, uint8_t *buffer) {
   ink_epd_ui_library_view_t view;
   char lines[INK_EPD_UI_MENU_CARD_CAPACITY][96] = {{0}};
   char meta[24];
-  build_library_view(model, &view, lines, meta);
+  const bool localized = ink_cpfont_is_loaded(s_library_fonts.body);
+  build_library_view(model, &view, lines, meta, localized);
   ink_epd_ui_draw_library(buffer, INK_EPD_BUFFER_SIZE, &view,
                           &s_library_fonts);
 }
