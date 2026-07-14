@@ -77,7 +77,7 @@ def test_photo_starts_in_preview_and_font_task_never_touches_epd() -> None:
     )
 
 
-def test_photo_gray_refresh_coalesces_navigation_without_busy_abort() -> None:
+def test_photo_gray_refresh_interrupts_busy_wait_for_latest_navigation() -> None:
     photo = source("apps/photo/main/app_main.c")
     hw_header = source("components/ink_hw/include/ink_hw.h")
     hw = source("components/ink_hw/ink_hw.c")
@@ -90,10 +90,14 @@ def test_photo_gray_refresh_coalesces_navigation_without_busy_abort() -> None:
     assert "ESP_ERR_NOT_FINISHED" in photo
     assert "wait_ready(" in hw
     assert "poll(context)" in hw
-    assert 'wait_ready("gray_update", poll, context, false)' in hw
+    assert 'wait_ready("gray_update", poll, context, WAIT_CANCEL_IMMEDIATE)' in hw
+    assert "WAIT_CANCEL_AFTER_READY" in hw
+    assert "cancel_mode == WAIT_CANCEL_IMMEDIATE" in hw
     assert hw.count(
         "if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;"
     ) >= 4
+    gray_refresh = hw[hw.index("esp_err_t ink_hw_gray_refresh_with_poll(") :]
+    assert "ESP_RETURN_ON_ERROR(update(" not in gray_refresh
     assert "aggressive" not in hw.lower()
     assert "busy_wait aborted" not in hw
 
