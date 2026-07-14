@@ -216,17 +216,17 @@ Expected: 一次写入成功，不启动 monitor、不占用 COM9。
 
 ## 里程碑 2：USB MSC
 
-### Task 7: Flash 固化 USB active 图片
+### Task 7: Flash 固化 USB 状态弹窗
 
 **Files:**
-- Create: `components/ink_epd_ui/ink_usb_msc_asset.c`
+- Create: `components/ink_epd_ui/ink_usb_msc_assets.c`
 - Modify: `components/ink_epd_ui/include/ink_epd_ui.h`
 - Modify: `components/ink_epd_ui/CMakeLists.txt`
 - Modify: `components/ink_epd_ui/test/loading_ui_host_test.c`
 
 - [ ] **Step 1: 写失败像素测试**
 
-从 `素材/U盘模式已启动.bmp` 的 200x40、1bpp 像素指纹断言图片极性、固定居中区域和 8px 白边。
+从 `素材/USB_mode_active.bmp` 和 `素材/USB_mode_failed.bmp` 读取 200x40、1bpp 像素，分别断言生成资源的逐像素指纹、黑白极性、固定居中区域 `(132,372,216,56)`、图片位置 `(140,380)` 和 8px 白边；弹窗区域外 framebuffer 不得变化。
 
 - [ ] **Step 2: 验证 RED**
 
@@ -234,9 +234,22 @@ Run: `components/ink_epd_ui/test/run_host_tests.ps1`
 
 Expected: USB 图片 API 不存在。
 
-- [ ] **Step 3: 实现资源与绘制 API**
+- [ ] **Step 3: 实现两个资源与绘制 API**
 
-机械转换 BMP 为 Flash 常量；公开 `ink_epd_ui_usb_msc_active_region()` 与 `ink_epd_ui_draw_usb_msc_active()`，运行时不得读文件或 SD。
+机械转换两个 BMP 为 Flash 常量；公开：
+
+```c
+typedef enum {
+  INK_EPD_UI_USB_MSC_ACTIVE = 0,
+  INK_EPD_UI_USB_MSC_FAILED,
+} ink_epd_ui_usb_msc_popup_t;
+
+ink_epd_region_t ink_epd_ui_usb_msc_popup_region(void);
+void ink_epd_ui_draw_usb_msc_popup(uint8_t *buffer, size_t length,
+                                   ink_epd_ui_usb_msc_popup_t popup);
+```
+
+绘制函数只清白固定弹窗区域再复制选定图片；运行时不得读文件、SD 或字体。
 
 - [ ] **Step 4: 验证 GREEN**
 
@@ -248,14 +261,17 @@ Expected: PASS。
 
 **Files:**
 - Create: `components/ink_usb_msc_core/CMakeLists.txt`
+- Create: `components/ink_usb_msc_core/idf_component.yml`
 - Create: `components/ink_usb_msc_core/include/ink_usb_msc_core.h`
+- Create: `components/ink_usb_msc_core/ink_usb_msc_state.h`
+- Create: `components/ink_usb_msc_core/ink_usb_msc_state.c`
 - Create: `components/ink_usb_msc_core/ink_usb_msc_core.c`
 - Create: `components/ink_usb_msc_core/test/usb_msc_state_host_test.c`
 - Create: `components/ink_usb_msc_core/test/run_host_tests.ps1`
 
 - [ ] **Step 1: 写失败状态测试**
 
-覆盖 `STARTING -> WAITING -> ACTIVE -> STOPPING -> STOPPED`、启动错误进入 ERROR、停止失败保持 ERROR 且不允许返回 Launcher；状态文本不依赖 EPD。
+覆盖 `STOPPED -> STARTING -> ACTIVE -> STOPPING -> STOPPED`、启动错误进入 ERROR、停止失败进入 ERROR 且不允许返回 Launcher、ERROR 重试停止后可进入 STOPPED。状态 reducer 不依赖 ESP-IDF、EPD 或 TinyUSB。
 
 - [ ] **Step 2: 验证 RED**
 
@@ -265,7 +281,34 @@ Expected: core API 不存在。
 
 - [ ] **Step 3: 迁移最小 raw SDMMC/TinyUSB 逻辑**
 
-参考旧 `main/ink_usb_msc_service.c`，仅保留 SDMMC card、TinyUSB device、`tinyusb_msc_new_storage_sdmmc()`、事件处理、storage 删除和关闭顺序。不得包含 `ink_system_services`、runtime、resource/MSC coordinator；USB 导出期间不得挂载 FATFS。
+公开小型 API：
+
+```c
+typedef enum {
+  INK_USB_MSC_STOPPED = 0,
+  INK_USB_MSC_STARTING,
+  INK_USB_MSC_ACTIVE,
+  INK_USB_MSC_STOPPING,
+  INK_USB_MSC_ERROR,
+} ink_usb_msc_state_t;
+
+esp_err_t ink_usb_msc_core_start(void);
+esp_err_t ink_usb_msc_core_stop(void);
+ink_usb_msc_state_t ink_usb_msc_core_state(void);
+bool ink_usb_msc_core_can_return_launcher(void);
+```
+
+Core 使用组件内部唯一实例持有 card、storage handle 和各安装 flags；USB App 是唯一消费者，不为未来多实例需求增加句柄分配 API。纯状态转换放在内部 `ink_usb_msc_state.h/.c`，供 host test 直接编译。
+
+参考旧 `main/ink_app_boot.c` 和 `main/ink_usb_msc_service.c`，仅迁移以下硬件路径：
+
+1. 使用 4-bit SDMMC，CLK=40、CMD=39、D0=41、D1=42、D2=48、D3=38，启用内部 pull-up；直接 `sdmmc_host_init_slot()` + `sdmmc_card_init()`，不挂载 FATFS。
+2. 安装 TinyUSB device 与 MSC driver，使用 `auto_mount_off=1`。
+3. 创建 `tinyusb_msc_new_storage_sdmmc()`，初始 mount point 为 `TINYUSB_MSC_STORAGE_MOUNT_USB`，`base_path=NULL`、`do_not_format=true`。
+4. start 任一步失败时按已完成阶段逆序清理并进入 ERROR。
+5. stop 严格按 storage delete → MSC driver uninstall → TinyUSB uninstall → SDMMC host deinit/free 的顺序；任一步失败则保留可重试 flags、进入 ERROR，并禁止返回 Launcher。
+
+`idf_component.yml` 固定依赖 `espressif/esp_tinyusb: ^2.2.1`。不得包含 `ink_system_services`、runtime、resource/MSC coordinator；USB 导出期间不得挂载 FATFS，也不得调用 `ink_sd_mount()`。
 
 - [ ] **Step 4: 验证 GREEN**
 
@@ -283,7 +326,7 @@ Expected: 状态测试 PASS。
 
 - [ ] **Step 1: 写失败集成契约**
 
-断言 App 启动 core，只有 ACTIVE 才画成功图片；Back 先 stop，成功后显示 Loading 并返回，失败留在 USB App。断言无 FATFS mount、无协调器、无 WiFi。
+断言 App 初始化 EPD/按键后直接启动 core，不绘制 `USB MSC / NOT READY` 占位页；只有 ACTIVE 才局刷 `INK_EPD_UI_USB_MSC_ACTIVE`，启动失败局刷 `INK_EPD_UI_USB_MSC_FAILED`。Back 先 stop，成功后显示 Loading 并返回；停止失败局刷 Failed 并留在 USB App。断言无 FATFS mount、无协调器、无 WiFi。
 
 - [ ] **Step 2: 验证 RED**
 
@@ -293,7 +336,7 @@ Expected: 最小 App 尚未接入 core。
 
 - [ ] **Step 3: 实现薄 App 胶水**
 
-接入 core 状态和 EPD 页面；日志包含 `APP_START name=usb_msc` 与返回 `BOOT_SWITCH`，不打印扇区内容。停止失败时显示明确错误并继续处理输入。
+接入 core 和固定弹窗；进入 App 后保留 Launcher Loading，start 完成后只局刷同一固定区域的 Active/Failed，不做全屏状态页。日志包含 `APP_START name=usb_msc` 与返回 `BOOT_SWITCH`，不打印扇区内容。停止失败时显示 Failed 并继续处理输入；只有 `ink_usb_msc_core_can_return_launcher()` 为 true 才显示 Loading、打印 switch 日志并重启。
 
 - [ ] **Step 4: 相关验证和构建**
 
@@ -303,13 +346,13 @@ Run: `python -m pytest tools/tests/test_app_startup_contracts.py -k usb_msc -q`
 
 Run: `idf.py -C apps/usb_msc build`
 
-Expected: PASS，镜像小于 2MB。
+Expected: PASS，组件解析 `esp_tinyusb` 2.2.x，镜像小于 2MB。
 
 - [ ] **Step 5: COM9 单 App 烧录验证**
 
 Run: `tools/flash_usb_msc.ps1 -Port COM9`
 
-人工确认电脑识别 SD、可读写、active 图片正确，安全弹出后 Back 能停止并返回 Launcher；然后中文提交里程碑 2。
+人工确认进入 USB App 后不出现占位页；成功时显示 `USB Mode Active`，电脑识别 SD 且可读写；安全弹出后 Back 能停止并返回 Launcher。另用未插卡或初始化失败场景确认 `USB Mode Failed`，且 Back 不会带着未释放资源重启；然后中文提交里程碑 2。
 
 ---
 
