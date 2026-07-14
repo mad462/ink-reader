@@ -277,6 +277,11 @@ bool ink_epd_ui_reader_self_test(void) {
   ok = ok && region.x == 8 && region.y == 8 && region.width == 464 &&
        region.height == 776;
   current.tabs_focused = false;
+  previous.tabs_focused = true;
+  region = ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.x == 8 && region.y == 8 && region.width == 464 &&
+       region.height == 776;
+  previous.tabs_focused = false;
   region = ink_epd_ui_library_selection_region(&previous, &current);
   ok = ok && region.x == 24 && region.y == 108 && region.width == 432 &&
        region.height == 122;

@@ -146,6 +146,7 @@ def test_reader_library_ui_is_a_pure_bounded_renderer() -> None:
     assert "ink_epd_ui_reader_self_test()" in common_ui
     assert "previous->tabs_focused != current->tabs_focused" in reader_ui
     assert "current.tabs_focused = true;" in reader_ui
+    assert "previous.tabs_focused = true;" in reader_ui
 
     for geometry in (
         "LIBRARY_PAGE_X = 8",
