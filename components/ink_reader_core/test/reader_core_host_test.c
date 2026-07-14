@@ -271,6 +271,50 @@ static int framebuffer_is(uint8_t *buffer, uint8_t value) {
   return 1;
 }
 
+static int display_chapter_filter_is_compatible(void) {
+  ink_reader_chapter_t chapters[] = {
+      {.title = "译序", .start_page = 0, .end_page = 0},
+      {.title = "前言：关于本书", .start_page = 1, .end_page = 1},
+      {.title = "第一章", .start_page = 2, .end_page = 4},
+      {.title = "附录 A", .start_page = 5, .end_page = 5},
+      {.title = "第二章", .start_page = 6, .end_page = 8},
+  };
+  ink_reader_book_t book = {
+      .chapters = chapters,
+      .chapter_count = sizeof(chapters) / sizeof(chapters[0]),
+      .page_count = 9,
+  };
+  size_t display_index = 99U;
+  size_t display_total = 99U;
+  const ink_reader_chapter_t *chapter = NULL;
+
+  if (ink_reader_chapter_title_is_displayable(NULL) ||
+      ink_reader_chapter_title_is_displayable("") ||
+      ink_reader_chapter_title_is_displayable("序") ||
+      ink_reader_chapter_title_is_displayable("序章") ||
+      ink_reader_chapter_title_is_displayable("上篇") ||
+      ink_reader_chapter_title_is_displayable("下篇") ||
+      ink_reader_chapter_title_is_displayable("楔子之一") ||
+      ink_reader_chapter_title_is_displayable("后记补遗") ||
+      !ink_reader_chapter_title_is_displayable("第一章"))
+    return 0;
+
+  if (ink_reader_book_resolve_display_chapter(
+          &book, 1U, &display_index, &display_total, &chapter) ||
+      display_index != 0U || display_total != 2U || chapter != NULL)
+    return 0;
+  if (!ink_reader_book_resolve_display_chapter(
+          &book, 4U, &display_index, &display_total, &chapter) ||
+      display_index != 0U || display_total != 2U || chapter != &chapters[2])
+    return 0;
+  return ink_reader_book_resolve_display_chapter(
+             &book, 7U, &display_index, &display_total, &chapter) &&
+         display_index == 1U && display_total == 2U &&
+         chapter == &chapters[4] &&
+         !ink_reader_book_resolve_display_chapter(
+             &book, 9U, &display_index, &display_total, &chapter);
+}
+
 int main(void) {
   ink_reader_book_t book;
   char path[INK_READER_PATH_MAX];
@@ -305,6 +349,10 @@ int main(void) {
   }
   if (!ink_reader_core_self_test()) {
     fprintf(stderr, "reader core self test failed\n");
+    goto cleanup;
+  }
+  if (!display_chapter_filter_is_compatible()) {
+    fprintf(stderr, "display chapter filtering is incompatible\n");
     goto cleanup;
   }
 

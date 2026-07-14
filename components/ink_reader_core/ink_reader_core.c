@@ -634,6 +634,52 @@ const ink_reader_chapter_t *ink_reader_book_chapter_for_page(
   return chapter;
 }
 
+static bool chapter_title_has_prefix(const char *title, const char *prefix) {
+  if (!title || !prefix) return false;
+  const size_t prefix_length = strlen(prefix);
+  return prefix_length > 0U && strncmp(title, prefix, prefix_length) == 0;
+}
+
+bool ink_reader_chapter_title_is_displayable(const char *title) {
+  if (!title || title[0] == '\0') return false;
+  if (strcmp(title, "译序") == 0 || strcmp(title, "序") == 0 ||
+      strcmp(title, "序章") == 0 || strcmp(title, "上篇") == 0 ||
+      strcmp(title, "下篇") == 0)
+    return false;
+  return !chapter_title_has_prefix(title, "楔子") &&
+         !chapter_title_has_prefix(title, "前言") &&
+         !chapter_title_has_prefix(title, "后记") &&
+         !chapter_title_has_prefix(title, "附录");
+}
+
+bool ink_reader_book_resolve_display_chapter(
+    const ink_reader_book_t *book, size_t page_index,
+    size_t *display_chapter_index, size_t *display_chapter_total,
+    const ink_reader_chapter_t **display_chapter) {
+  if (display_chapter_index) *display_chapter_index = 0U;
+  if (display_chapter_total) *display_chapter_total = 0U;
+  if (display_chapter) *display_chapter = NULL;
+  if (!book || !book->chapters || page_index >= book->page_count) return false;
+
+  const ink_reader_chapter_t *resolved = NULL;
+  size_t resolved_index = 0U;
+  size_t total = 0U;
+  for (size_t i = 0; i < book->chapter_count; ++i) {
+    const ink_reader_chapter_t *chapter = &book->chapters[i];
+    if (!ink_reader_chapter_title_is_displayable(chapter->title)) continue;
+    if (chapter->start_page <= page_index) {
+      resolved = chapter;
+      resolved_index = total;
+    }
+    ++total;
+  }
+  if (display_chapter_total) *display_chapter_total = total;
+  if (!resolved) return false;
+  if (display_chapter_index) *display_chapter_index = resolved_index;
+  if (display_chapter) *display_chapter = resolved;
+  return true;
+}
+
 bool ink_reader_book_jump_to_chapter(ink_reader_book_t *book,
                                      size_t chapter_index) {
   const ink_reader_chapter_t *chapter =

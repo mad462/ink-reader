@@ -87,6 +87,11 @@ const ink_reader_chapter_t *ink_reader_book_chapter_at(
     const ink_reader_book_t *book, size_t chapter_index);
 const ink_reader_chapter_t *ink_reader_book_chapter_for_page(
     const ink_reader_book_t *book, size_t page_index);
+bool ink_reader_chapter_title_is_displayable(const char *title);
+bool ink_reader_book_resolve_display_chapter(
+    const ink_reader_book_t *book, size_t page_index,
+    size_t *display_chapter_index, size_t *display_chapter_total,
+    const ink_reader_chapter_t **display_chapter);
 bool ink_reader_book_jump_to_chapter(ink_reader_book_t *book,
                                      size_t chapter_index);
 bool ink_reader_core_self_test(void);

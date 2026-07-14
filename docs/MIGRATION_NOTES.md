@@ -321,3 +321,15 @@ hash 校验。实机串口观察：
 `sdmmc_read_sectors: not enough mem`、`panel not ready after sw reset`、
 `epd busy_wait aborted`，也没有 WiFi、voice note、I2S、ASR 或 USB MSC 初始化
 日志。
+
+## 2026-07-14：Reader 旧版书库与阅读功能对齐
+
+- 书库恢复“最近 / 全部 / 收藏”、收藏操作弹窗和旧版卡片布局；阅读菜单恢复章节
+  跳转以及书签新增、跳转、覆盖、删除，书签变更立即写入 `state.bin`。
+- 阅读页恢复底部状态栏：左侧使用过滤后的正文章节名，右侧显示阅读百分比和
+  页码；普通翻页、章节跳转、书签跳转和菜单关闭后的页面均在差异计算前叠加
+  状态栏，继续使用局刷、第 50 次维护全刷和失败恢复策略。
+- Back 保持两级返回：阅读页先保存进度并回书库，书库标签层再切换到 Launcher；
+  阅读菜单 Back 按层级退出。
+- 本阶段仍只支持本地烧录和 boot partition 切换，不实现 OTA 下载；未引入旧
+  runtime、display mailbox、资源协调器、WiFi、voice/I2S/ASR 或 USB MSC。

@@ -337,3 +337,46 @@ def test_reader_menu_ui_is_a_bounded_overlay_renderer() -> None:
     assert "INK_EPD_UI_READER_MENU_ITEM_CAPACITY" in draw_menu
     assert "INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE" in draw_menu
     assert "ink_epd_ui_clear(" not in draw_menu
+
+
+def test_reader_footer_is_bounded_and_overlaid_after_page_decode() -> None:
+    header = source("components/ink_epd_ui/include/ink_epd_ui.h")
+    reader_ui = source("components/ink_epd_ui/ink_reader_ui.c")
+    core_header = source("components/ink_reader_core/include/ink_reader_core.h")
+    core = source("components/ink_reader_core/ink_reader_core.c")
+    app = source("apps/reader/main/app_main.c")
+
+    assert "ink_epd_ui_draw_reader_footer(" in header
+    assert "ink_reader_book_resolve_display_chapter(" in core_header
+    assert "ink_reader_chapter_title_is_displayable(" in core_header
+    assert "ink_reader_chapter_title_is_displayable(" in core
+    assert "ink_reader_book_resolve_display_chapter(" in core
+    for geometry in (
+        "READER_FOOTER_BAND_Y = 780",
+        "READER_FOOTER_BAND_HEIGHT = 20",
+        "READER_FOOTER_SEPARATOR_Y = 779",
+        "READER_FOOTER_TEXT_Y = 782",
+    ):
+        assert geometry in reader_ui
+
+    draw_footer = reader_ui[
+        reader_ui.index("void ink_epd_ui_draw_reader_footer(") :
+        reader_ui.index("bool ink_epd_ui_reader_self_test(void)")
+    ]
+    assert "ink_epd_ui_fill_rect(" in draw_footer
+    assert "draw_clipped_text(" in draw_footer
+    assert '"%u%% %u/%u"' in app
+    assert "draw_reader_footer(book, candidate_framebuffer);" in app
+    assert app.count("draw_reader_footer(book, candidate_framebuffer);") >= 2
+
+
+def test_reader_back_navigation_remains_two_level() -> None:
+    app = source("apps/reader/main/app_main.c")
+    model = source("apps/reader/main/reader_app_model.c")
+
+    assert 'save_state("return_library")' in app
+    assert 'BOOT_SWITCH from=reader to=launcher' in app
+    assert "READER_APP_EFFECT_RETURN_LAUNCHER" in app
+    assert "READER_APP_PAGE_READING" in model
+    assert "READER_LIBRARY_FOCUS_TABS" in model
+    assert "READER_APP_EFFECT_CLOSE_READER_MENU" in model

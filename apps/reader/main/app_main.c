@@ -320,6 +320,26 @@ static const char *chapter_title_for_page(const ink_reader_book_t *book,
   return chapter ? chapter->title : "";
 }
 
+static void draw_reader_footer(const ink_reader_book_t *book,
+                               uint8_t *buffer) {
+  if (!book || !buffer || book->page_count == 0U) return;
+  const ink_reader_chapter_t *chapter = NULL;
+  (void)ink_reader_book_resolve_display_chapter(
+      book, book->current_page, NULL, NULL, &chapter);
+  const char *left = chapter ? chapter->title : "";
+  if (!ink_cpfont_is_loaded(s_library_fonts.footer) &&
+      !is_printable_ascii(left))
+    left = "";
+  unsigned percent =
+      (unsigned)(((book->current_page + 1U) * 100U) / book->page_count);
+  if (percent > 100U) percent = 100U;
+  char right[32];
+  snprintf(right, sizeof(right), "%u%% %u/%u", percent,
+           (unsigned)book->current_page + 1U, (unsigned)book->page_count);
+  ink_epd_ui_draw_reader_footer(buffer, INK_EPD_BUFFER_SIZE,
+                                s_library_fonts.footer, left, right);
+}
+
 static void update_progress(const ink_reader_book_t *book) {
   if (!book || !book->file) return;
   const size_t chapter_index =
@@ -503,6 +523,7 @@ static bool refresh_reader_page_candidate(
     book->current_page = rollback_page;
     return false;
   }
+  draw_reader_footer(book, candidate_framebuffer);
   ink_epd_region_t changed = {0};
   const bool has_changes = find_changed_region(
       framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
@@ -558,6 +579,7 @@ static bool open_selected_book(reader_app_model_t *candidate_model,
     ink_reader_book_close(&candidate_book);
     return false;
   }
+  draw_reader_footer(&candidate_book, candidate_framebuffer);
   const esp_err_t refresh_ret =
       ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
   reader_refresh_state_record(refresh_state, refresh_ret == ESP_OK);
@@ -861,6 +883,7 @@ static void handle_reading_input(reader_app_input_t input,
     ESP_LOGE(TAG, "page load failed page=%u", (unsigned)target_page);
     return;
   }
+  draw_reader_footer(book, candidate_framebuffer);
   ink_epd_region_t region = {0};
   const bool changed = find_changed_region(
       framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,

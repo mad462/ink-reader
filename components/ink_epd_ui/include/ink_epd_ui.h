@@ -168,5 +168,9 @@ void ink_epd_ui_draw_reader_menu(
 ink_epd_region_t ink_epd_ui_reader_menu_selection_region(
     const ink_epd_ui_reader_menu_focus_t *previous,
     const ink_epd_ui_reader_menu_focus_t *current);
+void ink_epd_ui_draw_reader_footer(uint8_t *buffer, size_t length,
+                                   ink_cpfont_t *font,
+                                   const char *left_text,
+                                   const char *right_text);
 bool ink_epd_ui_reader_self_test(void);
 bool ink_epd_ui_self_test(void);

@@ -42,6 +42,13 @@ enum {
   READER_MENU_POPUP_Y = 281,
   READER_MENU_POPUP_WIDTH = 340,
   READER_MENU_POPUP_HEIGHT = 208,
+  READER_FOOTER_BAND_Y = 780,
+  READER_FOOTER_BAND_HEIGHT = 20,
+  READER_FOOTER_SEPARATOR_Y = 779,
+  READER_FOOTER_TEXT_Y = 782,
+  READER_FOOTER_LEFT_X = 8,
+  READER_FOOTER_RIGHT_X = 472,
+  READER_FOOTER_RIGHT_WIDTH = 156,
 };
 
 static void draw_outline(uint8_t *buffer, size_t length, int x, int y,
@@ -336,6 +343,36 @@ static bool reader_pixel_is_black(const uint8_t *buffer, int x, int y) {
   return (buffer[index] & (uint8_t)(0x80U >> (x & 7))) == 0U;
 }
 
+void ink_epd_ui_draw_reader_footer(uint8_t *buffer, size_t length,
+                                   ink_cpfont_t *font,
+                                   const char *left_text,
+                                   const char *right_text) {
+  if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
+  const uint8_t scale_divisor =
+      ink_cpfont_is_loaded(font) && font->advance_y > 24U ? 2U : 1U;
+  ink_epd_ui_fill_rect(buffer, length, 0, READER_FOOTER_BAND_Y,
+                       INK_EPD_WIDTH, READER_FOOTER_BAND_HEIGHT, false);
+  ink_epd_ui_fill_rect(buffer, length, 0, READER_FOOTER_SEPARATOR_Y,
+                       INK_EPD_WIDTH, 1, true);
+
+  draw_clipped_text(buffer, length, font, READER_FOOTER_LEFT_X,
+                    READER_FOOTER_TEXT_Y,
+                    INK_EPD_WIDTH - READER_FOOTER_LEFT_X -
+                        READER_FOOTER_RIGHT_WIDTH,
+                    2, scale_divisor, left_text ? left_text : "");
+
+  int right_width = 0;
+  if (!ink_epd_ui_measure_text(font, right_text ? right_text : "", 2,
+                               scale_divisor, &right_width))
+    right_width = 0;
+  if (right_width > READER_FOOTER_RIGHT_WIDTH)
+    right_width = READER_FOOTER_RIGHT_WIDTH;
+  draw_clipped_text(buffer, length, font,
+                    READER_FOOTER_RIGHT_X - right_width,
+                    READER_FOOTER_TEXT_Y, READER_FOOTER_RIGHT_WIDTH, 2,
+                    scale_divisor, right_text ? right_text : "");
+}
+
 bool ink_epd_ui_reader_self_test(void) {
   uint8_t *buffer = malloc(INK_EPD_BUFFER_SIZE);
   if (!buffer) return false;
@@ -468,6 +505,33 @@ bool ink_epd_ui_reader_self_test(void) {
                                                     &menu_current);
   ok = ok && region.x == 24 && region.y == 118 && region.width == 432 &&
        region.height == 534;
+
+  ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
+  ink_epd_ui_set_pixel(buffer, INK_EPD_BUFFER_SIZE, 0,
+                       READER_FOOTER_SEPARATOR_Y - 1, true);
+  ink_epd_ui_draw_reader_footer(buffer, INK_EPD_BUFFER_SIZE, NULL, "CHAPTER",
+                                "12% 12/100");
+  bool separator_ok = true;
+  for (int x = 0; x < INK_EPD_WIDTH; ++x)
+    separator_ok = separator_ok &&
+                   reader_pixel_is_black(buffer, x,
+                                         READER_FOOTER_SEPARATOR_Y);
+  bool left_text_ok = false;
+  bool right_text_ok = false;
+  for (int y = READER_FOOTER_TEXT_Y; y < INK_EPD_HEIGHT; ++y) {
+    for (int x = READER_FOOTER_LEFT_X; x < 150; ++x)
+      left_text_ok =
+          left_text_ok || reader_pixel_is_black(buffer, x, y);
+    for (int x = 316; x < READER_FOOTER_RIGHT_X; ++x)
+      right_text_ok =
+          right_text_ok || reader_pixel_is_black(buffer, x, y);
+  }
+  ok = ok && separator_ok && left_text_ok && right_text_ok &&
+       reader_pixel_is_black(buffer, 0, READER_FOOTER_SEPARATOR_Y - 1) &&
+       !reader_pixel_is_black(buffer, INK_EPD_WIDTH - 1,
+                              READER_FOOTER_SEPARATOR_Y - 1) &&
+       !reader_pixel_is_black(buffer, INK_EPD_WIDTH / 2,
+                              INK_EPD_HEIGHT - 1);
 
   free(buffer);
   return ok;
