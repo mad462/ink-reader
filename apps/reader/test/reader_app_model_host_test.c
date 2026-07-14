@@ -208,6 +208,131 @@ static int expect_visible_window(void) {
   return reader_app_model_window_start(&model) == 2;
 }
 
+static int expect_reader_menu_hierarchy_and_chapter_effect(void) {
+  reader_app_model_t model;
+  reader_app_model_init(&model);
+  model.page = READER_APP_PAGE_READING;
+
+  if (reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 10,
+                                      3) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      !model.reader_menu_open || model.reader_menu_tab != READER_MENU_CHAPTERS ||
+      model.reader_menu_level != READER_MENU_LEVEL_TABS ||
+      model.chapter_item_index != 0 || model.bookmark_item_index != 0 ||
+      model.bookmark_action_index != 0)
+    return 0;
+  if (reader_app_model_reduce_reading(&model, READER_APP_INPUT_RIGHT, 10, 3) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      model.reader_menu_tab != READER_MENU_BOOKMARKS ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_LEFT, 10, 3) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      model.reader_menu_tab != READER_MENU_CHAPTERS ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 10,
+                                      3) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      model.reader_menu_level != READER_MENU_LEVEL_ITEMS)
+    return 0;
+
+  for (size_t i = 0; i < 12; ++i)
+    (void)reader_app_model_reduce_reading(&model, READER_APP_INPUT_RIGHT, 10,
+                                          3);
+  if (model.chapter_item_index != 9 ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 10,
+                                      3) !=
+          READER_APP_EFFECT_JUMP_CHAPTER ||
+      model.reader_menu_open == false)
+    return 0;
+  if (reader_app_model_reduce_reading(&model, READER_APP_INPUT_BACK, 10, 3) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      model.reader_menu_level != READER_MENU_LEVEL_TABS ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_BACK, 10, 3) !=
+          READER_APP_EFFECT_CLOSE_READER_MENU ||
+      model.reader_menu_open)
+    return 0;
+  return 1;
+}
+
+static int expect_bookmark_effects_boundaries_and_window(void) {
+  reader_app_model_t model;
+  reader_app_model_init(&model);
+  model.page = READER_APP_PAGE_READING;
+  (void)reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                        12);
+  (void)reader_app_model_reduce_reading(&model, READER_APP_INPUT_RIGHT, 2,
+                                        12);
+  (void)reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                        12);
+  if (model.reader_menu_tab != READER_MENU_BOOKMARKS ||
+      model.reader_menu_level != READER_MENU_LEVEL_ITEMS ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_LEFT, 2, 12) !=
+          READER_APP_EFFECT_NONE ||
+      model.bookmark_item_index != 0 ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                      12) !=
+          READER_APP_EFFECT_ADD_BOOKMARK)
+    return 0;
+
+  for (size_t i = 0; i < 20; ++i)
+    (void)reader_app_model_reduce_reading(&model, READER_APP_INPUT_RIGHT, 2,
+                                          12);
+  if (model.bookmark_item_index != 12 ||
+      reader_app_model_menu_window_start(&model) != 7 ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                      12) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      model.reader_menu_level != READER_MENU_LEVEL_BOOKMARK_ACTIONS)
+    return 0;
+  for (size_t i = 0; i < 5; ++i)
+    (void)reader_app_model_reduce_reading(&model, READER_APP_INPUT_RIGHT, 2,
+                                          12);
+  if (model.bookmark_action_index != 2 ||
+      reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                      12) !=
+          READER_APP_EFFECT_DELETE_BOOKMARK)
+    return 0;
+  reader_app_model_bookmark_deleted(&model, 11);
+  if (model.reader_menu_level != READER_MENU_LEVEL_ITEMS ||
+      model.bookmark_item_index != 11 ||
+      reader_app_model_menu_window_start(&model) != 6)
+    return 0;
+
+  model.reader_menu_level = READER_MENU_LEVEL_BOOKMARK_ACTIONS;
+  model.bookmark_action_index = 0;
+  if (reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                      11) !=
+      READER_APP_EFFECT_JUMP_BOOKMARK)
+    return 0;
+  model.bookmark_action_index = 1;
+  if (reader_app_model_reduce_reading(&model, READER_APP_INPUT_CONFIRM, 2,
+                                      11) !=
+      READER_APP_EFFECT_OVERWRITE_BOOKMARK)
+    return 0;
+  if (reader_app_model_reduce_reading(&model, READER_APP_INPUT_BACK, 2, 11) !=
+          READER_APP_EFFECT_REDRAW_MENU ||
+      model.reader_menu_level != READER_MENU_LEVEL_ITEMS)
+    return 0;
+  return 1;
+}
+
+static int expect_bookmark_slot_filters_current_book(void) {
+  ink_reader_state_t state = {0};
+  state.bookmarks[2].used = true;
+  snprintf(state.bookmarks[2].book_path,
+           sizeof(state.bookmarks[2].book_path), "%s", "/books/other.xtc");
+  state.bookmarks[5].used = true;
+  snprintf(state.bookmarks[5].book_path,
+           sizeof(state.bookmarks[5].book_path), "%s", "/books/current.xtc");
+  state.bookmarks[9].used = true;
+  snprintf(state.bookmarks[9].book_path,
+           sizeof(state.bookmarks[9].book_path), "%s", "/books/current.xtc");
+  return reader_app_model_bookmark_slot(&state, "/books/current.xtc", 0) ==
+             5 &&
+         reader_app_model_bookmark_slot(&state, "/books/current.xtc", 1) ==
+             9 &&
+         reader_app_model_bookmark_slot(&state, "/books/current.xtc", 2) ==
+             SIZE_MAX;
+}
+
 int main(void) {
   if (!expect_defaults_and_filters()) {
     fputs("default/filter/recent ordering failed\n", stderr);
@@ -231,6 +356,18 @@ int main(void) {
   }
   if (!expect_visible_window() || !reader_app_model_self_test()) {
     fputs("window/model self test failed\n", stderr);
+    return 1;
+  }
+  if (!expect_reader_menu_hierarchy_and_chapter_effect()) {
+    fputs("reader menu hierarchy/chapter effect failed\n", stderr);
+    return 1;
+  }
+  if (!expect_bookmark_effects_boundaries_and_window()) {
+    fputs("bookmark effects/boundaries/window failed\n", stderr);
+    return 1;
+  }
+  if (!expect_bookmark_slot_filters_current_book()) {
+    fputs("bookmark slot filtering failed\n", stderr);
     return 1;
   }
   puts("PASS: reader app model host tests");

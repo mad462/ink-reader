@@ -120,6 +120,37 @@ def test_reader_all_refresh_paths_share_recovery_state() -> None:
     assert "!state->screen_ready ? READER_REFRESH_FULL : preferred" in policy
 
 
+def test_reader_menu_integration_is_transactional_and_redecodes_pages() -> None:
+    text = source("apps/reader/main/app_main.c")
+    mutation = text[
+        text.index("static bool apply_bookmark_mutation(") :
+        text.index("static bool jump_from_reader_menu(")
+    ]
+
+    for symbol in (
+        "build_reader_menu_view(",
+        "refresh_reader_menu_candidate(",
+        "refresh_reader_page_candidate(",
+        "reader_app_model_reduce_reading(",
+        "ink_reader_book_jump_to_chapter(",
+        "reader_app_model_bookmark_slot(",
+        "ink_reader_state_bookmark_add_or_replace(",
+        "ink_reader_state_bookmark_overwrite(",
+        "ink_reader_state_bookmark_remove_at(candidate_state, slot)",
+        "ink_reader_state_save(INK_READER_STATE_PATH, candidate_state)",
+    ):
+        assert symbol in text
+    assert '"T+%u:%02u"' in text
+    assert "reader_app_model_close_reader_menu(candidate_model);" in text
+    assert "ink_epd_ui_draw_reader_menu(" in text
+    assert "ink_hw_partial_refresh_area(" in text
+    assert "memcpy(&s_state, candidate_state, sizeof(s_state));" in text
+    assert mutation.index("refresh_reader_menu_candidate(") < mutation.index(
+        "ink_reader_state_save(INK_READER_STATE_PATH, candidate_state)"
+    )
+    assert mutation.count("refresh_reader_menu_candidate(") >= 2
+
+
 def test_reader_memory_error_keeps_back_navigation_available() -> None:
     text = source("apps/reader/main/app_main.c")
     allocation_error = text[
@@ -261,3 +292,48 @@ def test_reader_library_ui_is_a_pure_bounded_renderer() -> None:
         "usb",
     ):
         assert forbidden not in reader_ui.lower()
+
+
+def test_reader_menu_ui_is_a_bounded_overlay_renderer() -> None:
+    header = source("components/ink_epd_ui/include/ink_epd_ui.h")
+    reader_ui = source("components/ink_epd_ui/ink_reader_ui.c")
+
+    assert "INK_EPD_UI_READER_MENU_TAB_CAPACITY 2" in header
+    assert "INK_EPD_UI_READER_MENU_ITEM_CAPACITY 8" in header
+    assert "INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE 6" in header
+    assert "INK_EPD_UI_READER_MENU_ACTION_CAPACITY 3" in header
+    assert "ink_epd_ui_reader_menu_view_t" in header
+    assert "ink_epd_ui_reader_menu_focus_t" in header
+    assert "ink_epd_ui_draw_reader_menu(" in header
+    assert "ink_epd_ui_reader_menu_selection_region(" in header
+
+    for geometry in (
+        "READER_MENU_PANEL_X = 24",
+        "READER_MENU_PANEL_Y = 118",
+        "READER_MENU_PANEL_WIDTH = 432",
+        "READER_MENU_PANEL_HEIGHT = 534",
+        "READER_MENU_TAB_Y = 136",
+        "READER_MENU_TAB_HEIGHT = 42",
+        "READER_MENU_TAB_GAP = 10",
+        "READER_MENU_CHAPTER_Y = 200",
+        "READER_MENU_CHAPTER_HEIGHT = 48",
+        "READER_MENU_CHAPTER_GAP = 8",
+        "READER_MENU_BOOKMARK_Y = 200",
+        "READER_MENU_BOOKMARK_HEIGHT = 58",
+        "READER_MENU_BOOKMARK_GAP = 8",
+        "READER_MENU_POPUP_X = 70",
+        "READER_MENU_POPUP_Y = 281",
+        "READER_MENU_POPUP_WIDTH = 340",
+        "READER_MENU_POPUP_HEIGHT = 208",
+    ):
+        assert geometry in reader_ui
+
+    draw_menu = reader_ui[
+        reader_ui.index("void ink_epd_ui_draw_reader_menu(") :
+        reader_ui.index("ink_epd_region_t ink_epd_ui_reader_menu_selection_region(")
+    ]
+    assert "READER_MENU_PANEL_X" in draw_menu
+    assert "READER_MENU_PANEL_Y" in draw_menu
+    assert "INK_EPD_UI_READER_MENU_ITEM_CAPACITY" in draw_menu
+    assert "INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE" in draw_menu
+    assert "ink_epd_ui_clear(" not in draw_menu

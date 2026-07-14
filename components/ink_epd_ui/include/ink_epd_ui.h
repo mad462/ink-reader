@@ -27,6 +27,10 @@
 #define INK_EPD_UI_MENU_TAB_CAPACITY 3
 #define INK_EPD_UI_MENU_CARD_CAPACITY 8
 #define INK_EPD_UI_MENU_ACTION_CAPACITY 4
+#define INK_EPD_UI_READER_MENU_TAB_CAPACITY 2
+#define INK_EPD_UI_READER_MENU_ITEM_CAPACITY 8
+#define INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE 6
+#define INK_EPD_UI_READER_MENU_ACTION_CAPACITY 3
 
 typedef struct {
   int x;
@@ -86,6 +90,36 @@ typedef struct {
   size_t selected_action;
 } ink_epd_ui_library_focus_t;
 
+typedef struct {
+  const char *title;
+  const char *line1;
+  bool selected;
+} ink_epd_ui_reader_menu_item_t;
+
+typedef struct {
+  ink_epd_ui_library_tab_t tabs[INK_EPD_UI_READER_MENU_TAB_CAPACITY];
+  size_t tab_count;
+  bool bookmarks_tab;
+  ink_epd_ui_reader_menu_item_t
+      items[INK_EPD_UI_READER_MENU_ITEM_CAPACITY];
+  size_t item_count;
+  bool popup_open;
+  const char *popup_title;
+  ink_epd_ui_library_action_t
+      actions[INK_EPD_UI_READER_MENU_ACTION_CAPACITY];
+  size_t action_count;
+} ink_epd_ui_reader_menu_view_t;
+
+typedef struct {
+  size_t active_tab;
+  bool tabs_focused;
+  bool bookmarks_tab;
+  size_t window_start;
+  size_t selected_item;
+  bool popup_open;
+  size_t selected_action;
+} ink_epd_ui_reader_menu_focus_t;
+
 void ink_epd_ui_clear(uint8_t *buffer, size_t length, bool white);
 void ink_epd_ui_set_pixel(uint8_t *buffer, size_t length, int x, int y,
                           bool black);
@@ -127,5 +161,12 @@ void ink_epd_ui_draw_library(uint8_t *buffer, size_t length,
 ink_epd_region_t ink_epd_ui_library_selection_region(
     const ink_epd_ui_library_focus_t *previous,
     const ink_epd_ui_library_focus_t *current);
+void ink_epd_ui_draw_reader_menu(
+    uint8_t *buffer, size_t length,
+    const ink_epd_ui_reader_menu_view_t *view,
+    const ink_epd_ui_fonts_t *fonts);
+ink_epd_region_t ink_epd_ui_reader_menu_selection_region(
+    const ink_epd_ui_reader_menu_focus_t *previous,
+    const ink_epd_ui_reader_menu_focus_t *current);
 bool ink_epd_ui_reader_self_test(void);
 bool ink_epd_ui_self_test(void);

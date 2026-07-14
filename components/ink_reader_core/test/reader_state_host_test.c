@@ -258,7 +258,7 @@ static int test_bookmarks(void) {
           INK_READER_BOOKMARK_CAPACITY)
     return 0;
   if (!ink_reader_state_bookmark_find(&state, "/sdcard/books/a.xtc", 1,
-                                      &index) ||
+                                       &index) ||
       !ink_reader_state_bookmark_overwrite(
           &state, index, "/sdcard/books/b.xtc", 7, 3, 80, "Moved",
           "2026-07-13 13:00") ||
@@ -266,7 +266,21 @@ static int test_bookmarks(void) {
       !ink_reader_state_bookmark_find(&state, "/sdcard/books/b.xtc", 7,
                                       NULL) ||
       !ink_reader_state_bookmark_remove(&state, "/sdcard/books/b.xtc", 7) ||
-      ink_reader_state_bookmark_find(&state, "/sdcard/books/b.xtc", 7, NULL))
+       ink_reader_state_bookmark_find(&state, "/sdcard/books/b.xtc", 7, NULL))
+    return 0;
+
+  ink_reader_state_default(&state);
+  if (!ink_reader_state_bookmark_add_or_replace(
+          &state, "/sdcard/books/a.xtc", 7, 1, 80, "First", "T+0:07") ||
+      !ink_reader_state_bookmark_add_or_replace(
+          &state, "/sdcard/books/a.xtc", 8, 1, 80, "Second", "T+0:08") ||
+      !ink_reader_state_bookmark_overwrite(
+          &state, 1, "/sdcard/books/a.xtc", 7, 1, 80, "Duplicate",
+          "T+0:07") ||
+      !ink_reader_state_bookmark_remove_at(&state, 1) ||
+      !ink_reader_state_bookmark_at(&state, 0) ||
+      ink_reader_state_bookmark_at(&state, 1) ||
+      ink_reader_state_bookmark_count(&state, "/sdcard/books/a.xtc") != 1U)
     return 0;
   return 1;
 }

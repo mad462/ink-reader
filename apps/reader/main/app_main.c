@@ -337,6 +337,198 @@ static void update_progress(const ink_reader_book_t *book) {
            chapter_title_for_page(book, book->current_page));
 }
 
+typedef struct {
+  char titles[INK_EPD_UI_READER_MENU_ITEM_CAPACITY][96];
+  char details[INK_EPD_UI_READER_MENU_ITEM_CAPACITY][48];
+} reader_menu_text_t;
+
+static void build_reader_menu_view(
+    const reader_app_model_t *model, const ink_reader_book_t *book,
+    const ink_reader_state_t *state, ink_epd_ui_reader_menu_view_t *view,
+    reader_menu_text_t *text, bool localized) {
+  memset(view, 0, sizeof(*view));
+  memset(text, 0, sizeof(*text));
+  view->tab_count = 2U;
+  view->bookmarks_tab = model->reader_menu_tab == READER_MENU_BOOKMARKS;
+  view->tabs[0].label = localized ? "章节" : "CHAPTERS";
+  view->tabs[1].label = localized ? "书签" : "BOOKMARKS";
+  for (size_t i = 0; i < view->tab_count; ++i) {
+    view->tabs[i].active = model->reader_menu_tab == (reader_menu_tab_t)i;
+    view->tabs[i].focused = view->tabs[i].active &&
+                            model->reader_menu_level == READER_MENU_LEVEL_TABS;
+  }
+
+  const size_t window_start = reader_app_model_menu_window_start(model);
+  if (!view->bookmarks_tab) {
+    const size_t remaining = book->chapter_count > window_start
+                                 ? book->chapter_count - window_start
+                                 : 0U;
+    view->item_count =
+        remaining < INK_EPD_UI_READER_MENU_ITEM_CAPACITY
+            ? remaining
+            : INK_EPD_UI_READER_MENU_ITEM_CAPACITY;
+    for (size_t i = 0; i < view->item_count; ++i) {
+      const size_t chapter_index = window_start + i;
+      const ink_reader_chapter_t *chapter =
+          ink_reader_book_chapter_at(book, chapter_index);
+      const char *title = chapter ? chapter->title : "";
+      if (title[0] != '\0' && (localized || is_printable_ascii(title)))
+        snprintf(text->titles[i], sizeof(text->titles[i]), "%s", title);
+      else
+        snprintf(text->titles[i], sizeof(text->titles[i]), "CHAPTER %u",
+                 (unsigned)chapter_index + 1U);
+      view->items[i].title = text->titles[i];
+      view->items[i].line1 = "";
+      view->items[i].selected =
+          model->reader_menu_level == READER_MENU_LEVEL_ITEMS &&
+          model->chapter_item_index == chapter_index;
+    }
+  } else {
+    const size_t bookmark_count =
+        ink_reader_state_bookmark_count(state, book->path);
+    const size_t total_items = bookmark_count + 1U;
+    const size_t remaining = total_items > window_start
+                                 ? total_items - window_start
+                                 : 0U;
+    view->item_count =
+        remaining < INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE
+            ? remaining
+            : INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE;
+    for (size_t i = 0; i < view->item_count; ++i) {
+      const size_t item_index = window_start + i;
+      if (item_index == 0U) {
+        snprintf(text->titles[i], sizeof(text->titles[i]), "%s",
+                 localized ? "将当前页添加到书签" : "ADD CURRENT PAGE");
+        snprintf(text->details[i], sizeof(text->details[i]), "T+%u:%02u",
+                 (unsigned)(book->current_page / 60U),
+                 (unsigned)(book->current_page % 60U));
+      } else {
+        const size_t slot = reader_app_model_bookmark_slot(
+            state, book->path, item_index - 1U);
+        const ink_reader_bookmark_t *bookmark =
+            ink_reader_state_bookmark_at(state, slot);
+        if (bookmark) {
+          const char *title = bookmark->chapter_title;
+          if (title[0] != '\0' && (localized || is_printable_ascii(title)))
+            snprintf(text->titles[i], sizeof(text->titles[i]), "%s", title);
+          else
+            snprintf(text->titles[i], sizeof(text->titles[i]), "PAGE %u",
+                     (unsigned)bookmark->page_index + 1U);
+          snprintf(text->details[i], sizeof(text->details[i]), "%s",
+                   bookmark->timestamp_text);
+        }
+      }
+      view->items[i].title = text->titles[i];
+      view->items[i].line1 = text->details[i];
+      view->items[i].selected =
+          model->reader_menu_level == READER_MENU_LEVEL_ITEMS &&
+          model->bookmark_item_index == item_index;
+    }
+  }
+
+  if (model->reader_menu_level != READER_MENU_LEVEL_BOOKMARK_ACTIONS)
+    return;
+  view->popup_open = true;
+  view->popup_title = localized ? "书签操作" : "BOOKMARK ACTION";
+  view->action_count = 3U;
+  static const char *const localized_actions[] = {"跳转", "覆盖", "删除"};
+  static const char *const ascii_actions[] = {"JUMP", "OVERWRITE", "DELETE"};
+  const char *const *actions = localized ? localized_actions : ascii_actions;
+  for (size_t i = 0; i < view->action_count; ++i) {
+    view->actions[i].label = actions[i];
+    view->actions[i].selected = model->bookmark_action_index == i;
+  }
+}
+
+static void draw_reader_menu(const reader_app_model_t *model,
+                             const ink_reader_book_t *book,
+                             const ink_reader_state_t *state,
+                             uint8_t *buffer) {
+  ink_epd_ui_reader_menu_view_t view;
+  reader_menu_text_t text;
+  build_reader_menu_view(model, book, state, &view, &text,
+                         ink_cpfont_is_loaded(s_library_fonts.body));
+  ink_epd_ui_draw_reader_menu(buffer, INK_EPD_BUFFER_SIZE, &view,
+                              &s_library_fonts);
+}
+
+static bool refresh_reader_menu_candidate(
+    const reader_app_model_t *previous,
+    const reader_app_model_t *candidate_model, const ink_reader_book_t *book,
+    const ink_reader_state_t *candidate_state, uint8_t *framebuffer,
+    uint8_t *candidate_framebuffer,
+    reader_refresh_state_t *refresh_state) {
+  (void)previous;
+  memcpy(candidate_framebuffer, framebuffer, INK_EPD_BUFFER_SIZE);
+  draw_reader_menu(candidate_model, book, candidate_state,
+                   candidate_framebuffer);
+  ink_epd_region_t changed = {0};
+  const bool has_changes = find_changed_region(
+      framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
+      &changed);
+  const reader_refresh_mode_t mode = reader_refresh_state_choose(
+      refresh_state, READER_REFRESH_PARTIAL);
+  esp_err_t ret = ESP_OK;
+  if (mode == READER_REFRESH_FULL) {
+    ESP_LOGI(TAG, "READER_MENU_REFRESH mode=recovery_full");
+    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  } else if (has_changes) {
+    const ink_epd_region_t menu_region =
+        ink_epd_ui_reader_menu_selection_region(NULL, NULL);
+    ESP_LOGI(TAG,
+             "READER_MENU_REFRESH mode=partial x=%d y=%d w=%d h=%d",
+             changed.x, changed.y, changed.width, changed.height);
+    ret = ink_hw_partial_refresh_area(
+        candidate_framebuffer, INK_EPD_BUFFER_SIZE,
+        (uint16_t)menu_region.x, (uint16_t)menu_region.y,
+        (uint16_t)menu_region.width, (uint16_t)menu_region.height);
+  }
+  reader_refresh_state_record(refresh_state, ret == ESP_OK);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "reader menu refresh failed err=%s", esp_err_to_name(ret));
+    return false;
+  }
+  memcpy(framebuffer, candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  return true;
+}
+
+static bool refresh_reader_page_candidate(
+    reader_app_model_t *candidate_model, ink_reader_book_t *book,
+    size_t target_page, size_t rollback_page, uint8_t *framebuffer,
+    uint8_t *candidate_framebuffer,
+    reader_refresh_state_t *refresh_state) {
+  if (target_page >= book->page_count ||
+      !ink_reader_book_load_page(book, target_page, candidate_framebuffer,
+                                 INK_EPD_BUFFER_SIZE)) {
+    book->current_page = rollback_page;
+    return false;
+  }
+  ink_epd_region_t changed = {0};
+  const bool has_changes = find_changed_region(
+      framebuffer, candidate_framebuffer, INK_HW_WIDTH, INK_HW_HEIGHT,
+      &changed);
+  const bool recovery = reader_refresh_state_choose(
+                            refresh_state, READER_REFRESH_PARTIAL) ==
+                        READER_REFRESH_FULL;
+  esp_err_t ret = ESP_OK;
+  if (recovery) {
+    ret = ink_hw_full_refresh(candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  } else if (has_changes) {
+    ret = ink_hw_partial_refresh_area(
+        candidate_framebuffer, INK_EPD_BUFFER_SIZE, (uint16_t)changed.x,
+        (uint16_t)changed.y, (uint16_t)changed.width,
+        (uint16_t)changed.height);
+  }
+  reader_refresh_state_record(refresh_state, ret == ESP_OK);
+  if (ret != ESP_OK) {
+    book->current_page = rollback_page;
+    return false;
+  }
+  reader_app_model_close_reader_menu(candidate_model);
+  memcpy(framebuffer, candidate_framebuffer, INK_EPD_BUFFER_SIZE);
+  return true;
+}
+
 static bool open_selected_book(reader_app_model_t *candidate_model,
                                ink_reader_book_t *book, uint8_t *framebuffer,
                                uint8_t *candidate_framebuffer,
@@ -490,12 +682,161 @@ static void handle_library_input(reader_app_input_t input,
     s_model = s_candidate_model;
 }
 
+static bool apply_bookmark_mutation(
+    reader_app_effect_t effect, reader_app_model_t *candidate_model,
+    const ink_reader_book_t *book, uint8_t *framebuffer,
+    uint8_t *candidate_framebuffer,
+    reader_refresh_state_t *refresh_state) {
+  ink_reader_state_t *candidate_state = heap_caps_malloc(
+      sizeof(*candidate_state), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!candidate_state) return false;
+  memcpy(candidate_state, &s_state, sizeof(*candidate_state));
+
+  char timestamp[INK_READER_BOOKMARK_TIME_LENGTH + 1];
+  snprintf(timestamp, sizeof(timestamp), "T+%u:%02u",
+           (unsigned)(book->current_page / 60U),
+           (unsigned)(book->current_page % 60U));
+  const size_t chapter_index =
+      chapter_index_for_page(book, book->current_page);
+  const char *chapter_title =
+      chapter_title_for_page(book, book->current_page);
+  bool mutated = false;
+  if (effect == READER_APP_EFFECT_ADD_BOOKMARK) {
+    mutated = ink_reader_state_bookmark_add_or_replace(
+        candidate_state, book->path, book->current_page, chapter_index,
+        book->page_count, chapter_title, timestamp);
+  } else {
+    if (candidate_model->bookmark_item_index == 0U) {
+      free(candidate_state);
+      return false;
+    }
+    const size_t slot = reader_app_model_bookmark_slot(
+        candidate_state, book->path,
+        candidate_model->bookmark_item_index - 1U);
+    const ink_reader_bookmark_t *bookmark =
+        ink_reader_state_bookmark_at(candidate_state, slot);
+    if (!bookmark) {
+      free(candidate_state);
+      return false;
+    }
+    if (effect == READER_APP_EFFECT_OVERWRITE_BOOKMARK) {
+      mutated = ink_reader_state_bookmark_overwrite(
+          candidate_state, slot, book->path, book->current_page,
+          chapter_index, book->page_count, chapter_title, timestamp);
+      candidate_model->reader_menu_level = READER_MENU_LEVEL_ITEMS;
+      candidate_model->bookmark_action_index = 0U;
+    } else if (effect == READER_APP_EFFECT_DELETE_BOOKMARK) {
+      mutated = ink_reader_state_bookmark_remove_at(candidate_state, slot);
+      reader_app_model_bookmark_deleted(
+          candidate_model,
+          ink_reader_state_bookmark_count(candidate_state, book->path));
+    }
+  }
+  if (!mutated) {
+    ESP_LOGE(TAG, "bookmark state mutation failed effect=%d", (int)effect);
+    free(candidate_state);
+    return false;
+  }
+
+  const bool refreshed = refresh_reader_menu_candidate(
+      &s_model, candidate_model, book, candidate_state, framebuffer,
+      candidate_framebuffer, refresh_state);
+  if (!refreshed) {
+    free(candidate_state);
+    return false;
+  }
+  if (!ink_reader_state_save(INK_READER_STATE_PATH, candidate_state)) {
+    ESP_LOGE(TAG, "bookmark state save failed effect=%d", (int)effect);
+    if (!refresh_reader_menu_candidate(
+            candidate_model, &s_model, book, &s_state, framebuffer,
+            candidate_framebuffer, refresh_state))
+      ESP_LOGE(TAG, "bookmark menu rollback refresh failed");
+    free(candidate_state);
+    return false;
+  }
+  memcpy(&s_state, candidate_state, sizeof(s_state));
+  s_model = *candidate_model;
+  free(candidate_state);
+  return true;
+}
+
+static bool jump_from_reader_menu(
+    reader_app_effect_t effect, reader_app_model_t *candidate_model,
+    ink_reader_book_t *book, uint8_t *framebuffer,
+    uint8_t *candidate_framebuffer, reader_refresh_state_t *refresh_state,
+    unsigned *successful_page_turns) {
+  const size_t previous_page = book->current_page;
+  size_t target_page = previous_page;
+  if (effect == READER_APP_EFFECT_JUMP_CHAPTER) {
+    if (!ink_reader_book_jump_to_chapter(book,
+                                         candidate_model->chapter_item_index))
+      return false;
+    target_page = book->current_page;
+    book->current_page = previous_page;
+  } else {
+    if (candidate_model->bookmark_item_index == 0U) return false;
+    const size_t slot = reader_app_model_bookmark_slot(
+        &s_state, book->path, candidate_model->bookmark_item_index - 1U);
+    const ink_reader_bookmark_t *bookmark =
+        ink_reader_state_bookmark_at(&s_state, slot);
+    if (!bookmark || bookmark->page_index >= book->page_count) return false;
+    target_page = bookmark->page_index;
+  }
+  if (!refresh_reader_page_candidate(
+          candidate_model, book, target_page, previous_page, framebuffer,
+          candidate_framebuffer, refresh_state))
+    return false;
+  s_model = *candidate_model;
+  *successful_page_turns = 0U;
+  update_progress(book);
+  (void)save_state("reader_menu_jump");
+  return true;
+}
+
 static void handle_reading_input(reader_app_input_t input,
                                  ink_reader_book_t *book,
                                  uint8_t *framebuffer,
                                  uint8_t *candidate_framebuffer,
                                  reader_refresh_state_t *refresh_state,
                                  unsigned *successful_page_turns) {
+  if (s_model.reader_menu_open || input == READER_APP_INPUT_CONFIRM) {
+    s_candidate_model = s_model;
+    const size_t bookmark_count =
+        ink_reader_state_bookmark_count(&s_state, book->path);
+    const reader_app_effect_t effect = reader_app_model_reduce_reading(
+        &s_candidate_model, input, book->chapter_count, bookmark_count);
+    if (effect == READER_APP_EFFECT_NONE) return;
+    if (effect == READER_APP_EFFECT_REDRAW_MENU) {
+      if (refresh_reader_menu_candidate(
+              &s_model, &s_candidate_model, book, &s_state, framebuffer,
+              candidate_framebuffer, refresh_state))
+        s_model = s_candidate_model;
+      return;
+    }
+    if (effect == READER_APP_EFFECT_CLOSE_READER_MENU) {
+      const size_t current_page = book->current_page;
+      if (refresh_reader_page_candidate(
+              &s_candidate_model, book, current_page, current_page,
+              framebuffer, candidate_framebuffer, refresh_state))
+        s_model = s_candidate_model;
+      return;
+    }
+    if (effect == READER_APP_EFFECT_JUMP_CHAPTER ||
+        effect == READER_APP_EFFECT_JUMP_BOOKMARK) {
+      (void)jump_from_reader_menu(
+          effect, &s_candidate_model, book, framebuffer,
+          candidate_framebuffer, refresh_state, successful_page_turns);
+      return;
+    }
+    if (effect == READER_APP_EFFECT_ADD_BOOKMARK ||
+        effect == READER_APP_EFFECT_OVERWRITE_BOOKMARK ||
+        effect == READER_APP_EFFECT_DELETE_BOOKMARK) {
+      (void)apply_bookmark_mutation(
+          effect, &s_candidate_model, book, framebuffer,
+          candidate_framebuffer, refresh_state);
+      return;
+    }
+  }
   if (input == READER_APP_INPUT_BACK) {
     s_candidate_model = s_model;
     if (reader_app_model_reduce(&s_candidate_model, input) ==

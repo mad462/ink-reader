@@ -25,6 +25,23 @@ enum {
   LIBRARY_POPUP_HEIGHT = 164,
   LIBRARY_ACTION_HEIGHT = 34,
   LIBRARY_ACTION_GAP = 10,
+  READER_MENU_PANEL_X = 24,
+  READER_MENU_PANEL_Y = 118,
+  READER_MENU_PANEL_WIDTH = 432,
+  READER_MENU_PANEL_HEIGHT = 534,
+  READER_MENU_TAB_Y = 136,
+  READER_MENU_TAB_HEIGHT = 42,
+  READER_MENU_TAB_GAP = 10,
+  READER_MENU_CHAPTER_Y = 200,
+  READER_MENU_CHAPTER_HEIGHT = 48,
+  READER_MENU_CHAPTER_GAP = 8,
+  READER_MENU_BOOKMARK_Y = 200,
+  READER_MENU_BOOKMARK_HEIGHT = 58,
+  READER_MENU_BOOKMARK_GAP = 8,
+  READER_MENU_POPUP_X = 70,
+  READER_MENU_POPUP_Y = 281,
+  READER_MENU_POPUP_WIDTH = 340,
+  READER_MENU_POPUP_HEIGHT = 208,
 };
 
 static void draw_outline(uint8_t *buffer, size_t length, int x, int y,
@@ -217,6 +234,103 @@ ink_epd_region_t ink_epd_ui_library_selection_region(
                             .height = bottom - top};
 }
 
+void ink_epd_ui_draw_reader_menu(
+    uint8_t *buffer, size_t length,
+    const ink_epd_ui_reader_menu_view_t *view,
+    const ink_epd_ui_fonts_t *fonts) {
+  if (!buffer || length < INK_EPD_BUFFER_SIZE || !view) return;
+
+  ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
+  ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
+  ink_epd_ui_fill_rect(buffer, length, READER_MENU_PANEL_X,
+                       READER_MENU_PANEL_Y, READER_MENU_PANEL_WIDTH,
+                       READER_MENU_PANEL_HEIGHT, false);
+  draw_outline(buffer, length, READER_MENU_PANEL_X, READER_MENU_PANEL_Y,
+               READER_MENU_PANEL_WIDTH, READER_MENU_PANEL_HEIGHT);
+
+  const int tab_width =
+      (READER_MENU_PANEL_WIDTH - 3 * READER_MENU_TAB_GAP) / 2;
+  const size_t tab_count = bounded_count(
+      view->tab_count, INK_EPD_UI_READER_MENU_TAB_CAPACITY);
+  for (size_t i = 0; i < tab_count; ++i) {
+    const int x = READER_MENU_PANEL_X + READER_MENU_TAB_GAP +
+                  (int)i * (tab_width + READER_MENU_TAB_GAP);
+    draw_outline(buffer, length, x, READER_MENU_TAB_Y, tab_width,
+                 READER_MENU_TAB_HEIGHT);
+    if (view->tabs[i].active)
+      ink_epd_ui_fill_rect(buffer, length, x + 1,
+                           READER_MENU_TAB_Y + READER_MENU_TAB_HEIGHT - 4,
+                           tab_width - 2, 3, true);
+    if (view->tabs[i].focused)
+      ink_epd_ui_fill_rect(buffer, length, x + 6, READER_MENU_TAB_Y + 6, 4,
+                           READER_MENU_TAB_HEIGHT - 12, true);
+    draw_clipped_text(buffer, length, body_font, x + 16,
+                      READER_MENU_TAB_Y + 13, tab_width - 24, 1, 2U,
+                      view->tabs[i].label);
+  }
+
+  const size_t visible_capacity =
+      view->bookmarks_tab ? INK_EPD_UI_READER_MENU_BOOKMARK_VISIBLE
+                          : INK_EPD_UI_READER_MENU_ITEM_CAPACITY;
+  const size_t item_count = bounded_count(view->item_count, visible_capacity);
+  const int item_y = view->bookmarks_tab ? READER_MENU_BOOKMARK_Y
+                                         : READER_MENU_CHAPTER_Y;
+  const int item_height = view->bookmarks_tab
+                              ? READER_MENU_BOOKMARK_HEIGHT
+                              : READER_MENU_CHAPTER_HEIGHT;
+  const int item_gap = view->bookmarks_tab ? READER_MENU_BOOKMARK_GAP
+                                           : READER_MENU_CHAPTER_GAP;
+  const int item_x = READER_MENU_PANEL_X + READER_MENU_TAB_GAP;
+  const int item_width = READER_MENU_PANEL_WIDTH - 2 * READER_MENU_TAB_GAP;
+  for (size_t i = 0; i < item_count; ++i) {
+    const ink_epd_ui_reader_menu_item_t *item = &view->items[i];
+    const int y = item_y + (int)i * (item_height + item_gap);
+    draw_outline(buffer, length, item_x, y, item_width, item_height);
+    if (item->selected)
+      ink_epd_ui_fill_rect(buffer, length, item_x + 1, y + 6, 4,
+                           item_height - 12, true);
+    draw_clipped_text(buffer, length, title_font, item_x + 14, y + 8,
+                      item_width - 28, 1, 2U, item->title);
+    if (view->bookmarks_tab)
+      draw_clipped_text(buffer, length, body_font, item_x + 14, y + 31,
+                        item_width - 28, 1, 2U, item->line1);
+  }
+
+  if (!view->popup_open) return;
+  ink_epd_ui_fill_rect(buffer, length, READER_MENU_POPUP_X,
+                       READER_MENU_POPUP_Y, READER_MENU_POPUP_WIDTH,
+                       READER_MENU_POPUP_HEIGHT, false);
+  draw_outline(buffer, length, READER_MENU_POPUP_X, READER_MENU_POPUP_Y,
+               READER_MENU_POPUP_WIDTH, READER_MENU_POPUP_HEIGHT);
+  draw_clipped_text(buffer, length, title_font, READER_MENU_POPUP_X + 16,
+                    READER_MENU_POPUP_Y + 16,
+                    READER_MENU_POPUP_WIDTH - 32, 1, 2U,
+                    view->popup_title);
+  const size_t action_count = bounded_count(
+      view->action_count, INK_EPD_UI_READER_MENU_ACTION_CAPACITY);
+  for (size_t i = 0; i < action_count; ++i) {
+    const int x = READER_MENU_POPUP_X + 20;
+    const int y = READER_MENU_POPUP_Y + 56 + (int)i * 44;
+    const int width = READER_MENU_POPUP_WIDTH - 40;
+    draw_outline(buffer, length, x, y, width, 34);
+    if (view->actions[i].selected)
+      ink_epd_ui_fill_rect(buffer, length, x + 1, y + 5, 4, 24, true);
+    draw_clipped_text(buffer, length, body_font, x + 14, y + 10, width - 28,
+                      1, 2U, view->actions[i].label);
+  }
+}
+
+ink_epd_region_t ink_epd_ui_reader_menu_selection_region(
+    const ink_epd_ui_reader_menu_focus_t *previous,
+    const ink_epd_ui_reader_menu_focus_t *current) {
+  (void)previous;
+  (void)current;
+  return (ink_epd_region_t){.x = READER_MENU_PANEL_X,
+                            .y = READER_MENU_PANEL_Y,
+                            .width = READER_MENU_PANEL_WIDTH,
+                            .height = READER_MENU_PANEL_HEIGHT};
+}
+
 static bool reader_pixel_is_black(const uint8_t *buffer, int x, int y) {
   const size_t index = (size_t)y * (INK_EPD_WIDTH / 8) + (size_t)x / 8;
   return (buffer[index] & (uint8_t)(0x80U >> (x & 7))) == 0U;
@@ -309,6 +423,51 @@ bool ink_epd_ui_reader_self_test(void) {
        reader_pixel_is_black(buffer, 425, 477) &&
        !reader_pixel_is_black(buffer, 53, 314) &&
        !reader_pixel_is_black(buffer, 426, 477);
+
+  ink_epd_ui_clear(buffer, INK_EPD_BUFFER_SIZE, true);
+  ink_epd_ui_reader_menu_view_t reader_menu = {
+      .tab_count = 2,
+      .item_count = 8,
+  };
+  reader_menu.tabs[0] = (ink_epd_ui_library_tab_t){
+      .label = "CHAPTERS", .active = true, .focused = true};
+  reader_menu.tabs[1].label = "BOOKMARKS";
+  for (size_t i = 0; i < 8; ++i) {
+    reader_menu.items[i].title = "CHAPTER";
+    reader_menu.items[i].selected = i == 7;
+  }
+  ink_epd_ui_draw_reader_menu(buffer, INK_EPD_BUFFER_SIZE, &reader_menu,
+                              NULL);
+  ok = ok && reader_pixel_is_black(buffer, 24, 118) &&
+       reader_pixel_is_black(buffer, 455, 651) &&
+       reader_pixel_is_black(buffer, 34, 592) &&
+       !reader_pixel_is_black(buffer, 23, 118) &&
+       !reader_pixel_is_black(buffer, 456, 651);
+
+  reader_menu.bookmarks_tab = true;
+  reader_menu.item_count = 8;
+  reader_menu.popup_open = true;
+  reader_menu.popup_title = "BOOKMARK";
+  reader_menu.action_count = 3;
+  for (size_t i = 0; i < 3; ++i) {
+    reader_menu.actions[i].label = "ACTION";
+    reader_menu.actions[i].selected = i == 2;
+  }
+  ink_epd_ui_draw_reader_menu(buffer, INK_EPD_BUFFER_SIZE, &reader_menu,
+                              NULL);
+  ok = ok && reader_pixel_is_black(buffer, 34, 530) &&
+       !reader_pixel_is_black(buffer, 34, 596) &&
+       reader_pixel_is_black(buffer, 70, 281) &&
+       reader_pixel_is_black(buffer, 409, 488) &&
+       !reader_pixel_is_black(buffer, 69, 281) &&
+       !reader_pixel_is_black(buffer, 410, 488);
+
+  ink_epd_ui_reader_menu_focus_t menu_previous = {0};
+  ink_epd_ui_reader_menu_focus_t menu_current = {.selected_item = 7};
+  region = ink_epd_ui_reader_menu_selection_region(&menu_previous,
+                                                    &menu_current);
+  ok = ok && region.x == 24 && region.y == 118 && region.width == 432 &&
+       region.height == 534;
 
   free(buffer);
   return ok;

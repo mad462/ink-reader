@@ -218,6 +218,145 @@ reader_app_effect_t reader_app_model_reduce(reader_app_model_t *model,
   return reduce_popup(model, input);
 }
 
+void reader_app_model_close_reader_menu(reader_app_model_t *model) {
+  if (!model) return;
+  model->reader_menu_open = false;
+  model->reader_menu_tab = READER_MENU_CHAPTERS;
+  model->reader_menu_level = READER_MENU_LEVEL_TABS;
+  model->chapter_item_index = 0U;
+  model->bookmark_item_index = 0U;
+  model->bookmark_action_index = 0U;
+}
+
+static reader_app_effect_t reduce_reader_menu_tabs(
+    reader_app_model_t *model, reader_app_input_t input) {
+  if (input == READER_APP_INPUT_LEFT || input == READER_APP_INPUT_RIGHT) {
+    model->reader_menu_tab = model->reader_menu_tab == READER_MENU_CHAPTERS
+                                 ? READER_MENU_BOOKMARKS
+                                 : READER_MENU_CHAPTERS;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input == READER_APP_INPUT_CONFIRM) {
+    model->reader_menu_level = READER_MENU_LEVEL_ITEMS;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input == READER_APP_INPUT_BACK) {
+    reader_app_model_close_reader_menu(model);
+    return READER_APP_EFFECT_CLOSE_READER_MENU;
+  }
+  return READER_APP_EFFECT_NONE;
+}
+
+static reader_app_effect_t reduce_reader_menu_items(
+    reader_app_model_t *model, reader_app_input_t input, size_t chapter_count,
+    size_t bookmark_count) {
+  size_t *selected = model->reader_menu_tab == READER_MENU_CHAPTERS
+                         ? &model->chapter_item_index
+                         : &model->bookmark_item_index;
+  const size_t item_count = model->reader_menu_tab == READER_MENU_CHAPTERS
+                                ? chapter_count
+                                : bookmark_count + 1U;
+  if (input == READER_APP_INPUT_BACK) {
+    model->reader_menu_level = READER_MENU_LEVEL_TABS;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input == READER_APP_INPUT_LEFT) {
+    if (*selected == 0U) return READER_APP_EFFECT_NONE;
+    --*selected;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input == READER_APP_INPUT_RIGHT) {
+    if (*selected + 1U >= item_count) return READER_APP_EFFECT_NONE;
+    ++*selected;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input != READER_APP_INPUT_CONFIRM || item_count == 0U)
+    return READER_APP_EFFECT_NONE;
+  if (model->reader_menu_tab == READER_MENU_CHAPTERS)
+    return READER_APP_EFFECT_JUMP_CHAPTER;
+  if (model->bookmark_item_index == 0U)
+    return READER_APP_EFFECT_ADD_BOOKMARK;
+  model->reader_menu_level = READER_MENU_LEVEL_BOOKMARK_ACTIONS;
+  model->bookmark_action_index = 0U;
+  return READER_APP_EFFECT_REDRAW_MENU;
+}
+
+static reader_app_effect_t reduce_reader_bookmark_actions(
+    reader_app_model_t *model, reader_app_input_t input) {
+  if (input == READER_APP_INPUT_BACK) {
+    model->reader_menu_level = READER_MENU_LEVEL_ITEMS;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input == READER_APP_INPUT_LEFT) {
+    if (model->bookmark_action_index == 0U) return READER_APP_EFFECT_NONE;
+    --model->bookmark_action_index;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input == READER_APP_INPUT_RIGHT) {
+    if (model->bookmark_action_index >= 2U) return READER_APP_EFFECT_NONE;
+    ++model->bookmark_action_index;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (input != READER_APP_INPUT_CONFIRM) return READER_APP_EFFECT_NONE;
+  static const reader_app_effect_t effects[] = {
+      READER_APP_EFFECT_JUMP_BOOKMARK,
+      READER_APP_EFFECT_OVERWRITE_BOOKMARK,
+      READER_APP_EFFECT_DELETE_BOOKMARK,
+  };
+  return effects[model->bookmark_action_index];
+}
+
+reader_app_effect_t reader_app_model_reduce_reading(
+    reader_app_model_t *model, reader_app_input_t input, size_t chapter_count,
+    size_t bookmark_count) {
+  if (!model || model->page != READER_APP_PAGE_READING)
+    return READER_APP_EFFECT_NONE;
+  if (!model->reader_menu_open) {
+    if (input != READER_APP_INPUT_CONFIRM) return READER_APP_EFFECT_NONE;
+    reader_app_model_close_reader_menu(model);
+    model->reader_menu_open = true;
+    return READER_APP_EFFECT_REDRAW_MENU;
+  }
+  if (model->reader_menu_level == READER_MENU_LEVEL_TABS)
+    return reduce_reader_menu_tabs(model, input);
+  if (model->reader_menu_level == READER_MENU_LEVEL_ITEMS)
+    return reduce_reader_menu_items(model, input, chapter_count,
+                                    bookmark_count);
+  return reduce_reader_bookmark_actions(model, input);
+}
+
+void reader_app_model_bookmark_deleted(reader_app_model_t *model,
+                                       size_t bookmark_count) {
+  if (!model) return;
+  if (model->bookmark_item_index > bookmark_count)
+    model->bookmark_item_index = bookmark_count;
+  model->reader_menu_level = READER_MENU_LEVEL_ITEMS;
+  model->bookmark_action_index = 0U;
+}
+
+size_t reader_app_model_menu_window_start(const reader_app_model_t *model) {
+  if (!model) return 0U;
+  if (model->reader_menu_tab == READER_MENU_CHAPTERS)
+    return model->chapter_item_index < 8U ? 0U
+                                          : model->chapter_item_index - 7U;
+  return model->bookmark_item_index < 6U ? 0U
+                                         : model->bookmark_item_index - 5U;
+}
+
+size_t reader_app_model_bookmark_slot(const ink_reader_state_t *state,
+                                      const char *path,
+                                      size_t bookmark_index) {
+  if (!state || !path) return READER_APP_NO_INDEX;
+  size_t seen = 0U;
+  for (size_t slot = 0; slot < INK_READER_BOOKMARK_CAPACITY; ++slot) {
+    const ink_reader_bookmark_t *bookmark = &state->bookmarks[slot];
+    if (!bookmark->used || strcmp(bookmark->book_path, path) != 0) continue;
+    if (seen == bookmark_index) return slot;
+    ++seen;
+  }
+  return READER_APP_NO_INDEX;
+}
+
 size_t reader_app_model_window_start(const reader_app_model_t *model) {
   if (!model || model->tab >= READER_LIBRARY_TAB_COUNT) return 0U;
   const size_t selected = model->selected[model->tab];

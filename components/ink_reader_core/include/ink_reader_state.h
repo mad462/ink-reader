@@ -113,7 +113,9 @@ bool ink_reader_state_bookmark_overwrite(
     size_t page_index, size_t chapter_index, size_t total_pages_snapshot,
     const char *chapter_title, const char *timestamp_text);
 bool ink_reader_state_bookmark_remove(ink_reader_state_t *state,
-                                      const char *path, size_t page_index);
+                                       const char *path, size_t page_index);
+bool ink_reader_state_bookmark_remove_at(ink_reader_state_t *state,
+                                         size_t bookmark_index);
 bool ink_reader_state_bookmark_find(const ink_reader_state_t *state,
                                     const char *path, size_t page_index,
                                     size_t *bookmark_index_out);

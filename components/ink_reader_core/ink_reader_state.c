@@ -369,10 +369,20 @@ bool ink_reader_state_bookmark_overwrite(
 }
 
 bool ink_reader_state_bookmark_remove(ink_reader_state_t *state,
-                                      const char *path, size_t page_index) {
+                                       const char *path, size_t page_index) {
   const int slot = find_bookmark_slot(state, path, page_index);
   if (slot < 0) return false;
   memset(&state->bookmarks[slot], 0, sizeof(state->bookmarks[slot]));
+  return true;
+}
+
+bool ink_reader_state_bookmark_remove_at(ink_reader_state_t *state,
+                                         size_t bookmark_index) {
+  if (!state || bookmark_index >= INK_READER_BOOKMARK_CAPACITY ||
+      !state->bookmarks[bookmark_index].used)
+    return false;
+  memset(&state->bookmarks[bookmark_index], 0,
+         sizeof(state->bookmarks[bookmark_index]));
   return true;
 }
 
