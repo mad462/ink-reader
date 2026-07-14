@@ -557,6 +557,7 @@ void ink_epd_ui_draw_status(uint8_t *buffer, size_t length, const char *title,
 }
 
 bool ink_epd_ui_self_test(void) {
+  if (!ink_epd_ui_reader_self_test()) return false;
   int measured_width = 0;
   if (!ink_epd_ui_measure_text(NULL, "ABC", 2, 1U, &measured_width) ||
       measured_width != 36)

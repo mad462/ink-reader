@@ -1,0 +1,301 @@
+#include "ink_epd_ui.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+enum {
+  LIBRARY_PAGE_X = 8,
+  LIBRARY_PAGE_Y = 8,
+  LIBRARY_PAGE_WIDTH = 464,
+  LIBRARY_PAGE_HEIGHT = 776,
+  LIBRARY_HEADER_HEIGHT = 38,
+  LIBRARY_TAB_X = 24,
+  LIBRARY_TAB_Y = 58,
+  LIBRARY_TAB_WIDTH = 138,
+  LIBRARY_TAB_GAP = 8,
+  LIBRARY_TAB_HEIGHT = 42,
+  LIBRARY_CARD_X = 24,
+  LIBRARY_CARD_Y = 108,
+  LIBRARY_CARD_WIDTH = 432,
+  LIBRARY_CARD_HEIGHT = 58,
+  LIBRARY_CARD_GAP = 6,
+  LIBRARY_POPUP_X = 54,
+  LIBRARY_POPUP_Y = 314,
+  LIBRARY_POPUP_WIDTH = 372,
+  LIBRARY_POPUP_HEIGHT = 164,
+  LIBRARY_ACTION_HEIGHT = 34,
+  LIBRARY_ACTION_GAP = 10,
+};
+
+static void draw_outline(uint8_t *buffer, size_t length, int x, int y,
+                         int width, int height) {
+  if (width <= 0 || height <= 0) return;
+  ink_epd_ui_fill_rect(buffer, length, x, y, width, 1, true);
+  ink_epd_ui_fill_rect(buffer, length, x, y + height - 1, width, 1, true);
+  ink_epd_ui_fill_rect(buffer, length, x, y, 1, height, true);
+  ink_epd_ui_fill_rect(buffer, length, x + width - 1, y, 1, height, true);
+}
+
+static size_t utf8_character_length(unsigned char first) {
+  if (first < 0x80U) return 1U;
+  if ((first & 0xE0U) == 0xC0U) return 2U;
+  if ((first & 0xF0U) == 0xE0U) return 3U;
+  if ((first & 0xF8U) == 0xF0U) return 4U;
+  return 1U;
+}
+
+static void draw_clipped_text(uint8_t *buffer, size_t length,
+                              ink_cpfont_t *font, int x, int y, int max_width,
+                              int ascii_scale, uint8_t font_scale_divisor,
+                              const char *text) {
+  if (!text || max_width <= 0) return;
+
+  char clipped[192];
+  size_t source_offset = 0;
+  size_t clipped_length = 0;
+  while (text[source_offset] != '\0' &&
+         clipped_length + 4U < sizeof(clipped)) {
+    const size_t character_length =
+        utf8_character_length((unsigned char)text[source_offset]);
+    size_t available = strlen(text + source_offset);
+    if (character_length > available) break;
+    memcpy(clipped + clipped_length, text + source_offset, character_length);
+    clipped_length += character_length;
+    clipped[clipped_length] = '\0';
+
+    int measured_width = 0;
+    if (!ink_epd_ui_measure_text(font, clipped, ascii_scale,
+                                 font_scale_divisor, &measured_width) ||
+        measured_width > max_width) {
+      clipped_length -= character_length;
+      clipped[clipped_length] = '\0';
+      break;
+    }
+    source_offset += character_length;
+  }
+
+  if (clipped_length > 0U)
+    (void)ink_epd_ui_draw_text_font(buffer, length, font, x, y, ascii_scale,
+                                    font_scale_divisor, clipped, NULL);
+}
+
+static void draw_heart_icon(uint8_t *buffer, size_t length, int x, int y) {
+  ink_epd_ui_fill_rect(buffer, length, x + 2, y, 4, 2, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 10, y, 4, 2, true);
+  ink_epd_ui_fill_rect(buffer, length, x, y + 2, 16, 5, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 2, y + 7, 12, 3, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 5, y + 10, 6, 3, true);
+  ink_epd_ui_fill_rect(buffer, length, x + 7, y + 13, 2, 2, true);
+}
+
+static size_t bounded_count(size_t count, size_t capacity) {
+  return count < capacity ? count : capacity;
+}
+
+void ink_epd_ui_draw_library(uint8_t *buffer, size_t length,
+                             const ink_epd_ui_library_view_t *view,
+                             const ink_epd_ui_fonts_t *fonts) {
+  if (!buffer || length < INK_EPD_BUFFER_SIZE) return;
+
+  ink_epd_ui_clear(buffer, length, true);
+  if (!view) return;
+
+  ink_cpfont_t *title_font = fonts ? fonts->title : NULL;
+  ink_cpfont_t *body_font = fonts ? fonts->body : NULL;
+  ink_cpfont_t *footer_font = fonts ? fonts->footer : NULL;
+  draw_outline(buffer, length, LIBRARY_PAGE_X, LIBRARY_PAGE_Y,
+               LIBRARY_PAGE_WIDTH, LIBRARY_PAGE_HEIGHT);
+  draw_clipped_text(buffer, length, title_font, LIBRARY_TAB_X,
+                    LIBRARY_PAGE_Y + 8, 260, 2, 1U, view->header_title);
+  draw_clipped_text(buffer, length, footer_font, 340, LIBRARY_PAGE_Y + 12,
+                    112, 1, 2U, view->header_meta);
+  ink_epd_ui_fill_rect(buffer, length, LIBRARY_PAGE_X,
+                       LIBRARY_PAGE_Y + LIBRARY_HEADER_HEIGHT,
+                       LIBRARY_PAGE_WIDTH, 1, true);
+
+  const size_t tab_count =
+      bounded_count(view->tab_count, INK_EPD_UI_MENU_TAB_CAPACITY);
+  for (size_t i = 0; i < tab_count; ++i) {
+    const int x = LIBRARY_TAB_X +
+                  (int)i * (LIBRARY_TAB_WIDTH + LIBRARY_TAB_GAP);
+    draw_outline(buffer, length, x, LIBRARY_TAB_Y, LIBRARY_TAB_WIDTH,
+                 LIBRARY_TAB_HEIGHT);
+    if (view->tabs[i].active)
+      ink_epd_ui_fill_rect(buffer, length, x + 1,
+                           LIBRARY_TAB_Y + LIBRARY_TAB_HEIGHT - 4,
+                           LIBRARY_TAB_WIDTH - 2, 3, true);
+    if (view->tabs[i].focused)
+      ink_epd_ui_fill_rect(buffer, length, x + 6, LIBRARY_TAB_Y + 6, 4,
+                           LIBRARY_TAB_HEIGHT - 12, true);
+    draw_clipped_text(buffer, length, body_font, x + 16, LIBRARY_TAB_Y + 13,
+                      LIBRARY_TAB_WIDTH - 24, 1, 2U, view->tabs[i].label);
+  }
+
+  const size_t card_count =
+      bounded_count(view->card_count, INK_EPD_UI_MENU_CARD_CAPACITY);
+  for (size_t i = 0; i < card_count; ++i) {
+    const ink_epd_ui_library_card_t *card = &view->cards[i];
+    const int y = LIBRARY_CARD_Y +
+                  (int)i * (LIBRARY_CARD_HEIGHT + LIBRARY_CARD_GAP);
+    draw_outline(buffer, length, LIBRARY_CARD_X, y, LIBRARY_CARD_WIDTH,
+                 LIBRARY_CARD_HEIGHT);
+    if (card->selected)
+      ink_epd_ui_fill_rect(buffer, length, LIBRARY_CARD_X + 1, y + 6, 4,
+                           LIBRARY_CARD_HEIGHT - 12, true);
+    const int text_x = LIBRARY_CARD_X + 14;
+    const int text_width = card->trailing_favorite ? 374 : 406;
+    draw_clipped_text(buffer, length, title_font, text_x, y + 7, text_width,
+                      1, 2U, card->title);
+    draw_clipped_text(buffer, length, body_font, text_x, y + 27, text_width,
+                      1, 2U, card->line1);
+    draw_clipped_text(buffer, length, footer_font, text_x, y + 43, text_width,
+                      1, 2U, card->line2);
+    if (card->trailing_favorite)
+      draw_heart_icon(buffer, length, LIBRARY_CARD_X + 397, y + 35);
+  }
+
+  if (!view->popup_open) return;
+  ink_epd_ui_fill_rect(buffer, length, LIBRARY_POPUP_X, LIBRARY_POPUP_Y,
+                       LIBRARY_POPUP_WIDTH, LIBRARY_POPUP_HEIGHT, false);
+  draw_outline(buffer, length, LIBRARY_POPUP_X, LIBRARY_POPUP_Y,
+               LIBRARY_POPUP_WIDTH, LIBRARY_POPUP_HEIGHT);
+  draw_clipped_text(buffer, length, title_font, LIBRARY_POPUP_X + 16,
+                    LIBRARY_POPUP_Y + 14, LIBRARY_POPUP_WIDTH - 32, 2, 1U,
+                    view->popup_title);
+
+  const size_t action_count =
+      bounded_count(view->action_count, INK_EPD_UI_MENU_ACTION_CAPACITY);
+  const int action_width =
+      (LIBRARY_POPUP_WIDTH - 3 * LIBRARY_ACTION_GAP) / 2;
+  const int action_start_y = LIBRARY_POPUP_Y + 72;
+  for (size_t i = 0; i < action_count; ++i) {
+    const int column = (int)(i % 2U);
+    const int row = (int)(i / 2U);
+    const int x = LIBRARY_POPUP_X + LIBRARY_ACTION_GAP +
+                  column * (action_width + LIBRARY_ACTION_GAP);
+    const int y = action_start_y + row * (LIBRARY_ACTION_HEIGHT + 6);
+    draw_outline(buffer, length, x, y, action_width, LIBRARY_ACTION_HEIGHT);
+    if (view->actions[i].selected)
+      ink_epd_ui_fill_rect(buffer, length, x + 1, y + 1, 4,
+                           LIBRARY_ACTION_HEIGHT - 2, true);
+    draw_clipped_text(buffer, length, body_font, x + 12, y + 11,
+                      action_width - 20, 1, 2U, view->actions[i].label);
+  }
+}
+
+ink_epd_region_t ink_epd_ui_library_selection_region(
+    const ink_epd_ui_library_focus_t *previous,
+    const ink_epd_ui_library_focus_t *current) {
+  const ink_epd_region_t full = {.x = LIBRARY_PAGE_X,
+                                 .y = LIBRARY_PAGE_Y,
+                                 .width = LIBRARY_PAGE_WIDTH,
+                                 .height = LIBRARY_PAGE_HEIGHT};
+  if (!previous || !current || previous->active_tab != current->active_tab ||
+      previous->window_start != current->window_start ||
+      previous->popup_open != current->popup_open || current->popup_open)
+    return full;
+
+  size_t first = previous->selected_card;
+  size_t last = current->selected_card;
+  if (first >= INK_EPD_UI_MENU_CARD_CAPACITY ||
+      last >= INK_EPD_UI_MENU_CARD_CAPACITY)
+    return full;
+  if (first > last) {
+    const size_t temporary = first;
+    first = last;
+    last = temporary;
+  }
+  const int top = LIBRARY_CARD_Y +
+                  (int)first * (LIBRARY_CARD_HEIGHT + LIBRARY_CARD_GAP);
+  const int bottom = LIBRARY_CARD_Y +
+                     (int)last * (LIBRARY_CARD_HEIGHT + LIBRARY_CARD_GAP) +
+                     LIBRARY_CARD_HEIGHT;
+  return (ink_epd_region_t){.x = LIBRARY_CARD_X,
+                            .y = top,
+                            .width = LIBRARY_CARD_WIDTH,
+                            .height = bottom - top};
+}
+
+static bool reader_pixel_is_black(const uint8_t *buffer, int x, int y) {
+  const size_t index = (size_t)y * (INK_EPD_WIDTH / 8) + (size_t)x / 8;
+  return (buffer[index] & (uint8_t)(0x80U >> (x & 7))) == 0U;
+}
+
+bool ink_epd_ui_reader_self_test(void) {
+  uint8_t *buffer = malloc(INK_EPD_BUFFER_SIZE);
+  if (!buffer) return false;
+
+  ink_epd_ui_library_view_t view = {
+      .header_title = "LIBRARY",
+      .header_meta = "8 BOOKS",
+      .tab_count = 3,
+      .card_count = 8,
+  };
+  const char *tab_labels[3] = {"RECENT", "ALL", "FAVORITE"};
+  for (size_t i = 0; i < 3; ++i) {
+    view.tabs[i].label = tab_labels[i];
+    view.tabs[i].active = i == 0;
+    view.tabs[i].focused = i == 0;
+  }
+  for (size_t i = 0; i < 8; ++i) {
+    view.cards[i].title =
+        i == 0 ? "A VERY LONG ASCII BOOK TITLE THAT MUST BE CLIPPED" : "BOOK";
+    view.cards[i].line1 =
+        i == 0 ? "LONG UTF8 \xe9\x98\x85\xe8\xaf\xbb\xe6\x96\x87\xe6\x9c\xac \xe9\x98\x85\xe8\xaf\xbb\xe6\x96\x87\xe6\x9c\xac \xe9\x98\x85\xe8\xaf\xbb\xe6\x96\x87\xe6\x9c\xac" : "1/8";
+    view.cards[i].line2 = "";
+    view.cards[i].selected = i == 0;
+  }
+  view.cards[0].trailing_favorite = true;
+
+  ink_epd_ui_draw_library(buffer, INK_EPD_BUFFER_SIZE, &view, NULL);
+  bool ok = reader_pixel_is_black(buffer, 24, 58) &&
+            reader_pixel_is_black(buffer, 170, 58) &&
+            reader_pixel_is_black(buffer, 316, 58) &&
+            reader_pixel_is_black(buffer, 24, 108) &&
+            reader_pixel_is_black(buffer, 24, 556) &&
+            reader_pixel_is_black(buffer, 429, 150) &&
+            !reader_pixel_is_black(buffer, 457, 130);
+
+  ink_epd_ui_library_view_t empty = {
+      .header_title = "LIBRARY",
+      .tab_count = 3,
+  };
+  ink_epd_ui_draw_library(buffer, INK_EPD_BUFFER_SIZE, &empty, NULL);
+  ok = ok && !reader_pixel_is_black(buffer, 24, 108);
+
+  ink_epd_ui_library_focus_t previous = {
+      .active_tab = 0, .window_start = 0, .selected_card = 0};
+  ink_epd_ui_library_focus_t current = {
+      .active_tab = 0, .window_start = 0, .selected_card = 1};
+  ink_epd_region_t region =
+      ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.x == 24 && region.y == 108 && region.width == 432 &&
+       region.height == 122;
+  current.active_tab = 1;
+  region = ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.x == 8 && region.y == 8 && region.width == 464 &&
+       region.height == 776;
+  current.active_tab = 0;
+  current.window_start = 1;
+  region = ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.width == 464 && region.height == 776;
+  current.window_start = 0;
+  current.popup_open = true;
+  region = ink_epd_ui_library_selection_region(&previous, &current);
+  ok = ok && region.width == 464 && region.height == 776;
+
+  view.popup_open = true;
+  view.popup_title = "BOOK ACTION";
+  view.action_count = 2;
+  view.actions[0].label = "OPEN";
+  view.actions[0].selected = true;
+  view.actions[1].label = "FAVORITE";
+  ink_epd_ui_draw_library(buffer, INK_EPD_BUFFER_SIZE, &view, NULL);
+  ok = ok && reader_pixel_is_black(buffer, 54, 314) &&
+       reader_pixel_is_black(buffer, 425, 477) &&
+       !reader_pixel_is_black(buffer, 53, 314) &&
+       !reader_pixel_is_black(buffer, 426, 477);
+
+  free(buffer);
+  return ok;
+}

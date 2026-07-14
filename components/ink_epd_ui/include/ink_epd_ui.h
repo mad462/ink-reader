@@ -24,6 +24,9 @@
 #define INK_LAUNCHER_MARKER_HEIGHT 4
 #define INK_LAUNCHER_MARKER_Y_OFFSET 33
 #define INK_LAUNCHER_MARKER_PADDING 4
+#define INK_EPD_UI_MENU_TAB_CAPACITY 3
+#define INK_EPD_UI_MENU_CARD_CAPACITY 8
+#define INK_EPD_UI_MENU_ACTION_CAPACITY 4
 
 typedef struct {
   int x;
@@ -41,6 +44,46 @@ typedef struct {
   ink_cpfont_t *body;
   ink_cpfont_t *footer;
 } ink_epd_ui_fonts_t;
+
+typedef struct {
+  const char *label;
+  bool active;
+  bool focused;
+} ink_epd_ui_library_tab_t;
+
+typedef struct {
+  const char *title;
+  const char *line1;
+  const char *line2;
+  bool selected;
+  bool trailing_favorite;
+} ink_epd_ui_library_card_t;
+
+typedef struct {
+  const char *label;
+  bool selected;
+} ink_epd_ui_library_action_t;
+
+typedef struct {
+  const char *header_title;
+  const char *header_meta;
+  ink_epd_ui_library_tab_t tabs[INK_EPD_UI_MENU_TAB_CAPACITY];
+  size_t tab_count;
+  ink_epd_ui_library_card_t cards[INK_EPD_UI_MENU_CARD_CAPACITY];
+  size_t card_count;
+  bool popup_open;
+  const char *popup_title;
+  ink_epd_ui_library_action_t actions[INK_EPD_UI_MENU_ACTION_CAPACITY];
+  size_t action_count;
+} ink_epd_ui_library_view_t;
+
+typedef struct {
+  size_t active_tab;
+  size_t window_start;
+  size_t selected_card;
+  bool popup_open;
+  size_t selected_action;
+} ink_epd_ui_library_focus_t;
 
 void ink_epd_ui_clear(uint8_t *buffer, size_t length, bool white);
 void ink_epd_ui_set_pixel(uint8_t *buffer, size_t length, int x, int y,
@@ -77,4 +120,11 @@ void ink_epd_ui_draw_status_with_fonts(uint8_t *buffer, size_t length,
                                        const char *title,
                                        const char *message,
                                        const ink_epd_ui_fonts_t *fonts);
+void ink_epd_ui_draw_library(uint8_t *buffer, size_t length,
+                             const ink_epd_ui_library_view_t *view,
+                             const ink_epd_ui_fonts_t *fonts);
+ink_epd_region_t ink_epd_ui_library_selection_region(
+    const ink_epd_ui_library_focus_t *previous,
+    const ink_epd_ui_library_focus_t *current);
+bool ink_epd_ui_reader_self_test(void);
 bool ink_epd_ui_self_test(void);

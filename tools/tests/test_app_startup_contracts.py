@@ -111,3 +111,75 @@ def test_photo_list_omits_position_counter() -> None:
 
     assert "snprintf(counter" not in draw_list
     assert "counter_x" not in draw_list
+
+
+def test_reader_library_ui_is_a_pure_bounded_renderer() -> None:
+    header = source("components/ink_epd_ui/include/ink_epd_ui.h")
+    cmake = source("components/ink_epd_ui/CMakeLists.txt")
+    common_ui = source("components/ink_epd_ui/ink_epd_ui.c")
+    reader_ui = source("components/ink_epd_ui/ink_reader_ui.c")
+
+    assert "INK_EPD_UI_MENU_TAB_CAPACITY 3" in header
+    assert "INK_EPD_UI_MENU_CARD_CAPACITY 8" in header
+    assert "INK_EPD_UI_MENU_ACTION_CAPACITY 4" in header
+    for field in (
+        "header_title",
+        "header_meta",
+        "tabs",
+        "active",
+        "focused",
+        "cards",
+        "title",
+        "line1",
+        "line2",
+        "selected",
+        "trailing_favorite",
+        "popup_title",
+        "actions",
+    ):
+        assert field in header
+    assert "ink_epd_ui_draw_library(" in header
+    assert "ink_epd_ui_library_selection_region(" in header
+    assert "ink_epd_ui_reader_self_test(void)" in header
+    assert '"ink_reader_ui.c"' in cmake
+    assert "ink_epd_ui_reader_self_test()" in common_ui
+
+    for geometry in (
+        "LIBRARY_PAGE_X = 8",
+        "LIBRARY_PAGE_Y = 8",
+        "LIBRARY_PAGE_WIDTH = 464",
+        "LIBRARY_PAGE_HEIGHT = 776",
+        "LIBRARY_HEADER_HEIGHT = 38",
+        "LIBRARY_TAB_X = 24",
+        "LIBRARY_TAB_Y = 58",
+        "LIBRARY_TAB_WIDTH = 138",
+        "LIBRARY_TAB_GAP = 8",
+        "LIBRARY_TAB_HEIGHT = 42",
+        "LIBRARY_CARD_X = 24",
+        "LIBRARY_CARD_Y = 108",
+        "LIBRARY_CARD_WIDTH = 432",
+        "LIBRARY_CARD_HEIGHT = 58",
+        "LIBRARY_CARD_GAP = 6",
+        "LIBRARY_POPUP_X = 54",
+        "LIBRARY_POPUP_Y = 314",
+        "LIBRARY_POPUP_WIDTH = 372",
+        "LIBRARY_POPUP_HEIGHT = 164",
+        "LIBRARY_ACTION_HEIGHT = 34",
+        "LIBRARY_ACTION_GAP = 10",
+    ):
+        assert geometry in reader_ui
+
+    assert "draw_heart_icon(" in reader_ui
+    assert "draw_clipped_text(" in reader_ui
+    assert "ink_epd_ui_reader_self_test" in reader_ui
+    for forbidden in (
+        "ink_system_runtime",
+        "ink_display_mailbox",
+        "ink_display_request",
+        "ink_system_services",
+        "ink_resource_coordinator",
+        "wifi",
+        "voice",
+        "usb",
+    ):
+        assert forbidden not in reader_ui.lower()
