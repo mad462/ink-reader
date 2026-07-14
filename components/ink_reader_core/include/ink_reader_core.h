@@ -18,6 +18,7 @@ typedef struct {
 typedef struct {
   ink_reader_catalog_item_t *items;
   size_t count;
+  uint32_t lifecycle_cookie;
 } ink_reader_catalog_t;
 
 typedef struct {
@@ -65,6 +66,7 @@ typedef enum {
 
 void ink_reader_book_init(ink_reader_book_t *book);
 void ink_reader_book_close(ink_reader_book_t *book);
+void ink_reader_catalog_init(ink_reader_catalog_t *catalog);
 bool ink_reader_catalog_load(ink_reader_catalog_t *catalog);
 void ink_reader_catalog_free(ink_reader_catalog_t *catalog);
 size_t ink_reader_catalog_count(const ink_reader_catalog_t *catalog);

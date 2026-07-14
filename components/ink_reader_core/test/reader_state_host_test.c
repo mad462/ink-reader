@@ -103,8 +103,18 @@ static void cleanup_fixture(void) {
 }
 
 static int test_catalog(void) {
-  ink_reader_catalog_t catalog = {0};
+  ink_reader_catalog_t catalog;
+  ink_reader_catalog_t uninitialized;
   char path[INK_READER_PATH_MAX];
+
+  memset(&catalog, 0xa5, sizeof(catalog));
+  uninitialized = catalog;
+  if (ink_reader_catalog_load(&catalog) ||
+      memcmp(&catalog, &uninitialized, sizeof(catalog)) != 0)
+    return 0;
+  ink_reader_catalog_free(&catalog);
+  if (memcmp(&catalog, &uninitialized, sizeof(catalog)) != 0) return 0;
+  ink_reader_catalog_init(&catalog);
 
   for (int i = 34; i >= 0; --i) {
     snprintf(path, sizeof(path), TEST_BOOKS "/Book%02d.%s", i,
@@ -126,6 +136,15 @@ static int test_catalog(void) {
       return 0;
   }
   if (ink_reader_catalog_at(&catalog, INK_READER_CATALOG_CAPACITY) != NULL)
+    return 0;
+  if (!ink_reader_catalog_load(&catalog) ||
+      ink_reader_catalog_count(&catalog) != INK_READER_CATALOG_CAPACITY)
+    return 0;
+  ink_reader_catalog_free(&catalog);
+  if (ink_reader_catalog_count(&catalog) != 0U ||
+      ink_reader_catalog_at(&catalog, 0) != NULL ||
+      !ink_reader_catalog_load(&catalog) ||
+      ink_reader_catalog_count(&catalog) != INK_READER_CATALOG_CAPACITY)
     return 0;
   ink_reader_catalog_free(&catalog);
 

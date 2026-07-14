@@ -19,6 +19,7 @@
 #define XTCH_MAGIC 0x48435458u
 #define XTG_MAGIC 0x00475458u
 #define XTH_MAGIC 0x00485458u
+#define INK_READER_CATALOG_COOKIE 0x494e4b43u
 
 #ifndef INK_READER_SCAN_ROOT
 #define INK_READER_SCAN_ROOT "/sdcard"
@@ -340,8 +341,17 @@ void ink_reader_book_close(ink_reader_book_t *book) {
   memset(book, 0, sizeof(*book));
 }
 
+void ink_reader_catalog_init(ink_reader_catalog_t *catalog) {
+  if (!catalog) return;
+  catalog->items = NULL;
+  catalog->count = 0U;
+  catalog->lifecycle_cookie = INK_READER_CATALOG_COOKIE;
+}
+
 bool ink_reader_catalog_load(ink_reader_catalog_t *catalog) {
-  if (!catalog) return false;
+  if (!catalog ||
+      catalog->lifecycle_cookie != INK_READER_CATALOG_COOKIE)
+    return false;
   reader_candidate_list_t candidates = {0};
   if (collect_candidates(INK_READER_BOOKS_DIR, &candidates) != READER_DIR_OK) {
     free(candidates.paths);
@@ -384,19 +394,28 @@ bool ink_reader_catalog_load(ink_reader_catalog_t *catalog) {
 }
 
 void ink_reader_catalog_free(ink_reader_catalog_t *catalog) {
-  if (!catalog) return;
+  if (!catalog ||
+      catalog->lifecycle_cookie != INK_READER_CATALOG_COOKIE)
+    return;
   free(catalog->items);
   catalog->items = NULL;
   catalog->count = 0U;
 }
 
 size_t ink_reader_catalog_count(const ink_reader_catalog_t *catalog) {
-  return catalog ? catalog->count : 0U;
+  return catalog &&
+                 catalog->lifecycle_cookie == INK_READER_CATALOG_COOKIE
+             ? catalog->count
+             : 0U;
 }
 
 const ink_reader_catalog_item_t *ink_reader_catalog_at(
     const ink_reader_catalog_t *catalog, size_t index) {
-  return catalog && index < catalog->count ? &catalog->items[index] : NULL;
+  return catalog &&
+                 catalog->lifecycle_cookie == INK_READER_CATALOG_COOKIE &&
+                 index < catalog->count
+             ? &catalog->items[index]
+             : NULL;
 }
 
 bool ink_reader_find_first_book(char *path, size_t size) {
