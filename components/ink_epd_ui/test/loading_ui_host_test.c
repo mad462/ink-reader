@@ -38,7 +38,7 @@ static bool pixel_is_black(const uint8_t *buffer, int x, int y) {
   return !(buffer[index] & mask);
 }
 
-static uint32_t loading_image_fingerprint(const uint8_t *buffer) {
+static uint32_t popup_image_fingerprint(const uint8_t *buffer) {
   uint32_t hash = UINT32_C(2166136261);
   for (int y = 0; y < LOADING_IMAGE_HEIGHT; ++y) {
     for (int byte_x = 0; byte_x < LOADING_IMAGE_ROW_BYTES; ++byte_x) {
@@ -84,7 +84,39 @@ static bool loading_draw_test(void) {
       !pixel_is_black(buffer, 339, 419);
 
   return outside_unchanged && padding_is_white && key_pixels_match &&
-         loading_image_fingerprint(buffer) == UINT32_C(0xC912932C);
+         popup_image_fingerprint(buffer) == UINT32_C(0xC912932C);
+}
+
+static bool usb_msc_popup_test(void) {
+  uint8_t buffer[INK_EPD_BUFFER_SIZE];
+  const ink_epd_region_t region = ink_epd_ui_usb_msc_popup_region();
+  if (region.x != 132 || region.y != 372 || region.width != 216 ||
+      region.height != 56)
+    return false;
+
+  memset(buffer, 0x00, sizeof(buffer));
+  ink_epd_ui_draw_usb_msc_popup(buffer, sizeof(buffer),
+                                INK_EPD_UI_USB_MSC_ACTIVE);
+  const bool active_bounds =
+      pixel_is_black(buffer, 131, 371) && pixel_is_black(buffer, 348, 428) &&
+      !pixel_is_black(buffer, 132, 372) &&
+      !pixel_is_black(buffer, 139, 379) &&
+      !pixel_is_black(buffer, 347, 427);
+  const uint32_t active_hash = popup_image_fingerprint(buffer);
+
+  memset(buffer, 0x00, sizeof(buffer));
+  ink_epd_ui_draw_usb_msc_popup(buffer, sizeof(buffer),
+                                INK_EPD_UI_USB_MSC_FAILED);
+  const bool failed_bounds =
+      pixel_is_black(buffer, 131, 371) && pixel_is_black(buffer, 348, 428) &&
+      !pixel_is_black(buffer, 132, 372) &&
+      !pixel_is_black(buffer, 139, 379) &&
+      !pixel_is_black(buffer, 347, 427);
+  const uint32_t failed_hash = popup_image_fingerprint(buffer);
+
+  return active_bounds && failed_bounds &&
+         active_hash == UINT32_C(0x47143BDD) &&
+         failed_hash == UINT32_C(0x1ADE121A) && active_hash != failed_hash;
 }
 
 static bool region_has_black(const uint8_t *buffer, int x, int y, int width,
@@ -150,6 +182,10 @@ int main(void) {
   }
   if (!loading_draw_test()) {
     fprintf(stderr, "loading draw test failed\n");
+    return 1;
+  }
+  if (!usb_msc_popup_test()) {
+    fprintf(stderr, "USB MSC popup test failed\n");
     return 1;
   }
   if (!launcher_page_test()) {

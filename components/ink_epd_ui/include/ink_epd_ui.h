@@ -46,6 +46,11 @@ typedef enum {
   INK_EPD_UI_LAUNCHER_PAGE_SETTINGS,
 } ink_epd_ui_launcher_page_t;
 
+typedef enum {
+  INK_EPD_UI_USB_MSC_ACTIVE = 0,
+  INK_EPD_UI_USB_MSC_FAILED,
+} ink_epd_ui_usb_msc_popup_t;
+
 typedef struct {
   const char *name;
 } ink_epd_photo_row_t;
@@ -154,6 +159,9 @@ ink_epd_region_t ink_epd_ui_launcher_page_selection_region(
     ink_epd_ui_launcher_page_t page, int previous, int selected);
 ink_epd_region_t ink_epd_ui_loading_region(void);
 void ink_epd_ui_draw_loading(uint8_t *buffer, size_t length);
+ink_epd_region_t ink_epd_ui_usb_msc_popup_region(void);
+void ink_epd_ui_draw_usb_msc_popup(uint8_t *buffer, size_t length,
+                                   ink_epd_ui_usb_msc_popup_t popup);
 void ink_epd_ui_draw_photo_list(uint8_t *buffer, size_t length,
                                 const ink_epd_photo_row_t *rows, size_t count,
                                 size_t selected);

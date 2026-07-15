@@ -160,6 +160,34 @@ def test_partial_refresh_work_runs_after_activation_before_busy_wait() -> None:
     assert with_work.count("if (work) (void)work(work_context);") == 1
 
 
+def test_partial_after_gray_preloads_coherent_full_planes() -> None:
+    hw = source("components/ink_hw/ink_hw.c")
+
+    assert "static bool s_partial_requires_full_planes;" in hw
+    set_previous = hw[
+        hw.index("esp_err_t ink_hw_set_previous_frame(") :
+        hw.index("esp_err_t ink_hw_full_refresh(")
+    ]
+    assert "s_partial_requires_full_planes = true;" in set_previous
+
+    partial = hw[
+        hw.index("esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(") :
+        hw.index("esp_err_t ink_hw_gray_refresh(")
+    ]
+    preload = partial.index("if (s_partial_requires_full_planes)")
+    current = partial.index("write_native_plane(s_native, 0x24)", preload)
+    previous = partial.index("write_native_plane(s_shadow, 0x26)", current)
+    area = partial.index("set_native_window(", previous)
+    activate = partial.index('command(0x20), TAG, "partial activate"')
+    assert preload < current < previous < area < activate
+    assert "s_partial_requires_full_planes = false;" in partial
+
+    gray = hw[hw.index("esp_err_t ink_hw_gray_refresh_with_poll(") :]
+    assert gray.index("convert(msb);") < gray.index(
+        "s_partial_requires_full_planes = true;"
+    )
+
+
 def test_reader_page_cache_is_optional_transactional_and_prefetches() -> None:
     app = source("apps/reader/main/app_main.c")
     transaction = source("apps/reader/main/reader_page_turn.c")
@@ -347,6 +375,13 @@ def test_photo_gray_refresh_interrupts_busy_wait_for_latest_navigation() -> None
     ) >= 4
     gray_refresh = hw[hw.index("esp_err_t ink_hw_gray_refresh_with_poll(") :]
     assert "ESP_RETURN_ON_ERROR(update(" not in gray_refresh
+    update_done = gray_refresh.index(
+        "ret = update(kGrayUpdateMode, true, poll, context);"
+    )
+    shadow_sync = gray_refresh.index("convert(msb);", update_done)
+    assert update_done < shadow_sync < gray_refresh.index(
+        "memcpy(s_shadow, s_native, NATIVE_SIZE);", shadow_sync
+    )
     assert "aggressive" not in hw.lower()
     assert "busy_wait aborted" not in hw
 
@@ -610,11 +645,22 @@ def test_boot_loading_precedes_all_normal_boot_switches() -> None:
         photo.index("if (ink_input_was_pressed(&input, INK_BUTTON_BACK))") :
         photo.index("\n      }", photo.index("if (ink_input_was_pressed(&input, INK_BUTTON_BACK))"))
     ]
-    assert photo_return.index(
-        'show_boot_loading(lsb, "photo", "launcher")'
-    ) < photo_return.index('BOOT_SWITCH from=photo to=launcher')
+    photo_loading_call = photo_return.index(
+        'show_boot_loading(lsb, view == PREVIEW ? msb : lsb, "photo",'
+    )
+    assert '"launcher");' in photo_return[photo_loading_call:]
+    assert photo_loading_call < photo_return.index('BOOT_SWITCH from=photo to=launcher')
     assert photo_return.index('BOOT_SWITCH from=photo to=launcher') < photo_return.index(
         "ink_boot_switch_to_launcher()"
+    )
+    photo_loading = photo[
+        photo.index("static void show_boot_loading(") :
+        photo.index("\n}\n", photo.index("static void show_boot_loading(")) + 3
+    ]
+    assert "const uint8_t *previous_framebuffer" in photo_loading
+    assert "memcpy(framebuffer, previous_framebuffer, INK_EPD_BUFFER_SIZE);" in photo_loading
+    assert photo_loading.index("memcpy(framebuffer") < photo_loading.index(
+        "ink_epd_ui_draw_loading("
     )
 
 
@@ -702,9 +748,8 @@ def test_launcher_settings_navigation_and_routes_are_bounded() -> None:
         assert route.index(loading) < route.index(log) < route.index(call)
 
 
-def test_minimal_settings_apps_have_only_placeholder_runtime() -> None:
+def test_minimal_settings_apps_have_only_scoped_runtime() -> None:
     expected = {
-        "usb_msc": "USB MSC / NOT READY",
         "wifi_setup": "WIFI SETUP / NOT READY",
     }
     forbidden = (
@@ -762,6 +807,96 @@ def test_minimal_settings_apps_have_only_placeholder_runtime() -> None:
         lowered = app.lower()
         for token in forbidden:
             assert token not in lowered
+
+
+def test_usb_msc_app_owns_raw_storage_and_gates_launcher_return() -> None:
+    app = source("apps/usb_msc/main/app_main.c")
+    main_cmake = source("apps/usb_msc/main/CMakeLists.txt")
+    defaults = source("apps/usb_msc/sdkconfig.defaults")
+    header = source("components/ink_usb_msc_core/include/ink_usb_msc_core.h")
+    core = source("components/ink_usb_msc_core/ink_usb_msc_core.c")
+    component_cmake = source("components/ink_usb_msc_core/CMakeLists.txt")
+    component_manifest = Path("components/ink_usb_msc_core/idf_component.yml")
+    manifest = source("apps/usb_msc/main/idf_component.yml")
+    ui_header = source("components/ink_epd_ui/include/ink_epd_ui.h")
+    ui_cmake = source("components/ink_epd_ui/CMakeLists.txt")
+    hw_header = source("components/ink_hw/include/ink_hw.h")
+    hw = source("components/ink_hw/ink_hw.c")
+
+    assert "USB MSC / NOT READY" not in app
+    assert "ink_epd_ui_draw_status(" not in app
+    assert "ink_hw_full_refresh(" not in app
+    assert "ink_usb_msc_core_start()" in app
+    assert "INK_EPD_UI_USB_MSC_ACTIVE" in app
+    assert "INK_EPD_UI_USB_MSC_FAILED" in app
+    assert "ink_epd_ui_draw_usb_msc_popup(" in app
+    assert "ink_epd_ui_usb_msc_popup_region()" in app
+    assert "ink_hw_partial_refresh_area(" in app
+    assert "ink_usb_msc_core_stop()" in app
+    assert "ink_usb_msc_core_can_return_launcher()" in app
+    assert "ink_usb_msc_core" in main_cmake
+    assert "CONFIG_TINYUSB_MSC_ENABLED=y" in defaults
+    assert not component_manifest.exists()
+
+    assert "ink_hw_set_previous_frame(" in hw_header
+    assert "esp_err_t ink_hw_set_previous_frame(" in hw
+    startup = app[app.index("void app_main(void)") : app.index("while (true)")]
+    assert "memset(framebuffer, 0xff, INK_EPD_BUFFER_SIZE);" in startup
+    assert "ink_epd_ui_draw_loading(framebuffer, INK_EPD_BUFFER_SIZE);" in startup
+    assert "ink_hw_set_previous_frame(framebuffer, INK_EPD_BUFFER_SIZE)" in startup
+    assert startup.index("ink_epd_ui_draw_loading(") < startup.index(
+        "ink_hw_set_previous_frame("
+    ) < startup.index("ink_usb_msc_core_start()") < startup.index(
+        "show_usb_popup("
+    )
+
+    for symbol in (
+        "INK_USB_MSC_STOPPED",
+        "INK_USB_MSC_STARTING",
+        "INK_USB_MSC_ACTIVE",
+        "INK_USB_MSC_STOPPING",
+        "INK_USB_MSC_ERROR",
+        "ink_usb_msc_core_start(void)",
+        "ink_usb_msc_core_stop(void)",
+        "ink_usb_msc_core_state(void)",
+        "ink_usb_msc_core_can_return_launcher(void)",
+    ):
+        assert symbol in header
+
+    for token in (
+        "sdmmc_host_init_slot(",
+        "sdmmc_card_init(",
+        "tinyusb_driver_install(",
+        "tinyusb_msc_install_driver(",
+        "tinyusb_msc_new_storage_sdmmc(",
+        "tinyusb_msc_delete_storage(",
+        "tinyusb_msc_uninstall_driver(",
+        "tinyusb_driver_uninstall(",
+    ):
+        assert token in core
+    assert core.index("tinyusb_msc_delete_storage(") < core.index(
+        "tinyusb_msc_uninstall_driver("
+    ) < core.index("tinyusb_driver_uninstall(")
+    for pin in (".clk = 40", ".cmd = 39", ".d0 = 41", ".d1 = 42", ".d2 = 48", ".d3 = 38"):
+        assert pin in core
+    assert "esp_vfs_fat" not in core
+    assert "ink_sd_mount(" not in core
+    assert "fatfs" not in component_cmake.lower()
+    assert "espressif/esp_tinyusb" in manifest and 'version: "^2.2.1"' in manifest
+    for forbidden in (
+        "ink_system_runtime",
+        "ink_system_services",
+        "resource_coordinator",
+        "usb_msc_coordinator",
+        "wifi_coordinator",
+    ):
+        assert forbidden not in (app + core).lower()
+
+    assert "INK_EPD_UI_USB_MSC_ACTIVE" in ui_header
+    assert "INK_EPD_UI_USB_MSC_FAILED" in ui_header
+    assert "ink_epd_ui_usb_msc_popup_region(void)" in ui_header
+    assert "ink_epd_ui_draw_usb_msc_popup(" in ui_header
+    assert '"ink_usb_msc_assets.c"' in ui_cmake
 
 
 def test_flash_layout_scripts_use_fixed_app_slots_and_single_full_write() -> None:

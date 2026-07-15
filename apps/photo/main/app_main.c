@@ -1,6 +1,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
@@ -62,13 +63,16 @@ static void log_stage(const char *stage) {
            (long long)elapsed_ms());
 }
 
-static void show_boot_loading(uint8_t *framebuffer, const char *from,
-                              const char *to) {
+static void show_boot_loading(uint8_t *framebuffer,
+                              const uint8_t *previous_framebuffer,
+                              const char *from, const char *to) {
   if (!framebuffer) {
     ESP_LOGI(TAG, "BOOT_LOADING from=%s to=%s refresh=%s", from, to,
              "skipped");
     return;
   }
+  if (previous_framebuffer && previous_framebuffer != framebuffer)
+    memcpy(framebuffer, previous_framebuffer, INK_EPD_BUFFER_SIZE);
   ink_epd_ui_draw_loading(framebuffer, INK_EPD_BUFFER_SIZE);
   const ink_epd_region_t region = ink_epd_ui_loading_region();
   const esp_err_t ret = ink_hw_partial_refresh_area(
@@ -497,7 +501,8 @@ void app_main(void) {
     const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     if (input_ret == ESP_OK && ink_input_poll(now, &input) == ESP_OK) {
       if (ink_input_was_pressed(&input, INK_BUTTON_BACK)) {
-        show_boot_loading(lsb, "photo", "launcher");
+        show_boot_loading(lsb, view == PREVIEW ? msb : lsb, "photo",
+                          "launcher");
         ESP_LOGI(TAG, "BOOT_SWITCH from=photo to=launcher");
         esp_err_t ret = ink_boot_switch_to_launcher();
         if (ret != ESP_OK) {

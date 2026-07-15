@@ -15,6 +15,7 @@ typedef esp_err_t (*ink_hw_refresh_work_fn)(void *context);
 typedef void (*ink_hw_refresh_pump_fn)(void *context);
 
 esp_err_t ink_hw_init(void);
+esp_err_t ink_hw_set_previous_frame(const uint8_t *buffer, size_t length);
 esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length);
 esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
                                       uint16_t x, uint16_t y,

@@ -52,7 +52,8 @@ try {
         (Join-Path $testDir 'loading_ui_host_test.c') `
         (Join-Path $componentDir 'ink_epd_ui.c') `
         (Join-Path $componentDir 'ink_ui_text_assets.c') `
-        (Join-Path $componentDir 'ink_loading_asset.c')
+        (Join-Path $componentDir 'ink_loading_asset.c') `
+        (Join-Path $componentDir 'ink_usb_msc_assets.c')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $loadingTestExe
     exit $LASTEXITCODE

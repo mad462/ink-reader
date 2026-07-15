@@ -1,5 +1,7 @@
 .worktrees/
 **/build/
+**/managed_components/
+**/__pycache__/
 **/sdkconfig
 sdkconfig.old
 

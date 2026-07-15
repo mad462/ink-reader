@@ -29,6 +29,7 @@ static uint8_t *s_native;
 static uint8_t *s_shadow;
 static uint8_t *s_dma;
 static bool s_initialized;
+static bool s_partial_requires_full_planes;
 static const uint8_t kGrayLut[] = {
     0x80, 0x48, 0x4A, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x0A, 0x48, 0x68, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -200,6 +201,11 @@ static esp_err_t write_plane(const uint8_t *portrait, uint8_t ram_cmd) {
   ESP_RETURN_ON_ERROR(command(ram_cmd), TAG, "ram cmd");
   return data(s_native, NATIVE_SIZE);
 }
+static esp_err_t write_native_plane(const uint8_t *native, uint8_t ram_cmd) {
+  ESP_RETURN_ON_ERROR(window(), TAG, "native plane window");
+  ESP_RETURN_ON_ERROR(command(ram_cmd), TAG, "native plane cmd");
+  return data(native, NATIVE_SIZE);
+}
 static esp_err_t write_native_area(const uint8_t *src, uint16_t x, uint16_t y,
                                    uint16_t width, uint16_t height) {
   const size_t stride = NATIVE_WIDTH / 8;
@@ -303,6 +309,14 @@ fail:
   s_initialized = false;
   return ret;
 }
+esp_err_t ink_hw_set_previous_frame(const uint8_t *buffer, size_t length) {
+  if (!s_initialized) return ESP_ERR_INVALID_STATE;
+  if (!buffer || length < INK_HW_BUFFER_SIZE) return ESP_ERR_INVALID_ARG;
+  convert(buffer);
+  memcpy(s_shadow, s_native, NATIVE_SIZE);
+  s_partial_requires_full_planes = true;
+  return ESP_OK;
+}
 esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length) {
   if (!s_initialized || !buffer || length < INK_HW_BUFFER_SIZE)
     return ESP_ERR_INVALID_ARG;
@@ -310,6 +324,7 @@ esp_err_t ink_hw_full_refresh(const uint8_t *buffer, size_t length) {
   ESP_RETURN_ON_ERROR(write_plane(buffer, 0x24), TAG, "full plane");
   ESP_RETURN_ON_ERROR(update(0xf7, false, NULL, NULL), TAG, "full update");
   memcpy(s_shadow, s_native, NATIVE_SIZE);
+  s_partial_requires_full_planes = false;
   return ESP_OK;
 }
 esp_err_t ink_hw_partial_refresh_area(const uint8_t *buffer, size_t length,
@@ -355,17 +370,28 @@ esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(
   ESP_RETURN_ON_ERROR(data_byte(0x80), TAG, "partial temp data");
   ESP_RETURN_ON_ERROR(command(0x3c), TAG, "partial border cmd");
   ESP_RETURN_ON_ERROR(data_byte(0x80), TAG, "partial border data");
-  ESP_RETURN_ON_ERROR(set_native_window(native_x, native_y, native_width,
-                                        native_height),
-                      TAG, "partial window");
-  ESP_RETURN_ON_ERROR(command(0x24), TAG, "partial current cmd");
-  ESP_RETURN_ON_ERROR(write_native_area(s_native, native_x, native_y,
-                                        native_width, native_height),
-                      TAG, "partial current area");
-  ESP_RETURN_ON_ERROR(command(0x26), TAG, "partial previous cmd");
-  ESP_RETURN_ON_ERROR(write_native_area(s_shadow, native_x, native_y,
-                                        native_width, native_height),
-                      TAG, "partial previous area");
+  if (s_partial_requires_full_planes) {
+    ESP_RETURN_ON_ERROR(write_native_plane(s_native, 0x24), TAG,
+                        "partial current full plane");
+    ESP_RETURN_ON_ERROR(write_native_plane(s_shadow, 0x26), TAG,
+                        "partial previous full plane");
+    ESP_RETURN_ON_ERROR(set_native_window(native_x, native_y, native_width,
+                                          native_height),
+                        TAG, "partial preload window");
+    ESP_LOGI(TAG, "PARTIAL_PRELOAD mode=full_planes");
+  } else {
+    ESP_RETURN_ON_ERROR(set_native_window(native_x, native_y, native_width,
+                                          native_height),
+                        TAG, "partial window");
+    ESP_RETURN_ON_ERROR(command(0x24), TAG, "partial current cmd");
+    ESP_RETURN_ON_ERROR(write_native_area(s_native, native_x, native_y,
+                                          native_width, native_height),
+                        TAG, "partial current area");
+    ESP_RETURN_ON_ERROR(command(0x26), TAG, "partial previous cmd");
+    ESP_RETURN_ON_ERROR(write_native_area(s_shadow, native_x, native_y,
+                                          native_width, native_height),
+                        TAG, "partial previous area");
+  }
   ESP_RETURN_ON_ERROR(command(0x22), TAG, "partial update cmd");
   ESP_RETURN_ON_ERROR(data_byte(0xff), TAG, "partial update mode");
   ESP_RETURN_ON_ERROR(command(0x20), TAG, "partial activate");
@@ -374,8 +400,12 @@ esp_err_t ink_hw_partial_refresh_area_with_work_and_pump(
   ESP_RETURN_ON_ERROR(wait_ready_with_pump("partial_update", pump,
                                            pump_context),
                       TAG, "partial update timeout");
-  copy_native_area(s_shadow, s_native, native_x, native_y, native_width,
-                   native_height);
+  if (s_partial_requires_full_planes)
+    memcpy(s_shadow, s_native, NATIVE_SIZE);
+  else
+    copy_native_area(s_shadow, s_native, native_x, native_y, native_width,
+                     native_height);
+  s_partial_requires_full_planes = false;
   return ESP_OK;
 }
 esp_err_t ink_hw_gray_refresh(const uint8_t *lsb, size_t ll, const uint8_t *msb,
@@ -399,7 +429,9 @@ esp_err_t ink_hw_gray_refresh_with_poll(
   if (poll && poll(context)) return ESP_ERR_NOT_FINISHED;
   ret = update(kGrayUpdateMode, true, poll, context);
   if (ret != ESP_OK) return ret;
+  convert(msb);
   memcpy(s_shadow, s_native, NATIVE_SIZE);
+  s_partial_requires_full_planes = true;
   return ESP_OK;
 }
 esp_err_t ink_hw_sleep(void) {
